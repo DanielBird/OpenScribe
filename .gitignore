@@ -1,0 +1,21 @@
+node_modules/
+dist/
+release/
+.env*
+test-results/
+playwright-report/
+*.local
+.idea/
+fixtures/large/
+.claude/*
+!.claude/launch.json
+.impeccable/
+shots/
+dist-desktop/
+src-tauri/target/
+src-tauri/gen/
+*.msix
+*.pfx
+
+# Added by `winapp cert generate` (desktop:pack --sign), though *.pfx covers it.
+devcert.pfx

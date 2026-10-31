@@ -1,0 +1,26 @@
+[package]
+name = "describe"
+version = "0.1.0"
+description = "DeScribe, the desktop app"
+authors = ["DanielBird"]
+repository = "https://github.com/DanielBird/Describe"
+edition = "2024"
+rust-version = "1.90"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+name = "describe_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.7.4", features = [] }
+
+[dependencies]
+tauri = { version = "2.12.5", features = [] }
+# Only its open_url function, from Rust: the plugin isn't registered, so it injects no script and needs no capability.
+tauri-plugin-opener = "2.7.2"
+
+[target.'cfg(windows)'.dependencies]
+# The installed app's own data folder (ApplicationData). The version Tauri already uses, so it isn't built twice.
+windows = { version = "0.62.2", features = ["Storage", "Storage_Search"] }

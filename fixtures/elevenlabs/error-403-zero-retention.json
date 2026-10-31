@@ -1,0 +1,9 @@
+{
+  "detail": {
+    "type": "authorization_error",
+    "code": "forbidden",
+    "message": "Only users from the enterprise or trial tier can use ZRM mode.",
+    "status": "not_allowed",
+    "request_id": "fixture-request-0002"
+  }
+}

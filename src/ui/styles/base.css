@@ -1,0 +1,249 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+/* Elements scrolled into view (e.g. by Tab) stay clear of the sticky StepFooter (WCAG 2.4.11). */
+html {
+  scroll-padding-bottom: 6rem;
+  /* Always reserve the scrollbar's width, so the layout doesn't shift sideways when one step
+     is tall enough to scroll and another isn't. */
+  scrollbar-gutter: stable;
+}
+
+/* …and clear of the top row, which is pinned to the top on Output (50px tall). */
+html:has(.app-header.pinned) {
+  scroll-padding-top: 4rem;
+}
+
+body {
+  margin: 0;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  font-size: var(--font-size-md);
+  line-height: var(--line-height);
+}
+
+h1 {
+  font-size: var(--font-size-xl);
+  line-height: 1.25;
+}
+
+h1,
+h2,
+h3,
+p {
+  margin: 0;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+/* Headings receive focus programmatically on step change; only show a ring for keyboard focus. */
+[tabindex='-1']:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* Text for screen readers only. */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Buttons */
+.button {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg);
+  color: var(--color-text);
+  line-height: 1.25;
+  cursor: pointer;
+}
+
+.button:hover:not(:disabled) {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+
+.button[aria-pressed='true'] {
+  border-color: var(--color-accent);
+  background: var(--color-surface);
+  color: var(--color-accent);
+}
+
+.button:disabled {
+  border-color: var(--color-border);
+  color: var(--color-disabled);
+  cursor: not-allowed;
+}
+
+.button-primary {
+  border-color: var(--color-accent);
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+  font-weight: 600;
+}
+
+.button-primary:hover:not(:disabled) {
+  border-color: var(--color-accent-hover);
+  background: var(--color-accent-hover);
+  color: var(--color-on-accent);
+}
+
+.button-primary:disabled {
+  background: var(--color-surface);
+}
+
+/* For actions that can't be undone, e.g. in a ConfirmDialog. */
+.button-danger {
+  border-color: var(--color-danger);
+  background: var(--color-danger);
+  color: var(--color-on-accent);
+  font-weight: 600;
+}
+
+.button-danger:hover:not(:disabled) {
+  border-color: var(--color-danger-hover);
+  background: var(--color-danger-hover);
+  color: var(--color-on-accent);
+}
+
+.link-button {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--color-accent);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.link-button:hover {
+  color: var(--color-accent-hover);
+}
+
+a {
+  color: var(--color-accent);
+}
+
+a:hover {
+  color: var(--color-accent-hover);
+}
+
+/* Form controls */
+.control {
+  padding: var(--space-2);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg);
+  color: var(--color-text);
+}
+
+/* Focus draws an accent edge inside the field instead of the outline ring (as Glossary's composer does). */
+.control:focus-visible {
+  outline: none;
+  border-color: var(--color-accent);
+  box-shadow: inset 0 0 0 1px var(--color-accent);
+}
+
+input[type='checkbox'] {
+  width: 1rem;
+  height: 1rem;
+  margin: 0;
+  accent-color: var(--color-accent);
+}
+
+/* Busy indicator; sized by the component that uses it. */
+.spinner {
+  flex: none;
+  width: 1.25rem;
+  height: 1.25rem;
+  border: 3px solid var(--color-border);
+  border-top-color: var(--color-accent);
+  border-radius: 50%;
+  animation: spin 0.9s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(1turn);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation: none;
+  }
+}
+
+.hint {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+
+/* Setup and Settings are sheets of bands: each band's name in a fixed column, its content beside it.
+   Baseline alignment lines the name up with the first line of the content. */
+.band {
+  position: relative;
+  display: grid;
+  grid-template-columns: 8rem minmax(0, 1fr);
+  align-items: baseline;
+  gap: var(--space-3) var(--space-6);
+  padding-block: var(--space-6);
+}
+
+.band:first-child {
+  padding-top: 0;
+}
+
+.band + .band {
+  border-top: 1px solid var(--color-border);
+}
+
+.band > h2 {
+  grid-column: 1;
+  grid-row: 1;
+  font-size: var(--font-size-md);
+  font-weight: 600;
+}
+
+.band-content {
+  display: grid;
+  grid-column: 2;
+  grid-row: 1;
+  gap: var(--space-5);
+  min-width: 0;
+}
+
+/* Narrow windows stack each band's name above its content. */
+@media (max-width: 40rem) {
+  .band {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .band-content {
+    grid-column: 1;
+    grid-row: auto;
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "detail": {
+    "type": "validation_error",
+    "code": "invalid_parameters",
+    "message": "Must provide either file or a URL parameter.",
+    "status": "invalid_parameters",
+    "request_id": "fixture-request-0004",
+    "param": "file"
+  }
+}

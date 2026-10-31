@@ -1,0 +1,73 @@
+/* Design tokens. Light theme only for now; contrast is checked in tokens.spec.ts. */
+:root {
+  color-scheme: light;
+
+  /* Typography (DM Sans is bundled into the HTML as a data: URI; nothing is loaded from the network) */
+  --font-sans:
+    'DM Sans Variable', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
+    sans-serif;
+  --font-mono: ui-monospace, 'Cascadia Mono', Consolas, Menlo, monospace;
+  --font-size-sm: 0.875rem;
+  --font-size-md: 1rem;
+  --font-size-lg: 1.25rem;
+  --font-size-xl: 1.5rem;
+  --font-size-2xl: 1.75rem; /* the recording's name on Output */
+  --line-height: 1.5;
+
+  /* Colours */
+  --color-bg: #ffffff;
+  --color-surface: #f6f8fa;
+  --color-text: #1f2328;
+  --color-text-muted: #59636e;
+  --color-border: #d1d9e0;
+  --color-border-strong: #6e7781; /* form control outlines: >= 3:1 on --color-bg */
+  --color-accent: #0b5cad;
+  --color-accent-hover: #094a8c;
+  --color-on-accent: #ffffff;
+  --color-danger: #b42318;
+  --color-danger-hover: #912018;
+  --color-warning: #9a6700;
+  --color-warning-bg: #fff8c5;
+  --color-success: #1a7f37;
+  --color-highlight: #fff8c5; /* behind search matches (<mark>) */
+  --color-focus: #0b5cad;
+  --color-disabled: #8c959f;
+  --color-backdrop: rgb(31 35 40 / 45%); /* behind modal dialogs */
+
+  /* Spacing */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+  --space-7: 3rem;
+
+  /* Shape and layout */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-pill: 999px;
+  /* The Transcribe steps' centred column (D24, D31). The other pages use the window's width. */
+  --content-width: 80rem;
+  /* Between the window's edges and the page; wider above ProjectView's breakpoint (D31). */
+  --page-gutter: var(--space-4);
+
+  /* Speaker palette (Tableau 10), assigned in order of first appearance. Used only for marks beside the
+     speaker's name (dots, swatches, the playing-turn bar), never for text: most are below 4.5:1 on white. */
+  --speaker-1: #5778a4;
+  --speaker-2: #e49444;
+  --speaker-3: #d1615d;
+  --speaker-4: #85b6b2;
+  --speaker-5: #6a9f58;
+  --speaker-6: #e7ca60;
+  --speaker-7: #a87c9f;
+  --speaker-8: #f1a2a9;
+  --speaker-9: #967662;
+  --speaker-10: #b8b0ac;
+}
+
+@media not (max-width: 48rem) {
+  :root {
+    --page-gutter: var(--space-5);
+  }
+}
