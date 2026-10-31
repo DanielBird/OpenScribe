@@ -8,6 +8,11 @@ All notable changes to DeScribe are recorded here. The format follows
 
 ### Added
 
+- **Windows desktop app:** DeScribe also builds as a Windows app, the same app in its own window, packed as MSIX for
+  the Microsoft Store. It calls the same three APIs, opens links in the default browser, and skips the folder-access
+  prompts that Edge and Chrome show for a project folder (**Reconnect** is still needed after a restart). Its saved
+  data (keys, glossary, settings, the last transcript) is its own, not shared with the HTML file, and uninstalling
+  removes it. The HTML file is unchanged.
 - **Compact a chat:** type `/compact` in the chat to have the model summarise it and carry on from the summary,
   optionally with what to keep (`/compact keep the quotes about charging`). The long-chat notice suggests it.
 - **Chat history:** chats in Analyse mode are saved in the project folder (`chats/`) after each answer. A **Chats**

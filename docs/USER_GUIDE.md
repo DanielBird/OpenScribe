@@ -51,9 +51,10 @@ computers**. To remove one key, clear its box. To remove all keys, choose **Forg
 
 ## 3. Transcribe a recording
 
-DeScribe opens on **Home**. Click **Transcribe**. (**Project** is for a team's shared folder of sessions: see
-[Projects](#8-projects).) **Home**, at the start of the row at the top, takes you back. A running transcription or translation carries on, and **Transcribe**
-returns you to where you were. The browser's Back and Forward buttons also move between pages.
+DeScribe opens on **Home**. Click **Transcribe**. (**Analyse** is for a team's shared folder of sessions: see
+[Projects](#8-projects).) **Home**, at the start of the row at the top, takes you back. A running transcription or
+translation carries on, and **Transcribe** returns you to where you were. The browser's Back and Forward buttons also
+move between pages.
 
 **Setup**
 1. Add your ElevenLabs key on Settings, if you haven't yet.

@@ -458,3 +458,14 @@ check is on the work laptop) and W14 (needs a Store update).
 
 **Note:** the package family name follows from Name and Publisher. Locally installed test builds were
 `DeScribe_gsbrz2a1s0qx4`; Store builds get a new family name, and their own `Packages\…` folder.
+
+### 2026-10-31 — Status set to Done
+
+**Decided by the maintainer:** the phase's build work is finished, so the ROADMAP status is ☑. Two items stay open,
+as the other phases' open checks do:
+- **Task 8:** upload the MSIX in Partner Center, and record the steps' wording in
+  [reference/desktop.md](../reference/desktop.md#the-store).
+- **The work laptop:** W1–W15, with the app installed from the direct link.
+
+**Docs:** README.md now covers both builds and the desktop commands, and CHANGELOG.md's *Unreleased* has the desktop
+app.

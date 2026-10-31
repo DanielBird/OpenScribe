@@ -327,7 +327,7 @@ MVP = Phases 0–5. Each phase is sized for one agent session (or a few) and end
 | 20 | [Gemini for the project agent](phases/20-gemini-agent.md) | 16, 17, 19 | – | ☑ Done (live checks A1–A4 with Gemini, and manual row 20, open) |
 | 21 | [Chat history in the project folder](phases/21-chat-history.md) | 14, 16, 17, 20 | – | ☑ Done (live checks H1–H3 open) |
 | 22 | [Compacting a chat with `/compact`](phases/22-chat-compaction.md) | 17, 20, 21 | – | ☑ Done (live check C1 open) |
-| 24 | [Desktop shell and the Store pipeline](phases/24-desktop-shell.md) | – | 23 | ◐ In progress (built and packed; the Store listing and the work-laptop checklist open) |
+| 24 | [Desktop shell and the Store pipeline](phases/24-desktop-shell.md) | – | 23 | ☑ Done (Task 8, the Store submission, and the work-laptop checklist W1–W15 open) |
 
 Status values: ☐ Not started · ◐ In progress · ☑ Done.
 

@@ -7,8 +7,11 @@ playwright-report/
 *.local
 .idea/
 fixtures/large/
-.claude/*
-!.claude/launch.json
+
+# Claude Code: local only
+.claude/
+CLAUDE.md
+
 .impeccable/
 shots/
 dist-desktop/
