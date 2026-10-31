@@ -1,0 +1,9 @@
+# Keep LF in the working tree on Windows too, so `prettier --check` passes everywhere.
+* text=auto eol=lf
+
+*.wav binary
+*.mp3 binary
+*.m4a binary
+*.mp4 binary
+*.docx binary
+*.png binary

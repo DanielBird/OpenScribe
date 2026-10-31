@@ -1,0 +1,599 @@
+<!doctype html>
+<!--
+  Phase 10 spike: can Describe, opened from file://, use a OneDrive folder through the File System
+  Access API? Open this file by double-clicking it in Edge or Chrome and follow the checklist in
+  docs/reference/file-system-access.md. Self-contained: no build step, and the CSP below blocks
+  every network request (connect-src falls back to default-src 'none').
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'"
+    />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Describe – File System Access probe</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        font-family: system-ui, sans-serif;
+        line-height: 1.4;
+      }
+      body {
+        margin: 0 auto;
+        max-width: 64rem;
+        padding: 1rem;
+      }
+      h1 {
+        font-size: 1.4rem;
+      }
+      h2 {
+        font-size: 1.1rem;
+        margin-top: 1.5rem;
+      }
+      pre,
+      textarea,
+      output {
+        font-family: ui-monospace, Consolas, monospace;
+        font-size: 0.85rem;
+      }
+      pre {
+        white-space: pre-wrap;
+        word-break: break-word;
+      }
+      .checks {
+        display: grid;
+        grid-template-columns: 3rem 15rem 1fr;
+        gap: 0.5rem 0.75rem;
+        align-items: baseline;
+      }
+      .checks output {
+        overflow-wrap: anywhere;
+      }
+      .checks > span:not(.id) {
+        white-space: nowrap;
+      }
+      .id {
+        font-weight: 600;
+      }
+      button {
+        font: inherit;
+        padding: 0.25rem 0.6rem;
+      }
+      input[type='number'] {
+        width: 4rem;
+      }
+      textarea {
+        box-sizing: border-box;
+        width: 100%;
+        min-height: 18rem;
+      }
+      @media (max-width: 40rem) {
+        .checks {
+          grid-template-columns: 3rem 1fr;
+        }
+        .checks output {
+          grid-column: 1 / -1;
+          margin-bottom: 0.5rem;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <h1>File System Access probe</h1>
+    <p>
+      Phase 10 spike. The checklist is in <code>docs/reference/file-system-access.md</code>. This
+      page makes no network requests.
+    </p>
+
+    <h2>Environment</h2>
+    <pre id="env"></pre>
+
+    <h2>Checks</h2>
+    <p id="folder">Folder: none</p>
+    <div class="checks">
+      <span class="id">F2</span>
+      <button id="pick" type="button">Pick folder</button>
+      <output id="pick-out"></output>
+
+      <span class="id">F4</span>
+      <button id="store" type="button">Store handle</button>
+      <output id="store-out"></output>
+
+      <span class="id">F4</span>
+      <button id="load" type="button">Load handle</button>
+      <output id="load-out"></output>
+
+      <span class="id">F4</span>
+      <button id="request" type="button">Request permission</button>
+      <output id="request-out"></output>
+
+      <span class="id">F7</span>
+      <button id="list" type="button">List</button>
+      <output id="list-out"></output>
+
+      <span class="id">F7</span>
+      <span>
+        <button id="read" type="button">Read all</button>
+        <label>
+          parallel
+          <input id="parallel" type="number" min="1" max="32" value="1" />
+        </label>
+      </span>
+      <output id="read-out"></output>
+
+      <span class="id">F3</span>
+      <button id="write" type="button">Write</button>
+      <output id="write-out"></output>
+
+      <span class="id">F12</span>
+      <button id="overwrite" type="button">Overwrite twice quickly</button>
+      <output id="overwrite-out"></output>
+
+      <span class="id">F13</span>
+      <button id="clipboard" type="button">Clipboard</button>
+      <output id="clipboard-out"></output>
+
+      <span class="id">F14</span>
+      <button id="opfs" type="button">OPFS</button>
+      <output id="opfs-out"></output>
+    </div>
+
+    <h2><label for="log">Results</label></h2>
+    <form id="note-form">
+      <label for="note">Note</label>
+      <input id="note" type="text" size="40" placeholder="e.g. F8, after Free up space" />
+      <button type="submit">Add note</button>
+    </form>
+    <p>
+      <button id="copy" type="button">Copy results</button>
+      <button id="clear" type="button">Clear</button>
+      <output id="copy-out"></output>
+    </p>
+    <textarea id="log" readonly spellcheck="false"></textarea>
+
+    <script type="module">
+      const $ = (id) => document.getElementById(id);
+
+      // ---- Results log ---------------------------------------------------------------------
+      // Kept in localStorage so it survives the reloads, restarts and the copied page (F4–F6).
+      // Edge and Chrome keep separate storage, so each browser has its own log.
+      const LOG_KEY = 'describe-probe.log';
+      const logEl = $('log');
+      try {
+        logEl.value = localStorage.getItem(LOG_KEY) ?? '';
+      } catch {
+        // Storage unavailable: the log only lasts until the page closes.
+      }
+
+      function log(id, text) {
+        const time = new Date().toISOString().replace('T', ' ').slice(0, 23);
+        logEl.value += `${time} [${id}] ${text}\n`;
+        logEl.scrollTop = logEl.scrollHeight;
+        try {
+          localStorage.setItem(LOG_KEY, logEl.value);
+        } catch {
+          // See above.
+        }
+      }
+
+      const errText = (e) =>
+        e && typeof e === 'object' && 'name' in e ? `${e.name}: ${e.message}` : String(e);
+      const mb = (bytes) => `${(bytes / 1024 / 1024).toFixed(2)} MB`;
+      const dur = (msec) =>
+        msec < 1000 ? `${Math.round(msec)} ms` : `${(msec / 1000).toFixed(2)} s`;
+      const sleep = (msec) => new Promise((resolve) => setTimeout(resolve, msec));
+      const iso = (msec) => new Date(msec).toISOString().slice(0, 19);
+
+      window.addEventListener('error', (e) => log('page', `error: ${e.message}`));
+      window.addEventListener('unhandledrejection', (e) =>
+        log('page', `unhandled rejection: ${errText(e.reason)}`),
+      );
+
+      /**
+       * Wires a button to a check. `fn` runs synchronously inside the click handler, so the
+       * browser still sees the user's click when it calls showDirectoryPicker, requestPermission
+       * or the clipboard.
+       */
+      function check(buttonId, id, label, fn) {
+        const button = $(buttonId);
+        const out = $(`${buttonId}-out`);
+        button.addEventListener('click', async () => {
+          button.disabled = true;
+          out.textContent = 'Running…';
+          let text;
+          try {
+            text = await fn((progress) => (out.textContent = progress));
+          } catch (e) {
+            text = `failed: ${errText(e)}`;
+          } finally {
+            button.disabled = false;
+          }
+          out.textContent = text;
+          log(id, `${label}: ${text}`);
+        });
+      }
+
+      // ---- IndexedDB (database describe-probe, separate from the app's describe-v1) ---------
+      function openDb() {
+        return new Promise((resolve, reject) => {
+          const req = indexedDB.open('describe-probe', 1);
+          req.onupgradeneeded = () => req.result.createObjectStore('handles');
+          req.onsuccess = () => resolve(req.result);
+          req.onerror = () => reject(req.error);
+        });
+      }
+
+      async function idb(mode, op) {
+        const db = await openDb();
+        try {
+          return await new Promise((resolve, reject) => {
+            const tx = db.transaction('handles', mode);
+            const req = op(tx.objectStore('handles'));
+            tx.oncomplete = () => resolve(req.result);
+            tx.onerror = () => reject(tx.error);
+            tx.onabort = () => reject(tx.error);
+          });
+        } finally {
+          db.close();
+        }
+      }
+      const idbGet = (key) => idb('readonly', (store) => store.get(key));
+      const idbPut = (key, value) => idb('readwrite', (store) => store.put(value, key));
+
+      // ---- Environment (F1) ----------------------------------------------------------------
+      const page = decodeURIComponent(location.pathname.split('/').pop() ?? '');
+      const env = [
+        `page: ${page}`,
+        `protocol: ${location.protocol}`,
+        `isSecureContext: ${window.isSecureContext}`,
+        `showDirectoryPicker: ${'showDirectoryPicker' in window}`,
+        `userAgent: ${navigator.userAgent}`,
+      ];
+      try {
+        const data = await navigator.userAgentData?.getHighEntropyValues(['fullVersionList']);
+        const brands = (data?.fullVersionList ?? [])
+          .filter((b) => !/not.a.brand/i.test(b.brand))
+          .map((b) => `${b.brand} ${b.version}`);
+        env.push(`versions: ${brands.join(', ') || 'unknown'}`);
+      } catch (e) {
+        env.push(`versions: ${errText(e)}`);
+      }
+      $('env').textContent = env.join('\n');
+      log('F1', `page loaded · ${env.join(' · ')}`);
+
+      // ---- The folder ----------------------------------------------------------------------
+      let dir = null; // the current FileSystemDirectoryHandle, from Pick folder or Load handle
+      let listed = null; // file handles in sessions/ from the last List, for Read all
+
+      function setDir(handle) {
+        dir = handle;
+        listed = null;
+        $('folder').textContent = `Folder: "${handle.name}"`;
+      }
+
+      function requireDir() {
+        if (!dir) throw new Error('Pick a folder or load the stored handle first.');
+        return dir;
+      }
+
+      async function entriesOf(handle) {
+        const entries = [];
+        for await (const [name, entry] of handle.entries()) entries.push({ name, entry });
+        return entries;
+      }
+
+      /** Names in the folder root that belong to `prefix`, plus any swap or temporary files. */
+      async function relevantNames(prefix) {
+        const names = (await entriesOf(dir)).map((e) => e.name);
+        const hits = names.filter((n) => n.startsWith(prefix) || /\.crswap$|\.tmp$|^~|~$/i.test(n));
+        return hits.sort().join(', ') || 'none';
+      }
+
+      check('pick', 'F2', 'Pick folder', async () => {
+        const handle = await window.showDirectoryPicker({
+          id: 'describe-project',
+          mode: 'readwrite',
+        });
+        setDir(handle);
+        const permission = await handle.queryPermission({ mode: 'readwrite' });
+        return `picked "${handle.name}", permission ${permission}`;
+      });
+
+      check('store', 'F4', 'Store handle', async () => {
+        const handle = requireDir();
+        await idbPut('project', handle);
+        return `stored "${handle.name}"`;
+      });
+
+      check('load', 'F4', 'Load handle', async () => {
+        const handle = await idbGet('project');
+        if (!handle) return 'nothing stored';
+        setDir(handle);
+        const permission = await handle.queryPermission({ mode: 'readwrite' });
+        return `loaded "${handle.name}", queryPermission ${permission}`;
+      });
+
+      check('request', 'F4', 'Request permission', async () => {
+        const handle = requireDir();
+        const result = await handle.requestPermission({ mode: 'readwrite' });
+        return `requestPermission ${result}`;
+      });
+
+      // ---- List (F7, F8) -------------------------------------------------------------------
+      /** FNV-1a, 32 bits: a short fingerprint of names, sizes and lastModified dates. */
+      function fingerprint(text) {
+        let h = 0x811c9dc5;
+        for (let i = 0; i < text.length; i++) {
+          h ^= text.charCodeAt(i);
+          h = Math.imul(h, 0x01000193) >>> 0;
+        }
+        return h.toString(16).padStart(8, '0');
+      }
+
+      check('list', 'F7', 'List', async () => {
+        const root = requireDir();
+        const t0 = performance.now();
+        const top = await entriesOf(root);
+        const sessionsDir = top.find((e) => e.name === 'sessions' && e.entry.kind === 'directory');
+        const sessions = sessionsDir ? await entriesOf(sessionsDir.entry) : [];
+        const listMs = performance.now() - t0;
+
+        const all = [
+          ...top.map((e) => ({ ...e, path: e.name })),
+          ...sessions.map((e) => ({ ...e, path: `sessions/${e.name}` })),
+        ];
+        const files = all.filter((e) => e.entry.kind === 'file');
+        const statErrors = new Map();
+        const t1 = performance.now();
+        for (const f of files) {
+          try {
+            const file = await f.entry.getFile();
+            f.size = file.size;
+            f.lastModified = file.lastModified;
+          } catch (e) {
+            statErrors.set(e.name, (statErrors.get(e.name) ?? 0) + 1);
+          }
+        }
+        const statMs = performance.now() - t1;
+
+        listed = sessions.filter((e) => e.entry.kind === 'file' && e.name.endsWith('.json'));
+        const statted = files.filter((f) => f.size !== undefined);
+        const total = statted.reduce((n, f) => n + f.size, 0);
+        const dates = statted.map((f) => f.lastModified).sort((a, b) => a - b);
+        // Only sessions/: the Write checks add files to the folder root between runs.
+        const print = fingerprint(
+          statted
+            .filter((f) => f.path.startsWith('sessions/'))
+            .map((f) => `${f.path}|${f.size}|${f.lastModified}`)
+            .sort()
+            .join('\n'),
+        );
+        const other = all
+          .filter((e) =>
+            e.entry.kind === 'file'
+              ? !e.path.startsWith('sessions/') || !e.name.endsWith('.json')
+              : e.path !== 'sessions',
+          )
+          .map((e) => (e.entry.kind === 'directory' ? `${e.path}/` : e.path));
+
+        return [
+          `${top.length} entries in the folder, ${sessions.length} in sessions/ (${listed.length} .json)`,
+          `${files.length} files, ${mb(total)}`,
+          `listing ${dur(listMs)}, getFile() stats ${dur(statMs)}`,
+          dates.length ? `lastModified ${iso(dates[0])} – ${iso(dates.at(-1))}` : 'no dates',
+          `sessions/ fingerprint ${print}`,
+          `stat errors: ${[...statErrors].map(([k, n]) => `${k} ×${n}`).join(', ') || 'none'}`,
+          `other names: ${other.slice(0, 20).join(', ') || 'none'}${other.length > 20 ? ` (+${other.length - 20} more)` : ''}`,
+        ].join(' · ');
+      });
+
+      // ---- Read all (F7, F8, F9, F11) ------------------------------------------------------
+      check('read', 'F7', 'Read all', async (progress) => {
+        requireDir();
+        if (!listed) return 'run List first: Read all reads the files the last List found';
+        if (listed.length === 0) return 'no .json files in sessions/';
+        const parallel = Math.min(32, Math.max(1, Number($('parallel').value) || 1));
+        const queue = [...listed];
+        const errors = new Map();
+        let done = 0;
+        let ok = 0;
+        let bytes = 0;
+        const t0 = performance.now();
+        const worker = async () => {
+          while (queue.length) {
+            const { name, entry } = queue.shift();
+            try {
+              const file = await entry.getFile();
+              const text = await file.text();
+              JSON.parse(text);
+              bytes += file.size;
+              ok++;
+            } catch (e) {
+              const list = errors.get(e.name) ?? [];
+              list.push(`${name}: ${e.message}`);
+              errors.set(e.name, list);
+            }
+            done++;
+            if (done % 10 === 0) progress(`Reading ${done} of ${listed.length}…`);
+          }
+        };
+        await Promise.all(Array.from({ length: parallel }, worker));
+        const ms = performance.now() - t0;
+        const errorText =
+          [...errors]
+            .map(([k, list]) => `${k} ×${list.length} (${list.slice(0, 3).join('; ')})`)
+            .join(', ') || 'none';
+        return [
+          `${ok} of ${listed.length} files read and parsed`,
+          mb(bytes),
+          `${dur(ms)} (${dur(ms / listed.length)} per file, parallel ${parallel})`,
+          `errors: ${errorText}`,
+        ].join(' · ');
+      });
+
+      // ---- Write (F3) and overwrite (F12) --------------------------------------------------
+      const WORDS = (
+        'hearing aid battery charger night bedside routine phone app sound clinic home visit ' +
+        'audiologist noise speech background program settings update quiet restaurant family'
+      ).split(' ');
+
+      /** About `bytes` of JSON, labelled so a read-back shows which write it came from. */
+      function payload(label, bytes = 1_000_000) {
+        const lines = [];
+        let size = 0;
+        for (let i = 0; size < bytes; i++) {
+          const words = Array.from(
+            { length: 12 },
+            (_, j) => WORDS[(i * 7 + j * 13) % WORDS.length],
+          );
+          const line = `t${i} ${words.join(' ')}`;
+          lines.push(line);
+          size += line.length + 3;
+        }
+        return JSON.stringify({
+          kind: 'describe.probe',
+          label,
+          writtenAt: new Date().toISOString(),
+          lines,
+        });
+      }
+
+      check('write', 'F3', 'Write', async () => {
+        const root = requireDir();
+        const name = `probe-${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
+        const t0 = performance.now();
+        const handle = await root.getFileHandle(name, { create: true });
+        const writable = await handle.createWritable();
+        await writable.write(payload('write'));
+        const beforeClose = await relevantNames(name);
+        await writable.close();
+        const ms = performance.now() - t0;
+        const afterClose = await relevantNames(name);
+        const file = await handle.getFile();
+        return [
+          `wrote ${name}, ${mb(file.size)}, ${dur(ms)}`,
+          `before close(): ${beforeClose}`,
+          `after close(): ${afterClose}`,
+        ].join(' · ');
+      });
+
+      check('overwrite', 'F12', 'Overwrite twice quickly', async () => {
+        const root = requireDir();
+        const name = 'probe-overwrite.json';
+        const t0 = performance.now();
+        const at = () => dur(performance.now() - t0);
+        // A keeps its file open for about 200 ms (8 chunks, 25 ms apart), so B, started at
+        // 100 ms, opens the same file while A is still writing.
+        const write = async (label, chunks) => {
+          const start = at();
+          try {
+            const handle = await root.getFileHandle(name, { create: true });
+            const writable = await handle.createWritable();
+            const text = payload(label);
+            const size = Math.ceil(text.length / chunks);
+            for (let i = 0; i < chunks; i++) {
+              await writable.write(text.slice(i * size, (i + 1) * size));
+              if (chunks > 1) await sleep(25);
+            }
+            await writable.close();
+            return `${label} ${start}–${at()} ok`;
+          } catch (e) {
+            return `${label} ${start}–${at()} failed ${errText(e)}`;
+          }
+        };
+        const a = write('A', 8);
+        await sleep(100);
+        const b = write('B', 1);
+        const results = await Promise.all([a, b]);
+        let winner;
+        try {
+          const file = await (await root.getFileHandle(name)).getFile();
+          winner = `file holds ${JSON.parse(await file.text()).label}`;
+        } catch (e) {
+          winner = `read back failed ${errText(e)}`;
+        }
+        return [...results, winner, `files: ${await relevantNames('probe-overwrite')}`].join(' · ');
+      });
+
+      // ---- Clipboard (F13) -----------------------------------------------------------------
+      check('clipboard', 'F13', 'Clipboard', async () => {
+        await navigator.clipboard.writeText('probe');
+        return 'writeText ok: "probe" is on the clipboard';
+      });
+
+      // ---- OPFS (F14) ----------------------------------------------------------------------
+      async function readOpfs(folder) {
+        const file = await (await folder.getFileHandle('probe.txt')).getFile();
+        return file.text();
+      }
+
+      check('opfs', 'F14', 'OPFS', async () => {
+        const parts = [];
+        // A handle stored by an earlier run (before a reload) must still work.
+        try {
+          const stored = await idbGet('opfs');
+          parts.push(
+            stored
+              ? `earlier handle: read "${await readOpfs(stored)}", ${await stored.queryPermission({ mode: 'readwrite' })}`
+              : 'no earlier handle',
+          );
+        } catch (e) {
+          parts.push(`earlier handle failed ${errText(e)}`);
+        }
+        const root = await navigator.storage.getDirectory();
+        const folder = await root.getDirectoryHandle('describe-probe-opfs', { create: true });
+        const writable = await (
+          await folder.getFileHandle('probe.txt', { create: true })
+        ).createWritable();
+        const text = `probe ${new Date().toISOString()}`;
+        await writable.write(text);
+        await writable.close();
+        const back = await readOpfs(folder);
+        parts.push(back === text ? 'write and read back ok' : `read back differs: "${back}"`);
+        await idbPut('opfs', folder);
+        const again = await idbGet('opfs');
+        const backAgain = await readOpfs(again);
+        parts.push(
+          backAgain === text
+            ? 'directory handle stored in IndexedDB and read back ok'
+            : `stored handle reads "${backAgain}"`,
+        );
+        parts.push(`queryPermission ${await again.queryPermission({ mode: 'readwrite' })}`);
+        return parts.join(' · ');
+      });
+
+      // ---- Notes and Copy results ----------------------------------------------------------
+      // A button serves several checks (Read all is F7, F8, F9 and F11), so a note says which.
+      $('note-form').addEventListener('submit', (e) => {
+        e.preventDefault();
+        const text = $('note').value.trim();
+        if (text) log('note', text);
+        $('note').value = '';
+      });
+
+      $('copy').addEventListener('click', async () => {
+        try {
+          await navigator.clipboard.writeText(logEl.value);
+          $('copy-out').textContent = 'Copied';
+        } catch (e) {
+          logEl.focus();
+          logEl.select();
+          $('copy-out').textContent =
+            `Clipboard failed (${errText(e)}). The text is selected: press Ctrl+C.`;
+        }
+      });
+
+      $('clear').addEventListener('click', () => {
+        logEl.value = '';
+        try {
+          localStorage.removeItem(LOG_KEY);
+        } catch {
+          // See above.
+        }
+        $('copy-out').textContent = '';
+      });
+    </script>
+  </body>
+</html>

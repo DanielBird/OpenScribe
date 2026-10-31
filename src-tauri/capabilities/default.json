@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "None: the web app never calls Tauri's IPC.",
+  "windows": ["main"],
+  "permissions": []
+}

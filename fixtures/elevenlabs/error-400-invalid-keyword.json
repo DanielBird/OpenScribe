@@ -1,0 +1,10 @@
+{
+  "detail": {
+    "type": "validation_error",
+    "code": "invalid_parameters",
+    "message": "Some keyword contains invalid characters",
+    "status": "invalid_keyword",
+    "request_id": "fixture-request-0001",
+    "param": "keywords"
+  }
+}
