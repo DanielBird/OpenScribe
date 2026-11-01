@@ -61,3 +61,8 @@ Turn text became editable in Phase 9 (DECISIONS D19). Still open:
   stays at 0 while `currentTime` advances, which could show the existing format message. This is a non-standard API,
   so try it on real files in Edge and Chrome before relying on it.
 - A dark theme (tokens are ready for it; contrast is checked in `tokens.spec.ts`).
+- **Right-to-left transcripts** (Arabic, Hebrew, Persian, Urdu; Auto-detect transcribes them since Phase 26): `dir="auto"`
+  on each turn's text, the edit box and search snippets, and right-to-left paragraphs in the `.docx` (`docx` 9.11 has
+  `bidirectional` on paragraphs and `rightToLeft` on runs).
+- **Translating into languages other than English.** English is the only target, and projects rely on it (summaries,
+  quotes and search read the English text, PROJECTS.md A4), so this is a redesign rather than an option.

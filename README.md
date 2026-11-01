@@ -1,6 +1,6 @@
 # DeScribe
 
-DeScribe turns recorded interviews and meetings (English, German or French) into speaker-labelled, timestamped
+DeScribe turns recorded interviews and meetings, in English or many other languages, into speaker-labelled, timestamped
 transcripts, and helps a research team find quotes and themes across a whole project of them. It sends recordings to
 ElevenLabs Speech-to-Text and uses Claude or Gemini to translate, summarise and answer questions, always with the
 user's own API keys.
@@ -21,8 +21,8 @@ project work, [docs/PROJECTS.md](docs/PROJECTS.md).
 DeScribe opens on **Home**, with two modes and a **Settings** page.
 
 **Transcribe** (Setup → Glossary → Output):
-- Transcription with ElevenLabs `scribe_v2`: speakers, word timestamps, language auto/EN/DE/FR, optional number of
-  speakers, zero retention. Recordings up to 3 GB and 10 hours.
+- Transcription with ElevenLabs `scribe_v2`: speakers, word timestamps, language auto or one of the 36 ElevenLabs
+  transcribes most accurately, optional number of speakers, zero retention. Recordings up to 3 GB and 10 hours.
 - A glossary of project terms, sent to ElevenLabs as key terms.
 - The transcript by speaker turn: rename speakers, edit the text, click a turn to play the recording from there.
 - Translation to English with Claude or Gemini, and `.docx` export of the original or the English version.

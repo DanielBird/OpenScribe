@@ -24,6 +24,29 @@ describe('normalizeForMatch', () => {
   it('keeps letters that NFKD does not decompose', () => {
     expect(normalizeForMatch('København Æble Łódź')).toBe('københavn æble łodz');
   });
+
+  it.each([
+    ['Vietnamese', 'người', 'nguoi'],
+    ['Greek', 'Ἄνθρωπος', 'ανθρωπος'],
+    ['Cyrillic', 'Йогурт', 'иогурт'],
+    ['Arabic vowel points', 'العَرَبِيَّة', 'العربية'],
+    ['Hebrew points', 'שָׁלוֹם', 'שלום'],
+    ['Japanese voicing marks', 'ベッド', 'ヘット'],
+  ])('removes accents: %s', (_name, input, expected) => {
+    expect(normalizeForMatch(input)).toBe(expected);
+  });
+
+  it.each([
+    ['Thai', 'ฉัน'],
+    ['Hindi', 'हिंदी'],
+    ['Kannada', 'ಕನ್ನಡ'],
+    ['Malayalam', 'മലയാളം'],
+  ])('keeps the vowel signs that spell a word: %s', (_name, word) => {
+    expect(normalizeForMatch(word)).toBe(word.normalize('NFKD'));
+    expect(wordsWithOffsets(word)).toEqual([
+      { word: word.normalize('NFKD'), start: 0, end: word.length },
+    ]);
+  });
 });
 
 describe('wordsWithOffsets', () => {
@@ -75,6 +98,50 @@ describe('wordsWithOffsets', () => {
   it('keeps decomposed text in one word', () => {
     const text = 'Ho\u0308rgera\u0308t';
     expect(wordsWithOffsets(text)).toEqual([{ word: 'horgerat', start: 0, end: text.length }]);
+  });
+
+  it('segments scripts written without spaces into words, with their own offsets', () => {
+    const japanese = '\u300c\u6bce\u6669\u3001\u5145\u96fb\u3057\u307e\u3059\u3002\u300d';
+    const found = wordsWithOffsets(japanese);
+    expect(found.map((w) => japanese.slice(w.start, w.end))).toEqual([
+      '\u6bce\u6669',
+      '\u5145\u96fb',
+      '\u3057',
+      '\u307e\u3059',
+    ]);
+    expect(found.map((w) => w.word)).toEqual([
+      '\u6bce\u6669',
+      '\u5145\u96fb',
+      '\u3057',
+      '\u307e\u3059',
+    ]);
+
+    const thai =
+      '\u0e09\u0e31\u0e19\u0e0a\u0e32\u0e23\u0e4c\u0e08\u0e21\u0e31\u0e19\u0e02\u0e49\u0e32\u0e07\u0e40\u0e15\u0e35\u0e22\u0e07';
+    expect(words(thai)).toEqual([
+      '\u0e09\u0e31\u0e19',
+      '\u0e0a\u0e32\u0e23\u0e4c\u0e08',
+      '\u0e21\u0e31\u0e19',
+      '\u0e02\u0e49\u0e32\u0e07',
+      '\u0e40\u0e15\u0e35\u0e22\u0e07',
+    ]);
+  });
+
+  it('segments a run that mixes scripts, and leaves spaced scripts alone', () => {
+    expect(words('Oticon\u306e\u5145\u96fb\u5668')).toEqual([
+      'oticon',
+      '\u306e',
+      '\u5145\u96fb\u5668',
+    ]);
+    expect(
+      words(
+        '\u0417\u0430\u0440\u044f\u0434\u043a\u0430 \u0443 \u043a\u0440\u043e\u0432\u0430\u0442\u0438',
+      ),
+    ).toEqual([
+      '\u0437\u0430\u0440\u044f\u0434\u043a\u0430',
+      '\u0443',
+      '\u043a\u0440\u043e\u0432\u0430\u0442\u0438',
+    ]);
   });
 });
 

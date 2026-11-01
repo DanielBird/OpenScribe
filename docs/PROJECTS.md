@@ -22,7 +22,7 @@ session is useful as soon as it has been added.
 | A1 | A **project** is a shared folder that OneDrive (or SharePoint sync) keeps on each researcher's computer. It holds every session's **transcript and summary**. Recordings stay out. | Anyone on the team can open any session, and the agent can read every original. Playback still needs the recording attached locally. |
 | A2 | The **transcript is the research object**, whatever the number of respondents. | Metadata belongs to the session and lists the respondents in it. There is no register of respondents across sessions. |
 | A3 | **Themes:** a shared **project brief** (research questions, discussion guide) guides every summary, and the agent adds emergent themes. | One `describe-project.json` per project. Summaries reuse theme names the project already uses. |
-| A4 | **Everything in English:** summaries and quotes. | Adding a German or French session translates it to English first, with the existing translation. Search and quotes work on the English text. A quote from a translated session says so. |
+| A4 | **Everything in English:** summaries and quotes. | Adding a session in another language translates it to English first, with the existing translation. Search and quotes work on the English text. A quote from a translated session says so. |
 | A5 | Summaries are **JSON, read only through DeScribe**. | No .docx or .md copies. Project mode needs a summary view. |
 | A6 | **Claude only** for summaries and chat. *Changed 2026-10-21 (D26): Claude or Gemini. Summaries and the pipeline get Gemini in Phase 19, the chat in Phase 20.* | One agent implementation until Phase 20. Translation on the Output tab keeps offering Gemini. |
 | A7 | **The agent extracts respondent metadata.** | The fields come from the brief's list, plus anything else notable. The agent also sees the recording's file name and the speaker labels, so a file named `P07 Hamburg…` puts those details in the metadata. |
@@ -60,7 +60,7 @@ cached reads. These are estimates; the live checks (§6) measure them.
 | A question that reads passages from 10–15 sessions | $0.25–1 | $0.50–2 |
 | A question at the cap (§5.5) | about $2 | about $3 |
 
-- Translating a German or French hour costs about the same again as summarising it.
+- Translating an hour in another language costs about the same again as summarising it.
 - A question's cost is mostly for the passages it reads. The cards are cached across the conversation.
 
 ## 4. Three design choices
@@ -71,8 +71,8 @@ cached reads. These are estimates; the live checks (§6) measure them.
    the API isn't yet proven on `file://` with OneDrive's Files On-Demand, so Phase 10 checks that before anything
    is built on it.
 2. **Agentic keyword search, not embeddings.** The agent sees a card for every session. It runs its own keyword
-   queries over all the transcripts: word variants, synonyms, and German or French terms when it searches the
-   originals. It reads full summaries and transcript passages only where they matter. Adding a session adds one
+   queries over all the transcripts: word variants, synonyms, and terms in the session's own language when it
+   searches the originals. It reads full summaries and transcript passages only where they matter. Adding a session adds one
    more file to the folder, with nothing to re-index or re-embed.
 3. **Quotes are pointers that the app checks.** The agent writes a quote as `<quote ref="s12/t412">…</quote>`.
    DeScribe checks that the words appear in that turn, then shows the transcript's own text with the citation. A
@@ -321,8 +321,9 @@ interface AgentProvider {
 
 **What the agent sees.** The order puts what changes least first, so caching works:
 1. **Instructions** (fixed):
-   - How to research: start from the cards, run several keyword queries with variants and synonyms (and German or
-     French terms for the originals), read passages around the hits, and read whole sessions only when needed.
+   - How to research: start from the cards, run several keyword queries with variants and synonyms (and terms in
+     the session's language for the originals), read passages around the hits, and read whole sessions only when
+     needed.
    - Write in English. Say when the evidence is thin. Never quote anything it hasn't read.
    - The quote format, and the small Markdown subset that the UI renders.
 2. **Context,** frozen when the chat starts: the brief, and one card per session, sorted by date and keyed

@@ -46,7 +46,7 @@ export const TranscriptDocSchema = z.object({
   request: z.object({
     provider: z.literal('elevenlabs'),
     model: z.string(),
-    languageHint: z.enum(['auto', 'en', 'de', 'fr']),
+    languageHint: z.string(), // 'auto' or a language code (DECISIONS.md D37)
     numSpeakers: z.number().nullable(),
     zeroRetention: z.boolean(),
     keyterms: z.array(z.string()),

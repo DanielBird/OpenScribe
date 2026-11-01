@@ -39,7 +39,7 @@ decision changes, add an entry that replaces the earlier one and mark the earlie
 ### D5 — Setup options
 - **Decision:** Language dropdown (Auto-detect *(default)* / English / German / French). Optional "Number of
   speakers" (Auto or 1–32). "Zero retention (Enterprise only)" checkbox, off by default
-  (`enable_logging=false`).
+  (`enable_logging=false`). *Language list widened by D37: Auto-detect and ElevenLabs' 36 most accurate languages.*
 
 ### D6 — One glossary list
 - **Decision:** A single list, saved to `localStorage` after every edit. Users can paste, edit inline, delete,
@@ -596,3 +596,39 @@ summarise them.
   contents are checked again. Licence texts that a package doesn't ship, or ships too much of (Vite's lists Vite's own
   dependencies; JSZip's adds the GPL it is also offered under), are kept in `scripts/notices/`. Of "MIT OR …", only
   the MIT text is shown. The web build leaves out the desktop notices (`__DESKTOP__`).
+
+### D37 — Recordings in more languages: ElevenLabs' most accurate tier on Setup (2026-11-01; Phase 26)
+- **Decision:** Setup's **Language** list is Auto-detect and the 36 languages ElevenLabs rates "Excellent" (a word
+  error rate of 5% or less, `providers/transcription/elevenlabs/languages.ts`), A–Z by English name. Any other
+  language still works through Auto-detect. Codes are kept in one form (`normalizeLanguage()`, `Intl.Locale`: ISO
+  639-1 where there is one) and named in English by `Intl.DisplayNames`, so every language ElevenLabs returns is
+  named properly in the header, the export, the session list and the prompts. The request sends ElevenLabs' own
+  ISO 639-3 code. Translation stays English-only (D7, PROJECTS.md A4).
+- **Why:** the maintainer asked for languages other than English, German and French (2026-11-01), and chose the most
+  accurate tier so that what Setup offers transcribes well. The translation step already accepted any language;
+  only the names, the list and search were missing.
+- **Consequences:**
+  - `languageHint` in prefs and in `TranscriptDoc` is any string. By D18 that's a widening: newer releases read
+    everything older ones wrote. An **older** release ignores a last transcript, and reports a project transcript as
+    unreadable, when its hint is one of the new languages. Auto-detected transcripts and English/German/French ones
+    are unaffected. Landing this before the 2.0 release (Phase 18) keeps project folders out of it.
+  - A saved hint the provider doesn't offer falls back to Auto-detect.
+  - Right-to-left display and export (Arabic, Hebrew, Persian, Urdu) are not handled: `future.md` F4.
+
+### T19 — Words in scripts without spaces come from `Intl.Segmenter`; accents are not vowel signs (2026-11-01; Phase 26)
+- **Decision:**
+  - In `domain/corpus/normalize.ts`, a run of letters containing Han, Hiragana, Katakana, Thai, Lao, Khmer or Myanmar
+    is split into words by `Intl.Segmenter` (`'und'`, `granularity: 'word'`). Each word keeps its own offsets.
+  - Matching removes only accents: the combining marks shared by every script (Latin, Greek and Cyrillic accents,
+    Arabic vowel points, Japanese voicing marks) and Hebrew points. Until now it removed every mark, which also
+    deleted the vowel signs of Thai and Indic scripts (Kannada and Malayalam are on the list), so many different words
+    became one.
+  - The agent's `estimateTokens()` counts each Han, Hiragana, Katakana and Hangul character as a token, the rest at
+    3.5 characters a token.
+- **Why:** T12's search is a scan over words. Without a word boundary, a whole Chinese, Japanese or Thai sentence was
+  one word that no single-word query could find. Search, queries, snippets and the quote check share one walker, so
+  they still agree. Chinese, Japanese and Korean text runs about a token per character, so the agent's budget
+  (`transcriptTokensPerQuestion`) undercounted an untranslated session of theirs about 3.5×.
+- **Consequences:** the en/de/fr benchmark is unchanged (the ASCII fast paths are untouched). Dictionary segmentation
+  depends on the browser's ICU, so a word boundary can differ slightly between Chromium versions; queries and text are
+  segmented the same way in one browser.

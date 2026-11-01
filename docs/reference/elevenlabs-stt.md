@@ -33,7 +33,7 @@ So the browser can call the API directly from the single HTML file.
 |---|---|---|
 | `model_id` | `scribe_v2` | Required |
 | `file` | the selected `File` | Under 3 GB (product docs; the API reference says 5 GB, so we use the stricter 3 GB). Minimum 100 ms. Audio or video. |
-| `language_code` | `en` / `de` / `fr`, or **omitted** for Auto | ISO-639-1 or ISO-639-3 accepted (both confirmed, V5) |
+| `language_code` | ElevenLabs' ISO 639-3 code for the chosen language (`deu`, `spa`, …), or **omitted** for Auto | ISO-639-1 or ISO-639-3 accepted (both confirmed for German, V5). The list: [Supported languages](#supported-languages). |
 | `diarize` | `true` | Speaker separation |
 | `num_speakers` | 1–32, or **omitted** for Auto | Max 32 |
 | `timestamps_granularity` | `word` | |
@@ -44,6 +44,24 @@ So the browser can call the API directly from the single HTML file.
 Parameters we deliberately **don't** use: `source_url`, `cloud_storage_url`, `use_multi_channel`,
 `detect_speaker_roles`, `entity_detection`/`entity_redaction`, `transcript_edit`, `additional_formats`,
 `temperature`, `seed`, `diarization_threshold`, `webhook` (except as a possible fallback, see V4).
+
+## Supported languages
+
+From the [Speech-to-Text page](https://elevenlabs.io/docs/overview/capabilities/speech-to-text), 2026-11-01. It says
+Scribe v2 supports "90+ languages" and groups them by word error rate (WER). Setup lists only the first tier (D37);
+every other language is transcribed with Auto-detect.
+
+| Tier | Languages (ISO 639-3) |
+|---|---|
+| **Excellent** (≤ 5% WER), listed on Setup | Belarusian (bel), Bosnian (bos), Bulgarian (bul), Catalan (cat), Croatian (hrv), Czech (ces), Danish (dan), Dutch (nld), English (eng), Estonian (est), Finnish (fin), French (fra), Galician (glg), German (deu), Greek (ell), Hungarian (hun), Icelandic (isl), Indonesian (ind), Italian (ita), Japanese (jpn), Kannada (kan), Latvian (lav), Macedonian (mkd), Malay (msa), Malayalam (mal), Norwegian (nor), Polish (pol), Portuguese (por), Romanian (ron), Russian (rus), Slovak (slk), Spanish (spa), Swedish (swe), Turkish (tur), Ukrainian (ukr), Vietnamese (vie) |
+| High accuracy (> 5% to ≤ 10%) | Armenian (hye), Azerbaijani (aze), Bengali (ben), Cantonese (yue), Filipino (fil), Georgian (kat), Gujarati (guj), Hindi (hin), Kazakh (kaz), Lithuanian (lit), Maltese (mlt), Mandarin (cmn), Marathi (mar), Nepali (nep), Odia (ori), Persian (fas), Serbian (srp), Slovenian (slv), Swahili (swa), Tamil (tam), Telugu (tel) |
+| Good (> 10% to ≤ 20%) | Afrikaans (afr), Arabic (ara), Assamese (asm), Asturian (ast), Burmese (mya), Hausa (hau), Hebrew (heb), Javanese (jav), Korean (kor), Kyrgyz (kir), Luxembourgish (ltz), Māori (mri), Occitan (oci), Punjabi (pan), Tajik (tgk), Thai (tha), Uzbek (uzb), Welsh (cym) |
+| Moderate (> 25% to ≤ 50%) | Amharic (amh), Ganda (lug), Igbo (ibo), Irish (gle), Khmer (khm), Kurdish (kur), Lao (lao), Mongolian (mon), Northern Sotho (nso), Pashto (pus), Shona (sna), Sindhi (snd), Sinhala (sin), Somali (som), Urdu (urd), Wolof (wol), Xhosa (xho), Yoruba (yor), Zulu (zul) |
+
+The page isn't consistent: its main list also has Chichewa (nya), Cebuano (ceb), Fulah (ful), Kabuverdianu (kea), Luo
+(luo) and Umbundu (umb), which are in no tier; it calls Mandarin `zho` in one place and `cmn` in another; and no tier
+covers 20–25%. DeScribe names any code the response returns with `Intl.DisplayNames` (`languageName()`), so these
+gaps don't matter outside the Setup list.
 
 ## Limits & cost
 
@@ -171,6 +189,7 @@ Choose `--terms` that are actually spoken in the clip, or V1 can't show whether 
 | V3 | Which endpoint can verify a key scoped only to speech-to-text? | **`POST /v1/speech-to-text` without a file.** The GET candidates don't work: with the maintainer's restricted key, `GET /v1/user`, `/v1/user/subscription` and `/v1/models` all → 401 `missing_permissions`. The no-audio POST tells keys apart, so ElevenLabs checks the key before the body: the real key → 400 `invalid_parameters` "Must provide either file or a URL parameter."; an invalid key → 401 `invalid_api_key`. Nothing is transcribed, so it's free. `verifyKey` uses it. Not observed: a key *without* Speech-to-Text permission (expected 401 `missing_permissions`, which has its own message). | 2026-10-13 |
 | V4 | Does a synchronous request for a ≥ 60 min file complete reliably (Node and browser)? Record processing time ÷ audio length. If not, design async: `webhook=true` → 202 + `transcription_id` → poll `GET …/transcripts/{id}`. Check whether `webhook=true` needs a webhook configured in the ElevenLabs dashboard. | **Accepted for 1.0 as a known limitation** until [TESTING.md](../TESTING.md) scenario 5 is run on the release file. It needs a long recording of the maintainer's own; the result goes here. Default: a synchronous request with no client timeout (`xhr.timeout = 0`). The Output tab shows the processing time. If a long run fails, design the async fallback described in the question. | 2026-10-14 (accepted) |
 | V5 | What format is `language_code` in the response (`deu` vs `de`)? Is `language_code=de` accepted in the request? | **Response: ISO-639-3** (an English clip with Auto returned `"eng"`). **Request: both** `de` and `deu` → 200. No change: we send ISO-639-1, and `normalizeLanguage()` maps `eng`/`deu`/`fra`. | 2026-10-13 |
+| V7 | Does `language_code` take ElevenLabs' ISO 639-3 code for the newly listed languages (spot check `spa`, `jpn`, `nor`, `msa`), and does the response return the same language? | *Pending* (Phase 26; no real API calls until the maintainer asks). Assumption until then: yes, as V5 showed for `deu`, since the codes are the ones the docs list. | – |
 | V6 | Which formats do ElevenLabs and Chromium `<audio>` both handle (mp3, m4a, wav, mp4, webm, ogg, flac)? Note any that ElevenLabs accepts but the browser can't play. | **Browser side measured; see [V6 details](#v6-details-what-the-browser-can-play).** Every common format plays, including the audio track of mp4, mov, mkv and webm video. Not playable: wma, wmv, avi and aiff (media error 4: the app shows the format message). Two silent traps in Chrome (Edge is fine): AC-3 audio in mp4 plays the video with **no sound and no error**, and HEVC video makes `play()` reject with `NotSupportedError` (now shown as the format message). ElevenLabs acceptance of each format wasn't re-tested (no live call). | 2026-10-13 |
 
 ### V6 details: what the browser can play

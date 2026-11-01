@@ -4,6 +4,7 @@ import JSZip from 'jszip';
 import {
   englishFor,
   expect,
+  fixture,
   goToGlossary,
   mockAnthropic,
   mockElevenLabs,
@@ -108,6 +109,34 @@ test('translates a German transcript with Claude, switches versions and exports 
   expect(xml).toContain('English t1.');
   expect(xml).toContain('English (translated from German with Claude, claude-opus-5-5)');
   expect(xml).not.toContain('Guten Tag');
+});
+
+test('a transcript in another language is named, translated and exported by its language', async ({
+  page,
+}) => {
+  // The German fixture, as ElevenLabs would return a Spanish recording.
+  const spanish = JSON.stringify({
+    ...JSON.parse(fixture('two-speakers-short')),
+    language_code: 'spa',
+  });
+  await mockElevenLabs(page, async () => ({ status: 200, body: spanish }));
+  const calls = await mockAnthropic(page);
+  await openApp(page);
+  await goToGlossary(page);
+  await run(page);
+
+  await expect(page.locator('.transcript-header')).toContainText(/Spanish \(\d+%\)/);
+  await expect(page.locator('ol.turn-list')).toHaveAttribute('lang', 'es');
+  await translate(page);
+  expect(calls[0]!.body.system).toContain('from Spanish into natural, faithful English.');
+
+  await versions(page).getByRole('button', { name: 'Original (Spanish)' }).click();
+  await page.getByRole('button', { name: 'Download .docx' }).click();
+  const choose = page.getByRole('dialog', { name: 'Which version?' });
+  await expect(choose.getByRole('radio', { name: 'Original (Spanish)' })).toBeChecked();
+  const downloading = page.waitForEvent('download');
+  await choose.getByRole('button', { name: 'Download' }).click();
+  expect((await downloading).suggestedFilename()).toBe('tone-5s - transcript (Spanish).docx');
 });
 
 test('translates with Gemini and the chosen model', async ({ page }) => {

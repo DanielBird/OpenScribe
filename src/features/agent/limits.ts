@@ -22,7 +22,10 @@ export const AGENT_LIMITS = {
 
 /** Characters per token, roughly, for English and German text. Good enough for a budget, not for billing. */
 const CHARS_PER_TOKEN = 3.5;
+/** Chinese, Japanese and Korean: about a token per character, not 3.5 characters (DECISIONS.md T19). */
+const DENSE_SCRIPT = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/gu;
 
 export function estimateTokens(text: string): number {
-  return Math.ceil(text.length / CHARS_PER_TOKEN);
+  const dense = text.match(DENSE_SCRIPT)?.length ?? 0;
+  return Math.ceil(dense + (text.length - dense) / CHARS_PER_TOKEN);
 }

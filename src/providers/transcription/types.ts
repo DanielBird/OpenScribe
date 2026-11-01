@@ -31,6 +31,8 @@ export interface TranscriptionProvider {
     /** `forbiddenChars`: every character in this string is rejected by the provider inside a term. */
     keyterms: { maxTerms: number; maxChars: number; maxWords: number; forbiddenChars: string };
   };
+  /** The languages that can be chosen instead of Auto-detect, as `normalizeLanguage()` codes. */
+  readonly languages: readonly string[];
   transcribe(
     input: TranscriptionInput,
     opts: { signal: AbortSignal; onProgress: (p: TranscriptionProgress) => void },

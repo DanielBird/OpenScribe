@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { computed, ref, useId } from 'vue';
-import type { LanguageHint } from '../../domain/transcript';
 import { useNavStore } from '../../stores/nav';
 import { useSettingsStore } from '../../stores/settings';
 import FileDrop from '../components/FileDrop.vue';
@@ -23,12 +22,7 @@ const optionsOpen = ref(false);
 // The keys are on Settings (D27); Setup only points there while the required one is missing.
 const keyMissing = computed(() => settings.elevenLabsKey.trim() === '');
 
-const LANGUAGES: readonly { value: LanguageHint; label: string }[] = [
-  { value: 'auto', label: 'Auto-detect' },
-  { value: 'en', label: 'English' },
-  { value: 'de', label: 'German' },
-  { value: 'fr', label: 'French' },
-];
+const languages = [{ code: 'auto', label: 'Auto-detect' }, ...settings.languages];
 
 // NaN (an entry that isn't a number) is left out so that re-rendering doesn't wipe what the user typed.
 const speakersValue = computed(() => {
@@ -45,7 +39,7 @@ function onSpeakersInput(event: Event): void {
 // Collapsed, Options says what it holds, so it needn't be opened to check.
 const optionsSummary = computed(() => {
   const language =
-    LANGUAGES.find((lang) => lang.value === settings.languageHint)?.label ?? 'Auto-detect';
+    languages.find((lang) => lang.code === settings.languageHint)?.label ?? 'Auto-detect';
   const parts = [`Language: ${language}`, `Speakers: ${speakersValue.value ?? 'Auto'}`];
   if (settings.zeroRetention) parts.push('Zero retention');
   return parts.join(' · ');
@@ -99,7 +93,7 @@ const optionsSummary = computed(() => {
           <div class="field">
             <label :for="ids.language" class="label">Language</label>
             <select :id="ids.language" v-model="settings.languageHint" class="control">
-              <option v-for="lang in LANGUAGES" :key="lang.value" :value="lang.value">
+              <option v-for="lang in languages" :key="lang.code" :value="lang.code">
                 {{ lang.label }}
               </option>
             </select>

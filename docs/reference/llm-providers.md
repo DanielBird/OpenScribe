@@ -201,8 +201,8 @@ the entry point.
   </transcript>
   ```
 
-  - Each turn is its English text: the translation, or the original in an English session. A German or French
-    session without a translation is refused before any request.
+  - Each turn is its English text: the translation, or the original in an English session. A session in another
+    language without a translation is refused before any request.
   - The Speakers line shows each speaker's id, because a respondent's `speakerId` must be one of them.
   - The date is the recording file's date (UTC).
 - **Output** (`schema.ts`): `SessionSummary` (title, synopsis, overview, respondents with attributes, a finding
@@ -224,7 +224,7 @@ the entry point.
   summaries using it. Names that differ only in case or spacing are merged. The pipeline (Phase 15) leaves out the
   session's own summary, so a **Regenerate** isn't steered by its old themes.
 - **As used by the pipeline** (`stores/pipeline.ts`, Phase 15): the project model (`settings.projectModel`) and the
-  Claude key, both read when a job starts. A German or French session is translated first with
+  Claude key, both read when a job starts. A session in another language is translated first with
   `translateTranscript` and the same model; the translation is written into the transcript file before the summary
   request. The summary file records the model chosen, the `transcriptHash` of the text sent and `briefHash(brief)`.
 

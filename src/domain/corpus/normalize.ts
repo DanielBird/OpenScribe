@@ -1,26 +1,36 @@
-// Normalisation shared by keyword search and the quote check (PROJECTS.md §5.4–5.5, DECISIONS.md T12).
+// Normalisation shared by keyword search and the quote check (PROJECTS.md §5.4–5.5, DECISIONS.md T12, T19).
 // Matching works on words: case, accents and punctuation are ignored. A word is a run of letters and digits, so
-// apostrophes and hyphens separate words ("doctor's" is "doctor s", "l'appareil" is "l appareil").
+// apostrophes and hyphens separate words ("doctor's" is "doctor s", "l'appareil" is "l appareil"). Scripts written
+// without spaces (Chinese, Japanese, Thai, …) are split into words by `Intl.Segmenter` instead.
 
 const ASCII = /^\p{ASCII}*$/u;
 const ASCII_WORD = /^[A-Za-z0-9]+$/;
-const COMBINING_MARKS = /\p{M}/gu;
+/**
+ * The marks that are accents: the combining marks shared by every script (Latin, Greek and Cyrillic accents,
+ * Arabic vowel points, Japanese voicing marks) and Hebrew points. A script's own vowel signs spell its words
+ * (Thai, Hindi, Kannada, …), so they stay.
+ */
+const ACCENTS = /(?=\p{M})\p{Script=Inherited}|[֑-ׇֽֿׁׂׅׄ]/gu;
 const SINGLE_QUOTES = /[‘’‚‛ʼ′]/g;
 const DOUBLE_QUOTES = /[“”„‟″«»]/g;
 const DASHES = /[‐‑‒–—―−]/g;
-/** What NFKD can leave inside a word that isn't a letter or digit, e.g. the fraction slash in "½" → "1⁄2". */
-const NON_WORD = /[^\p{L}\p{N}]+/u;
+/** What NFKD can leave inside a word that isn't part of it, e.g. the fraction slash in "½" → "1⁄2". */
+const NON_WORD = /[^\p{L}\p{N}\p{M}]+/u;
+/** Scripts that don't put spaces between words. A run of letters with one of them in it is segmented. */
+const UNSPACED_SCRIPT =
+  /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Thai}\p{Script=Lao}\p{Script=Khmer}\p{Script=Myanmar}]/u;
+const WORD_SEGMENTER = new Intl.Segmenter('und', { granularity: 'word' });
 
 /**
- * Text as compared for matching: NFKD with the combining marks removed (so "ö" is "o", not "oe"), lower case,
- * `ß` → `ss`, typographic quotes and dashes made plain, and whitespace collapsed.
+ * Text as compared for matching: NFKD with the accents removed (so "ö" is "o", not "oe"), lower case, `ß` → `ss`,
+ * typographic quotes and dashes made plain, and whitespace collapsed.
  */
 export function normalizeForMatch(text: string): string {
   const out = ASCII.test(text)
     ? text.toLowerCase()
     : text
         .normalize('NFKD')
-        .replace(COMBINING_MARKS, '')
+        .replace(ACCENTS, '')
         .toLowerCase()
         .replace(/ß/g, 'ss')
         .replace(SINGLE_QUOTES, "'")
@@ -54,10 +64,26 @@ function forEachWord(
       visit(raw.toLowerCase(), start, end);
       continue;
     }
-    // Rarely, NFKD splits a word ("½" → "1", "2"). Each piece keeps the offsets of the whole word.
-    for (const piece of normalizeForMatch(raw).split(NON_WORD)) {
-      if (piece) visit(piece, start, end);
+    if (UNSPACED_SCRIPT.test(raw)) {
+      // "私は毎晩充電します" is one run of letters, and several words.
+      for (const { segment, index, isWordLike } of WORD_SEGMENTER.segment(raw)) {
+        if (isWordLike) visitPieces(segment, start + index, start + index + segment.length, visit);
+      }
+      continue;
     }
+    visitPieces(raw, start, end, visit);
+  }
+}
+
+/** Visits a word once normalised. Rarely, NFKD splits it ("½" → "1", "2"); each piece keeps its offsets. */
+function visitPieces(
+  raw: string,
+  start: number,
+  end: number,
+  visit: (word: string, start: number, end: number) => void,
+): void {
+  for (const piece of normalizeForMatch(raw).split(NON_WORD)) {
+    if (piece) visit(piece, start, end);
   }
 }
 

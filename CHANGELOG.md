@@ -8,6 +8,10 @@ All notable changes to DeScribe are recorded here. The format follows
 
 ### Added
 
+- **More languages:** Setup's **Language** list has the 36 languages ElevenLabs transcribes most accurately, from
+  Belarusian to Vietnamese. Other languages still work with Auto-detect. Every language is named in full (Spanish,
+  not SPA) in the transcript, the Word file's name, the session list and the translation, and Chinese, Japanese and
+  Thai originals can be searched word by word.
 - **Licences:** the source is under the MIT License ([LICENSE](LICENSE)). **Settings → About → Licences** shows
   it, and the licences of the open-source software DeScribe includes.
 - **Windows desktop app:** DeScribe also builds as a Windows app, the same app in its own window, packed as MSIX for

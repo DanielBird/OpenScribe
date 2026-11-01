@@ -1,6 +1,8 @@
 import { ProviderError, redactSecret, withoutSecret } from '../../errors';
 import type { KeyCheckResult, NormalizedTranscription, TranscriptionProvider } from '../types';
+import { normalizeLanguage } from '../../../domain/transcript';
 import { ELEVENLABS_MESSAGES, parseErrorBody, toProviderError } from './errors';
+import { ELEVENLABS_LANGUAGES } from './languages';
 import { ELEVENLABS_LIMITS, ELEVENLABS_MODEL } from './limits';
 import { toNormalized } from './mapper';
 import { buildFormData, buildKeyCheckFormData, buildUrl, ELEVENLABS_STT_URL } from './request';
@@ -14,6 +16,7 @@ export function createElevenLabsProvider(
     id: 'elevenlabs',
     model: ELEVENLABS_MODEL,
     limits: ELEVENLABS_LIMITS,
+    languages: ELEVENLABS_LANGUAGES.map(normalizeLanguage),
 
     async transcribe(input, { signal, onProgress }): Promise<NormalizedTranscription> {
       const apiKey = input.apiKey.trim();

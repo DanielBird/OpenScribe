@@ -328,6 +328,33 @@ describe('search: snippets', () => {
   });
 });
 
+describe('search: scripts written without spaces', () => {
+  const JA = session('ja1', 'jpn', 1, [
+    ['毎晩、ベッドの横で充電します。', 'I charge them by the bed every night.'],
+    ['朝は充電器から外します。'],
+  ]);
+  const TH = session('th1', 'tha', 2, [['ฉันชาร์จมันข้างเตียงทุกคืน']]);
+  const corpus = prepareCorpus([JA, TH]);
+  const find = (input: string) =>
+    search(corpus, q(input), { field: 'original', maxHitsPerSession: 50 });
+
+  it('finds one word inside a sentence, and marks just that word', () => {
+    expect(refs(find('充電'))).toEqual(['ja1/t1:original']);
+    const hit = find('充電').sessions[0]?.hits[0];
+    expect(marked(hit?.snippet ?? '', hit?.marks ?? [])).toEqual(['充電']);
+
+    expect(refs(find('เตียง'))).toEqual(['th1/t1:original']);
+    const thai = find('เตียง').sessions[0]?.hits[0];
+    expect(marked(thai?.snippet ?? '', thai?.marks ?? [])).toEqual(['เตียง']);
+  });
+
+  it('matches a compound word only as itself, and a phrase typed without spaces', () => {
+    expect(refs(find('充電器'))).toEqual(['ja1/t2:original']);
+    expect(refs(find('"ベッドの横"'))).toEqual(['ja1/t1:original']);
+    expect(refs(find('ベッドの横'))).toEqual(['ja1/t1:original']);
+  });
+});
+
 describe('search: the generated corpus', () => {
   const { docs, planted } = makeCorpus({ hours: 40, seed: 7 });
   const corpus = prepareCorpus(docs.map(toSessionText));

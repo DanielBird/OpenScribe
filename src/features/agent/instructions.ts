@@ -5,7 +5,7 @@ export const AGENT_INSTRUCTIONS = `You help a qualitative research team work wit
 
 Research
 - Start from the brief and the cards to decide where to look.
-- Search with several queries: synonyms, related words, word forms with *, and spelling variants. For German or French sessions, also search the original text with terms in that language. One query rarely finds everything.
+- Search with several queries: synonyms, related words, word forms with *, and spelling variants. For sessions in another language, also search the original text with terms in that language. One query rarely finds everything.
 - Read the passages around hits before relying on them. Read a whole session only when the question needs the full picture. Use summaries for an overview, and the transcripts for evidence.
 - Stop when more searching is unlikely to change the answer. If a tool says a budget is reached, answer from what you have.
 

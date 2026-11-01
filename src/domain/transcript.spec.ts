@@ -70,28 +70,42 @@ describe('normalizeLanguage', () => {
     ['fre', 'fr'],
     ['FR', 'fr'],
     [' fra ', 'fr'],
+    ['SPA', 'es'],
+    ['jpn', 'ja'],
+    ['nor', 'no'],
+    ['msa', 'ms'],
+    ['zho', 'zh'],
+    ['cmn', 'zh'],
+    ['nl', 'nl'],
+    ['yue', 'yue'],
   ])('%s → %s', (code, expected) => {
     expect(normalizeLanguage(code)).toBe(expected);
   });
 
-  it('returns unknown codes lower-cased and otherwise unchanged', () => {
-    expect(normalizeLanguage('SPA')).toBe('spa');
-    expect(normalizeLanguage('nl')).toBe('nl');
+  it('returns codes it does not know lower-cased, without a region', () => {
+    expect(normalizeLanguage('ZZZ')).toBe('zzz');
+    expect(normalizeLanguage('x_Y')).toBe('x');
     expect(normalizeLanguage('')).toBe('');
   });
 });
 
 describe('languageName', () => {
-  it('names the supported languages from any of their codes', () => {
+  it('names a language from any of its codes', () => {
     expect(languageName('eng')).toBe('English');
+    expect(languageName('en-GB')).toBe('English');
     expect(languageName('deu')).toBe('German');
     expect(languageName('de')).toBe('German');
     expect(languageName('fra')).toBe('French');
+    expect(languageName('spa')).toBe('Spanish');
+    expect(languageName('jpn')).toBe('Japanese');
+    expect(languageName('nor')).toBe('Norwegian');
+    expect(languageName('nl')).toBe('Dutch');
   });
 
   it('falls back to the upper-cased code', () => {
-    expect(languageName('spa')).toBe('SPA');
-    expect(languageName('nl')).toBe('NL');
+    expect(languageName('zzz')).toBe('ZZZ');
+    expect(languageName(' x ')).toBe('X');
+    expect(languageName('')).toBe('');
   });
 });
 

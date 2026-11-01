@@ -72,6 +72,14 @@ describe('createElevenLabsProvider', () => {
     expect(provider.verifyKey).toBeTypeOf('function');
   });
 
+  it('offers its most accurate languages, as ISO 639-1 codes', () => {
+    const { languages } = createElevenLabsProvider(fakeTransport(ok(twoSpeakers)).transport);
+    expect(languages).toHaveLength(36);
+    expect(new Set(languages).size).toBe(36);
+    expect(languages).toEqual(expect.arrayContaining(['en', 'de', 'fr', 'es', 'ja', 'no', 'ms']));
+    for (const code of languages) expect(code).toMatch(/^[a-z]{2}$/);
+  });
+
   it('uploads, reports progress in order, and returns normalized tokens', async () => {
     const { transport, calls } = fakeTransport(ok(twoSpeakers));
     const { result, progress } = await run(transport);

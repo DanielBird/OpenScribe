@@ -121,6 +121,24 @@ describe('SetupView', () => {
     expect(wrapper.text()).toContain('Number of speakers must be a whole number from 1 to 32.');
   });
 
+  it('offers Auto-detect, then the languages A–Z, and names the choice in the closed Options', async () => {
+    wrapper = mount(SetupView);
+    const options = byLabel('Language').findAll('option');
+    expect(options).toHaveLength(37);
+    expect(options.slice(0, 4).map((o) => [o.attributes('value'), o.text()])).toEqual([
+      ['auto', 'Auto-detect'],
+      ['be', 'Belarusian'],
+      ['bs', 'Bosnian'],
+      ['bg', 'Bulgarian'],
+    ]);
+    const labels = options.slice(1).map((o) => o.text());
+    expect(labels).toEqual([...labels].sort((a, b) => a.localeCompare(b, 'en')));
+
+    expect(wrapper.text()).toContain('Language: Auto-detect');
+    await byLabel('Language').setValue('es');
+    expect(wrapper.text()).toContain('Language: Spanish');
+  });
+
   it('binds language and zero retention to the saved prefs', async () => {
     wrapper = mount(SetupView);
     await byLabel('Language').setValue('fr');

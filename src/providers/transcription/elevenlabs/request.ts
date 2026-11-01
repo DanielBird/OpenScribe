@@ -1,5 +1,6 @@
 // Request building (docs/reference/elevenlabs-stt.md, "Request fields DeScribe sends"; DECISIONS.md D4, D5).
 import type { TranscriptionInput } from '../types';
+import { elevenLabsLanguageCode } from './languages';
 import { ELEVENLABS_MODEL } from './limits';
 
 export const ELEVENLABS_API_BASE = 'https://api.elevenlabs.io';
@@ -23,6 +24,7 @@ export function buildUrl(zeroRetention: boolean): string {
 /**
  * The multipart body. The API key is not part of it (it goes in the `xi-api-key` header). Optional fields
  * are omitted when unset: language for Auto, speakers for Auto, keyterms for an empty glossary.
+ * The language goes as ElevenLabs' own ISO 639-3 code (it accepts 639-1 too, verification log V5).
  * Keyterms are sent as repeated fields, one term per field (confirmed live, verification log V1: a single
  * JSON-array string is rejected as a term with invalid characters).
  */
@@ -32,7 +34,9 @@ export function buildFormData(
   const form = new FormData();
   form.append('model_id', ELEVENLABS_MODEL);
   form.append('file', input.file, input.file.name);
-  if (input.languageHint !== 'auto') form.append('language_code', input.languageHint);
+  if (input.languageHint !== 'auto') {
+    form.append('language_code', elevenLabsLanguageCode(input.languageHint));
+  }
   form.append('diarize', 'true');
   if (input.numSpeakers !== null) form.append('num_speakers', String(input.numSpeakers));
   form.append('timestamps_granularity', 'word');

@@ -52,6 +52,11 @@ describe('parseQuery', () => {
     expect(parsed("don't e-mail").clauses).toEqual([[term(['don', 't'])], [term(['e', 'mail'])]]);
   });
 
+  it('splits a term in a script written without spaces into its words', () => {
+    expect(parsed('毎晩充電').clauses).toEqual([[term(['毎晩', '充電'])]]);
+    expect(parsed('充電*').clauses).toEqual([[term(['充電'], true)]]);
+  });
+
   it('reads word* as a prefix', () => {
     expect(parsed('charg*').clauses).toEqual([[term(['charg'], true)]]);
     expect(parsed('Ladeg**').clauses).toEqual([[term(['ladeg'], true)]]);

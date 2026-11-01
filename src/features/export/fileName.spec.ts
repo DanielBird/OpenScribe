@@ -37,8 +37,11 @@ describe('exportFileName', () => {
     );
   });
 
-  it('uses the code for a language it has no name for', () => {
-    expect(exportFileName(docNamed('a.mp3', 'ita'), 'original')).toBe('a - transcript (ITA).docx');
+  it('names any language, and uses the code for one it has no name for', () => {
+    expect(exportFileName(docNamed('a.mp3', 'ita'), 'original')).toBe(
+      'a - transcript (Italian).docx',
+    );
+    expect(exportFileName(docNamed('a.mp3', 'zzz'), 'original')).toBe('a - transcript (ZZZ).docx');
   });
 
   it('replaces characters Windows does not allow, and control characters', () => {

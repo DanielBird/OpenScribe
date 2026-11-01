@@ -1,7 +1,7 @@
 # DeScribe: User Guide
 
-DeScribe turns a recorded interview or meeting (English, German or French) into a transcript with speaker names
-and timestamps. You can listen from any point, correct the text, translate the transcript to English, and download
+DeScribe turns a recorded interview or meeting, in English or one of many other languages, into a transcript with
+speaker names and timestamps. You can listen from any point, correct the text, translate the transcript to English, and download
 it as a Word file.
 
 DeScribe is one HTML file. It runs in your browser, with nothing to install. It uses your own API keys to send the
@@ -60,7 +60,9 @@ move between pages.
 1. Add your ElevenLabs key on Settings, if you haven't yet.
 2. Choose the recording, or drop it on the page. Audio and video files work, up to 3 GB and 10 hours.
 3. Options:
-   - **Language:** pick it if you know it. Auto-detect works for most recordings.
+   - **Language:** pick it if you know it. Auto-detect works for most recordings. The list has the 36 languages
+     ElevenLabs transcribes most accurately. Recordings in other languages work with Auto-detect, but expect more
+     mistakes in the text.
    - **Number of speakers:** set it if you know it (for example 2 for an interview). It improves speaker separation.
    - **Zero retention:** see [Privacy](#9-privacy).
 4. Click **Next**.
@@ -107,8 +109,8 @@ The glossary is saved in this browser. To share it, use **Copy list**, and your 
 
 ## 6. Translate to English
 
-Use **Translate to English** on the Output step when the recording is in German or French and you need an English
-version. The button doesn't appear for English recordings.
+Use **Translate to English** on the Output step when the recording isn't in English and you need an English version.
+The button doesn't appear for English recordings.
 
 1. Choose Claude or Gemini, and the model. The default is fine.
 2. Click **Translate**. You can keep reading and renaming speakers while it runs.
@@ -182,7 +184,7 @@ one, shows the project's **Model** (change it there if you like), and asks for t
 it's missing. Click **Add**. DeScribe then,
 in the actions row:
 1. saves the transcript in the project folder (the recording itself stays on your computer);
-2. translates it to English with the project's model, if it's in German or French and has no English yet;
+2. translates it to English with the project's model, if it's in another language and has no English yet;
 3. writes its summary.
 
 You can keep reading and renaming speakers meanwhile. If a step fails, the session stays in the project and

@@ -2,7 +2,7 @@ import { defineStore } from 'pinia';
 import { computed, ref, shallowRef, watch, type Ref } from 'vue';
 import { randomAuthorName, type ChatAuthor } from '../domain/chat';
 import { checkFile, type FileCheck } from '../domain/filecheck';
-import type { LanguageHint, LlmProviderId } from '../domain/transcript';
+import { languageName, type LanguageHint, type LlmProviderId } from '../domain/transcript';
 import { z } from '../lib/zod';
 import { probeDuration } from '../media/probeDuration';
 import { getTranscriptionProvider, verifyLlmKey } from '../providers/index';
@@ -31,7 +31,8 @@ const PREFS_KEY = 'prefs';
 
 /** Persisted preferences. Each field falls back on its own, so one bad value doesn't reset the rest. */
 const PrefsSchema = z.object({
-  languageHint: z.enum(['auto', 'en', 'de', 'fr']).catch('auto'),
+  /** `'auto'` or a language code; the store falls back to Auto for one the provider doesn't offer. */
+  languageHint: z.string().catch('auto'),
   zeroRetention: z.boolean().catch(false),
   /** The provider and model of the last translation, offered first next time. */
   translationProvider: z.enum(['claude', 'gemini']).catch('claude'),
@@ -184,8 +185,15 @@ export const useSettingsStore = defineStore('settings', () => {
 
   // --- Options ------------------------------------------------------------------------------------
 
+  /** What can be chosen besides Auto-detect, A–Z by name (DECISIONS.md D37). */
+  const languages = transcription.languages
+    .map((code) => ({ code, label: languageName(code) }))
+    .sort((a, b) => a.label.localeCompare(b.label, 'en'));
+
   const prefs = loadPrefs();
-  const languageHint = ref<LanguageHint>(prefs.languageHint);
+  const languageHint = ref<LanguageHint>(
+    transcription.languages.includes(prefs.languageHint) ? prefs.languageHint : 'auto',
+  );
   const zeroRetention = ref(prefs.zeroRetention);
   watch(
     [languageHint, zeroRetention],
@@ -342,6 +350,7 @@ export const useSettingsStore = defineStore('settings', () => {
     rememberKeys,
     keyLocations,
     keyChecks,
+    languages,
     languageHint,
     numSpeakers,
     zeroRetention,

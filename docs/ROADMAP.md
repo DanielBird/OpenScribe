@@ -5,8 +5,8 @@
 
 ## 1. Purpose
 
-Colleagues need a simple, safe way to turn recorded interviews and meetings (English, German or French) into
-readable transcripts. Each transcript has speaker labels and timestamps, can be listened to from any point, can
+Colleagues need a simple, safe way to turn recorded interviews and meetings (English, German and French at first;
+any language ElevenLabs transcribes well since Phase 26) into readable transcripts. Each transcript has speaker labels and timestamps, can be listened to from any point, can
 be translated to English, and downloads as a Word document.
 
 The tool must be **one HTML file** shared on SharePoint. It runs locally in the browser and needs no installation,
@@ -19,7 +19,8 @@ with WebView2, packed as MSIX. The HTML file stays.
 
 ### In scope for v1
 - Transcription via ElevenLabs Speech-to-Text (`scribe_v2`), with speaker diarization and word timestamps
-- Setup: API key, file selection, language (auto/EN/DE/FR), optional number of speakers, zero-retention toggle
+- Setup: API key, file selection, language (auto/EN/DE/FR; 36 languages since Phase 26), optional number of
+  speakers, zero-retention toggle
 - A glossary of project terms, saved locally and sent as ElevenLabs `keyterms`
 - Output view: speaker turns with timestamps, renameable speaker labels, autosave of the latest transcript
 - `.docx` export (original or English)
@@ -328,6 +329,7 @@ MVP = Phases 0–5. Each phase is sized for one agent session (or a few) and end
 | 21 | [Chat history in the project folder](phases/21-chat-history.md) | 14, 16, 17, 20 | – | ☑ Done (live checks H1–H3 open) |
 | 22 | [Compacting a chat with `/compact`](phases/22-chat-compaction.md) | 17, 20, 21 | – | ☑ Done (live check C1 open) |
 | 24 | [Desktop shell and the Store pipeline](phases/24-desktop-shell.md) | – | 23 | ☑ Done (Task 8, the Store submission, and the work-laptop checklist W1–W15 open) |
+| 26 | [Recordings in more languages](phases/26-more-languages.md) | – | 23, 25 | ☑ Done (live check V7 and manual row 21 open) |
 
 Status values: ☐ Not started · ◐ In progress · ☑ Done.
 

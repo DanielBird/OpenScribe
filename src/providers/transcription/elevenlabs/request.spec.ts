@@ -35,11 +35,23 @@ describe('buildFormData', () => {
     expect(fields(buildFormData(input()))).toEqual(ALWAYS);
   });
 
-  it('adds language_code when a language is chosen', () => {
-    for (const languageHint of ['en', 'de', 'fr'] as const) {
+  it('adds language_code, as ElevenLabs writes it, when a language is chosen', () => {
+    for (const [languageHint, code] of [
+      ['en', 'eng'],
+      ['de', 'deu'],
+      ['fr', 'fra'],
+      ['es', 'spa'],
+      ['ja', 'jpn'],
+      ['no', 'nor'],
+      ['ms', 'msa'],
+    ]) {
       const form = buildFormData(input({ languageHint }));
-      expect(form.getAll('language_code')).toEqual([languageHint]);
+      expect(form.getAll('language_code')).toEqual([code]);
     }
+  });
+
+  it('sends a language ElevenLabs does not list as it is', () => {
+    expect(buildFormData(input({ languageHint: 'yue' })).getAll('language_code')).toEqual(['yue']);
   });
 
   it('adds num_speakers when a number is set', () => {
@@ -59,7 +71,7 @@ describe('buildFormData', () => {
     expect(fields(form)).toEqual([
       ['model_id', 'scribe_v2'],
       ['file', 'File(meeting.wav)'],
-      ['language_code', 'de'],
+      ['language_code', 'deu'],
       ['diarize', 'true'],
       ['num_speakers', '3'],
       ['timestamps_granularity', 'word'],

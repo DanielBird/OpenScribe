@@ -71,7 +71,7 @@ export function isEnglishSession(session: SessionText): boolean {
 }
 
 /**
- * The English text of a turn: its translation, or its own text in an English session. A German or French session
+ * The English text of a turn: its translation, or its own text in an English session. A session in another language
  * without a translation has no English text yet (`null`).
  */
 export function englishText(session: SessionText, turn: SessionTurn): string | null {

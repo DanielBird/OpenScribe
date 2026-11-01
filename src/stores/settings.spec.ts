@@ -273,6 +273,26 @@ describe('settings store', () => {
       expect(settings.zeroRetention).toBe(true);
     });
 
+    it('keeps a saved language the provider offers, and falls back to Auto for another', () => {
+      localStorage.setItem('describe.v1.prefs', JSON.stringify({ languageHint: 'es' }));
+      expect(useSettingsStore().languageHint).toBe('es');
+
+      localStorage.setItem('describe.v1.prefs', JSON.stringify({ languageHint: 'yue' }));
+      setActivePinia(createPinia());
+      expect(useSettingsStore().languageHint).toBe('auto');
+    });
+
+    it('lists the languages to choose from, A–Z by name', () => {
+      const { languages } = useSettingsStore();
+      expect(languages).toHaveLength(36);
+      expect(languages).toContainEqual({ code: 'ja', label: 'Japanese' });
+      expect(languages.map((l) => l.label).slice(0, 3)).toEqual([
+        'Belarusian',
+        'Bosnian',
+        'Bulgarian',
+      ]);
+    });
+
     it('falls back to defaults when stored prefs are not an object', () => {
       localStorage.setItem('describe.v1.prefs', '[1, 2]');
       const settings = useSettingsStore();

@@ -39,6 +39,7 @@ function fakeProvider() {
     id: 'elevenlabs',
     model: 'scribe_v2',
     limits: ELEVENLABS_LIMITS,
+    languages: ['de', 'en', 'fr'],
     transcribe: (input, { signal, onProgress }) =>
       new Promise((resolve, reject) => {
         calls.push({ input, signal, onProgress, resolve, reject });

@@ -3,7 +3,8 @@
 
 export const TRANSCRIPT_SCHEMA_VERSION = 1 as const;
 
-export type LanguageHint = 'auto' | 'en' | 'de' | 'fr';
+/** `'auto'`, or the language chosen on Setup as `normalizeLanguage()` returns it, e.g. `'de'`. */
+export type LanguageHint = string;
 export type TranscriptVersion = 'original' | 'en';
 export type LlmProviderId = 'claude' | 'gemini';
 
@@ -106,32 +107,31 @@ export function formatDate(ms: number, opts: { timeZone?: string } = {}): string
   );
 }
 
-const LANGUAGE_ALIASES: Record<string, string> = {
-  en: 'en',
-  eng: 'en',
-  de: 'de',
-  deu: 'de',
-  ger: 'de',
-  fr: 'fr',
-  fra: 'fr',
-  fre: 'fr',
-};
-
 /**
- * Maps the language codes we support (ISO 639-1/-2/-3, optionally with a region such as `en-GB`) to
- * ISO 639-1. Any other code is returned lower-cased and otherwise unchanged.
+ * A language code (ISO 639-1/-2/-3, optionally with a region such as `en-GB`) in one form: ISO 639-1 where the
+ * language has one (`deu`, `ger` and `de_AT` are all `de`), otherwise ISO 639-3 (`yue`). `Intl.Locale` does the
+ * canonicalising; a code it rejects is returned lower-cased, without its region.
  */
 export function normalizeLanguage(code: string): string {
-  const lower = code.trim().toLowerCase();
-  const base = lower.split(/[-_]/)[0] ?? lower;
-  return LANGUAGE_ALIASES[lower] ?? LANGUAGE_ALIASES[base] ?? lower;
+  const tag = code.trim().replace(/_/g, '-');
+  try {
+    return new Intl.Locale(tag).language;
+  } catch {
+    return (tag.split('-')[0] ?? tag).toLowerCase();
+  }
 }
 
-const LANGUAGE_NAMES: Record<string, string> = { en: 'English', de: 'German', fr: 'French' };
+const LANGUAGE_NAMES = new Intl.DisplayNames(['en'], { type: 'language', fallback: 'none' });
 
-/** 'English' | 'German' | 'French' for the supported languages, otherwise the code upper-cased. */
+/** The language's English name ('German', 'Spanish'), or the code upper-cased if it has none. */
 export function languageName(code: string): string {
-  return LANGUAGE_NAMES[normalizeLanguage(code)] ?? code.trim().toUpperCase();
+  let name: string | undefined;
+  try {
+    name = LANGUAGE_NAMES.of(normalizeLanguage(code));
+  } catch {
+    name = undefined; // not a language code at all, e.g. ''
+  }
+  return name ?? code.trim().toUpperCase();
 }
 
 /** Default label for the speaker at `index` (0-based, in order of first appearance). */

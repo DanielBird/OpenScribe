@@ -1,5 +1,16 @@
 import type { Page } from '@playwright/test';
-import { enterKey, expect, openApp, reloadApp, test, TONE_WAV } from './helpers';
+import {
+  enterKey,
+  expect,
+  goToGlossary,
+  mockElevenLabs,
+  ok,
+  openApp,
+  reloadApp,
+  run,
+  test,
+  TONE_WAV,
+} from './helpers';
 
 // The API keys are on Settings: settings.e2e.ts.
 const nextButton = (page: Page) => page.getByRole('button', { name: 'Next' });
@@ -60,6 +71,21 @@ test('language and zero retention survive a reload; the speaker count does not',
   await expect(page.getByLabel('Language')).toHaveValue('de');
   await expect(page.getByLabel('Zero retention')).toBeChecked();
   await expect(page.getByLabel('Number of speakers')).toHaveValue('');
+});
+
+test('a language chosen from the list goes to ElevenLabs as its own code', async ({ page }) => {
+  const requests = await mockElevenLabs(page, () => ok());
+  await openApp(page);
+  await optionsToggle(page).click();
+  await page.getByLabel('Language').selectOption({ label: 'Spanish' });
+  await optionsToggle(page).click();
+  await expect(page.getByText('Language: Spanish')).toBeVisible();
+
+  await goToGlossary(page);
+  await run(page);
+  await expect(page.locator('li.turn').first()).toBeVisible();
+  expect(requests).toHaveLength(1);
+  expect(requests[0]?.body).toMatch(/name="language_code"\r\n\r\nspa\r\n/);
 });
 
 test('every control is labelled and the form works from the keyboard', async ({ page }) => {

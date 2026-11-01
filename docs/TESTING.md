@@ -14,11 +14,11 @@ The e2e specs in `tests/e2e/`:
 | Spec | Covers |
 |---|---|
 | `shell` | Loads from `file://` with no network requests; the CSP is first in `<head>` and blocks other hosts. Opens on Home; **Transcribe** returns to the step left, and **Home** leads back. |
-| `setup`, `glossary` | The Setup and Glossary steps, including keyboard use. |
+| `setup`, `glossary` | The Setup and Glossary steps, including keyboard use. A language chosen from the list goes to ElevenLabs as its ISO 639-3 code (Phase 26). |
 | `transcribe` | Run, progress, errors (401, 429), Cancel, rename, reload and autosave. A run carries on while Home is shown. |
 | `export` | `.docx` downloads (Original, English, renamed speakers). |
 | `edit` | Edit text: nothing moves when it turns on or off (1280 and 375 px), saved across a reload, Enter then Tab, Escape, a multi-line paste and Ctrl+Z, the `.docx`, and an English translation left unchanged. |
-| `translate` | Claude and Gemini translation (Gemini streamed, Phase 19), batches, Resume, Cancel, reload. |
+| `translate` | Claude and Gemini translation (Gemini streamed, Phase 19), batches, Resume, Cancel, reload. A Spanish transcript named in the header, the prompt, the version toggle and the file name (Phase 26). |
 | `playback` | Click to play, highlight, Follow, re-attach after reload, unplayable formats. |
 | `project` | Project mode on the fake folder: New project (the Brief opens), Open project and a folder that isn't one, Change, Reconnect after the browser session ends, a colleague's session on focus, the text cache, unreadable files and conflict copies, a colleague's brief (Reload), the model across a reload, search (the chat pane's **Search**) in English and the original, Copy, a bad query, and back to **Chat** and Search with the search kept. |
 | `project-add` | Phase 15: **Add to project** on a new transcript (New project, the Brief, the key; saved, translated, summarised; the list shows the summary; Copy a quote); **Summarise** a German session that is only in the folder; an edit on Output reaching the file, the summary going out of date and **Regenerate**; a file changed behind DeScribe's back and **Keep mine**; **Summarise all** past a failure; the link kept across a reload, with **Reconnect** and no false conflict; a session whose files are deleted offered **Add to project…** again on focus, and added again. Phase 19: a German session summarised with Gemini 4 Argon (the Gemini key, the data line naming Google, both requests streamed to Gemini and none to Claude, `provider: 'gemini'` in both files, the model in the details, Copy a quote); from Output, a switch to Gemini 3.8 Flash in the Add to project dialog (the Gemini key, no Claude request, the same setting in the Analyse header).; after it, **Open summary** (focused when the work ends) showing the summary in Analyse mode, and Escape back to the chat. |
@@ -52,9 +52,9 @@ The corpus core (`src/domain/corpus/`, Phase 12) is pure TypeScript with unit sp
 | Spec | Covers |
 |---|---|
 | `sessionText` | The text-only view of a transcript (English and German, with and without a translation), and what changes `transcriptHash`. |
-| `normalize` | Case, accents, `ß`, typographic quotes and dashes, words split at apostrophes and hyphens, and offsets into the original text. |
-| `query` | Words (AND), `"phrases"`, `prefix*`, `OR` (binds tighter than AND), `-exclusions`, and each error. |
-| `search` | The query semantics, the English, original and both fields, session filter, order, paging, snippets and marks, and every planted phrase in a generated corpus. |
+| `normalize` | Case, accents (Latin, Greek, Cyrillic, Arabic and Hebrew points, Japanese voicing marks), `ß`, typographic quotes and dashes, words split at apostrophes and hyphens, and offsets into the original text. Vowel signs kept (Thai, Hindi, Kannada, Malayalam); Japanese and Thai segmented into words (Phase 26). |
+| `query` | Words (AND), `"phrases"`, `prefix*`, `OR` (binds tighter than AND), `-exclusions`, and each error. A Japanese term split into its words. |
+| `search` | The query semantics, the English, original and both fields, session filter, order, paging, snippets and marks, every planted phrase in a generated corpus, and one word found and marked inside a Japanese or Thai sentence. |
 | `quoteCheck` | Changed case, punctuation and accents verify; a changed or added word doesn't; omissions marked `…`, `...` or `[…]`. |
 | `sessionKeys`, `citation` | `s1…sN` keys and refs; the **Copy** text with and without a translation. |
 
@@ -230,6 +230,7 @@ below the table.
 | 18 | A real OneDrive project with summaries → ask a question you know the answer to → the activity and cost look right, the quotes are checked and **Copy** pastes with the citation → a follow-up → **Stop** mid-answer → **New chat** → with Opus 5.5 too (records **A1**, run in Phase 18) | ☐ | ☐ |
 | 19 | With **Gemini 4 Argon** selected in Analyse mode: **Add to project** on a real German session → the dialog asks for the Gemini key and names Google → it is translated and summarised → the summary's details say "Made with Gemini 4 Argon" → **Copy** a quote (records **G1**–**G3**) | ☐ | ☐ |
 | 20 | Row 18 with **Gemini 3.8 Flash**, then **Gemini 4 Argon**: the same questions, the activity and cost, the quotes checked, a follow-up, **Stop**, **New chat** (records **A1**–**A4** for Gemini) | ☐ | ☐ |
+| 21 | A short Spanish recording with language = Spanish, and a Japanese one with Auto-detect → each header names the language → **Translate to English** → export both versions → add both to a project → search a word of each original (records **V7**) | ☐ | ☐ |
 
 Where results go:
 - **Scenario 5:** processing time ÷ audio length (shown on Output) goes into the V4 row of

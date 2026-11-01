@@ -15,7 +15,7 @@ web
 on microphones in the field, so a Teams recording (and Teams' own transcript) is often not an option.
 
 Their job: turn a recording into a transcript they can trust and use. They name the speakers, check passages
-against the audio, correct misheard words and names, translate German or French sessions to English when needed,
+against the audio, correct misheard words and names, translate sessions in other languages to English when needed,
 and take the Word file into their analysis: quoting, coding and sharing it with colleagues.
 
 ## Product Purpose
@@ -39,7 +39,7 @@ Confirmed reasons a researcher picks DeScribe over the transcription built into 
 - **No install, no IT.** One HTML file from SharePoint, double-clicked, running from `file://` in Edge or Chrome.
 - **Domain accuracy.** A glossary of product names, people and jargon (`Oticon Intent`, `BTE`, `audiogram`) is
   sent to ElevenLabs as key terms and given to the translation.
-- **German and French to English** on demand, with Claude or Gemini, exported to Word.
+- **Any language to English** on demand, with Claude or Gemini, exported to Word.
 
 ## Operating Context
 
@@ -62,7 +62,8 @@ Confirmed reasons a researcher picks DeScribe over the transcription built into 
 
 **Shipped (1.0.0, plus Edit text unreleased):**
 - Transcription with ElevenLabs `scribe_v2`: speakers, word timestamps, clean verbatim (fixed, not a setting).
-  Language auto, English, German or French. Number of speakers auto or 1–32. Zero retention.
+  Language auto, or one of ElevenLabs' 36 most accurate (unreleased, Phase 26; 1.0.0 offers English, German or
+  French). Number of speakers auto or 1–32. Zero retention.
 - Glossary: paste, edit, delete, clear, copy; invalid terms are marked skipped.
 - Output: turns with timestamps, speaker renaming, Edit text (turn text only), playback from any turn, Follow
   playback, Space to play or pause, autosave and reopen of the last transcript.
