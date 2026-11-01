@@ -93,6 +93,7 @@ npx playwright install chromium
 | `npm run verify:single-file` | Checks that `dist/` holds exactly one self-contained HTML file with the expected CSP, no Tauri code, and API hosts that match the desktop CSP |
 | `npm run test:e2e` | Builds, then runs Playwright against `dist/describe.html` over `file://`, with the APIs and the project folder mocked (includes axe accessibility checks) |
 | `npm run test:perf` | Builds, then times a generated 3-hour transcript and a generated 300-hour project (opt-in; see [docs/TESTING.md](docs/TESTING.md)) |
+| `npm run notices` | Regenerates the two `THIRD-PARTY-NOTICES` files from the build and `cargo metadata`; run it after a dependency change |
 | `npm run release` | On a clean tree: runs every check, then writes `release/DeScribe-v<version>.html` and its `.sha256` (see [docs/RELEASING.md](docs/RELEASING.md)) |
 
 ### Desktop app
@@ -144,3 +145,9 @@ changes only some of Settings' wording. Decisions and their reasons are in [docs
   each phase's tasks and handoff notes, and the status of each phase
 - [docs/reference/](docs/reference/): API and platform facts for ElevenLabs, Claude and Gemini, the File System
   Access API, and the desktop app
+
+## License
+
+[MIT](LICENSE). The open-source software DeScribe includes, and its licences, are listed in
+[THIRD-PARTY-NOTICES.txt](THIRD-PARTY-NOTICES.txt) and, for the Windows app,
+[THIRD-PARTY-NOTICES-DESKTOP.txt](THIRD-PARTY-NOTICES-DESKTOP.txt). Settings shows both.

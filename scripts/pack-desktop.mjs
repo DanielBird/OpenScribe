@@ -81,14 +81,21 @@ if (sign && existsSync(cert)) {
   }
 }
 
-// 3. The release exe, built from this tree (`tauri build --no-bundle` runs build:desktop first).
+// 3. The licences Settings shows must list what this build includes.
+try {
+  run('node scripts/make-notices.mjs --check');
+} catch {
+  stop('the third-party notices are out of date (see above). Nothing was packed.');
+}
+
+// 4. The release exe, built from this tree (`tauri build --no-bundle` runs build:desktop first).
 try {
   run('npm run desktop:build');
 } catch {
   stop('the desktop build failed (see above). Nothing was packed.');
 }
 
-// 4. The stage holds exactly what goes in the package. The committed manifest keeps its version.
+// 5. The stage holds exactly what goes in the package. The committed manifest keeps its version.
 const identityVersion = /(<Identity\b[^>]*?\bVersion=")[^"]*(")/;
 if (!identityVersion.test(manifest))
   stop('src-tauri/msix/Package.appxmanifest has no <Identity Version>.');
@@ -100,7 +107,7 @@ cpSync(exe, `${stage}/describe.exe`);
 cpSync(path('src-tauri/msix/Assets'), `${stage}/Assets`, { recursive: true });
 writeFileSync(stagedManifest, manifest.replace(identityVersion, `$1${msixVersion}$2`));
 
-// 5. Pack, signed only for this PC.
+// 6. Pack, signed only for this PC.
 mkdirSync(path('release'), { recursive: true });
 rmSync(output, { force: true });
 try {

@@ -1,5 +1,8 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, useId, useTemplateRef } from 'vue';
+import ownLicence from '../../../LICENSE?raw';
+import desktopNotices from '../../../THIRD-PARTY-NOTICES-DESKTOP.txt?raw';
+import notices from '../../../THIRD-PARTY-NOTICES.txt?raw';
 import { useNavStore } from '../../stores/nav';
 import { useSavedDataStore } from '../../stores/savedData';
 import { useSettingsStore } from '../../stores/settings';
@@ -26,6 +29,14 @@ const buildDate = __BUILD_DATE__;
 /** The desktop app (D35) keeps its data in its own storage, not a browser's. */
 const desktop = __DESKTOP__;
 const keysEl = useTemplateRef<HTMLElement>('keys');
+
+/**
+ * DeScribe's licence, then the notices from scripts/make-notices.mjs. The Rust crates' are only in the desktop build:
+ * `__DESKTOP__` is a literal there, so the web build drops them.
+ */
+const licences = [ownLicence, notices, ...(__DESKTOP__ ? [desktopNotices] : [])].join('\n\n');
+/** The text is long, so it is rendered only while open. */
+const licencesOpen = ref(false);
 
 const hasKeys = computed(() =>
   Object.values(settings.keyLocations).some((where) => where !== null),
@@ -219,6 +230,13 @@ async function clearSavedData(): Promise<void> {
               </li>
             </ul>
           </div>
+          <details
+            class="licences"
+            @toggle="licencesOpen = ($event.target as HTMLDetailsElement).open"
+          >
+            <summary>Licences</summary>
+            <pre v-if="licencesOpen" tabindex="0" aria-label="Licence texts">{{ licences }}</pre>
+          </details>
           <p class="hint">v{{ version }} · built {{ buildDate }}</p>
         </div>
       </section>
@@ -292,5 +310,49 @@ h3 {
 .list {
   margin: 0;
   padding-left: var(--space-5);
+}
+
+/* A quiet label with Setup's chevron: down when closed, up when open. */
+.licences summary {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.licences summary:hover {
+  color: var(--color-accent);
+}
+
+.licences summary::after {
+  flex: none;
+  width: 0.4rem;
+  height: 0.4rem;
+  border-right: 1.5px solid;
+  border-bottom: 1.5px solid;
+  content: '';
+  transform: translateY(-25%) rotate(45deg);
+  transition: transform 0.2s ease-out;
+}
+
+.licences[open] summary::after {
+  transform: translateY(25%) rotate(-135deg);
+}
+
+.licences pre {
+  max-height: 24rem;
+  margin: var(--space-2) 0 0;
+  padding: var(--space-3);
+  overflow: auto;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-sm);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 </style>

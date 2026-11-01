@@ -8,6 +8,8 @@ All notable changes to DeScribe are recorded here. The format follows
 
 ### Added
 
+- **Licences:** the source is under the MIT License ([LICENSE](LICENSE)). **Settings → About → Licences** shows
+  it, and the licences of the open-source software DeScribe includes.
 - **Windows desktop app:** DeScribe also builds as a Windows app, the same app in its own window, packed as MSIX for
   the Microsoft Store. It calls the same three APIs, opens links in the default browser, and skips the folder-access
   prompts that Edge and Chrome show for a project folder (**Reconnect** is still needed after a restart). Its saved

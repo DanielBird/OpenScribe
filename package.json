@@ -3,6 +3,7 @@
   "private": true,
   "version": "1.0.0",
   "description": "Single-file transcription tool: speaker-labelled transcripts via ElevenLabs, optional English translation, .docx export.",
+  "license": "MIT",
   "type": "module",
   "engines": {
     "node": ">=22.12"
@@ -19,6 +20,7 @@
     "verify:single-file": "node scripts/verify-single-file.mjs",
     "test:e2e": "npm run build && playwright test --project=chromium",
     "test:perf": "npm run build && node scripts/make-large-fixture.mjs && playwright test --project=perf --workers=1",
+    "notices": "node scripts/make-notices.mjs",
     "release": "node scripts/release.mjs",
     "build:desktop": "vue-tsc -b && vite build --mode desktop",
     "desktop:dev": "tauri dev",

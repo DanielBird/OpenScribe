@@ -22,3 +22,5 @@ src-tauri/gen/
 
 # Added by `winapp cert generate` (desktop:pack --sign), though *.pfx covers it.
 devcert.pfx
+
+docs/screenshots/

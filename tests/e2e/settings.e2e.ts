@@ -64,6 +64,18 @@ test('Settings opens from the footer and Back returns to where it was opened', a
   await expect(page.getByRole('heading', { level: 1, name: 'Analyse' })).toBeFocused();
 });
 
+test('Licences shows DeScribe’s licence and the HTML file’s notices, not the Windows app’s', async ({
+  page,
+}) => {
+  await openHome(page);
+  await openSettings(page);
+  await page.getByText('Licences', { exact: true }).click();
+  const texts = page.getByLabel('Licence texts');
+  await expect(texts).toContainText('Permission is hereby granted, free of charge');
+  await expect(texts).toContainText('DeScribe includes the open-source software below.');
+  await expect(texts).not.toContainText('The DeScribe Windows app also includes');
+});
+
 test('Setup offers Settings while the key is missing, and Back returns to Setup', async ({
   page,
 }) => {

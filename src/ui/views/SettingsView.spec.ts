@@ -233,7 +233,26 @@ describe('SettingsView', () => {
       mountView();
       expect(wrapper!.text()).toMatch(/v\d+\.\d+\.\d+ · built \d{4}-\d{2}-\d{2}/);
     });
+
+    it('shows DeScribe’s licence and the npm packages’ notices under Licences, only once opened', async () => {
+      mountView();
+      expect(wrapper!.get('.licences summary').text()).toBe('Licences');
+      expect(wrapper!.find('.licences pre').exists()).toBe(false);
+
+      const text = await openLicences();
+      expect(text).toMatch(/^MIT License\n\nCopyright \(c\) \d{4} /);
+      expect(text).toContain('DeScribe includes the open-source software below.');
+      expect(text).toContain('@anthropic-ai/sdk');
+      expect(text).not.toContain('The DeScribe Windows app also includes');
+    });
   });
+
+  async function openLicences(): Promise<string> {
+    const details = wrapper!.get<HTMLDetailsElement>('.licences');
+    details.element.open = true;
+    await details.trigger('toggle');
+    return wrapper!.get('.licences pre').element.textContent ?? '';
+  }
 
   it('Back returns to the mode Settings was opened from', async () => {
     const nav = useNavStore();
@@ -271,6 +290,14 @@ describe('SettingsView', () => {
       await buttonNamed('Clear saved data…')!.trigger('click');
       await flushPromises();
       expect(wrapper!.get('dialog').text()).toContain('the link to your project from this app.');
+    });
+
+    it('adds the Rust crates’ notices to the licences', async () => {
+      mountView();
+      const text = await openLicences();
+      expect(text).toContain('DeScribe includes the open-source software below.');
+      expect(text).toContain('The DeScribe Windows app also includes');
+      expect(text).toContain('Microsoft Edge WebView2 SDK loader');
     });
   });
 });

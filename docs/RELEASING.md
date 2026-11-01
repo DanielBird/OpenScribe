@@ -20,8 +20,8 @@ A release is one file, `DeScribe-v<version>.html`, shared on SharePoint. This pa
 2. **Run `npm run release`** from that commit. The script:
    - refuses to run with uncommitted changes, without a dated CHANGELOG entry for the version, or when
      `release/DeScribe-v<version>.html` already exists (a released file is never replaced);
-   - runs typecheck, lint, the unit tests, the build, `verify:single-file` and the e2e tests, and stops at the first
-     failure;
+   - runs typecheck, lint, the unit tests, a check that `THIRD-PARTY-NOTICES.txt` is up to date (`npm run notices`
+     fixes it), the build, `verify:single-file` and the e2e tests, and stops at the first failure;
    - writes `release/DeScribe-v<version>.html` and `release/DeScribe-v<version>.sha256` (`release/` is gitignored);
    - prints the checklist for the steps below.
 3. **Run the manual checklist** in [TESTING.md](TESTING.md) on Edge and Chrome with the release file. If a scenario

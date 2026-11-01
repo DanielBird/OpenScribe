@@ -114,6 +114,9 @@ test('Setup, empty and filled in, with Options open', async ({ page }, testInfo)
 
   await openSettings(page);
   await expectAccessible(page, testInfo, 'Settings, empty');
+  await page.getByText('Licences', { exact: true }).click();
+  await expect(page.getByLabel('Licence texts')).toBeVisible();
+  await expectAccessible(page, testInfo, 'Settings, licences open');
   await page.getByLabel('ElevenLabs API key').fill('test-key');
   await page.getByRole('button', { name: 'Back' }).click();
   await page.locator('input[type="file"]').setInputFiles(TONE_12S_WAV);

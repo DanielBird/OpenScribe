@@ -3,6 +3,7 @@ name = "describe"
 version = "0.1.0"
 description = "DeScribe, the desktop app"
 authors = ["DanielBird"]
+license = "MIT"
 repository = "https://github.com/DanielBird/Describe"
 edition = "2024"
 rust-version = "1.90"

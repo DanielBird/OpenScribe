@@ -42,7 +42,7 @@ set it yourself for any `winapp` command run by hand.
 |---|---|
 | `npm run desktop:dev` | `tauri dev`: the window on the Vite dev server in desktop mode, with hot reload. Rust changes rebuild and restart the window. |
 | `npm run desktop:build` | `tauri build --no-bundle`: runs `build:desktop`, then makes `src-tauri/target/release/describe.exe`. |
-| `npm run desktop:pack` | `scripts/pack-desktop.mjs`: `desktop:build`, then an unsigned x64 MSIX, `release/DeScribe-v<version>-x64.msix`, for the Store. |
+| `npm run desktop:pack` | `scripts/pack-desktop.mjs`: checks the third-party notices are up to date (D36), runs `desktop:build`, then makes an unsigned x64 MSIX, `release/DeScribe-v<version>-x64.msix`, for the Store. |
 | `npm run desktop:pack -- --sign` | The same, signed with a development certificate, `devcert.pfx`, so it installs on this PC. |
 
 **Sizes (2026-10-31, version 1.0.0):**

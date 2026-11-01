@@ -1,7 +1,7 @@
 // Makes a release: release/DeScribe-v<version>.html plus its SHA-256 (docs/RELEASING.md).
 // Refuses to run with uncommitted changes, without a dated CHANGELOG entry for the version, or when the
-// version has already been released. Runs every check first (typecheck, lint, unit tests, build,
-// single-file check, e2e) and stops at the first failure.
+// version has already been released. Runs every check first (typecheck, lint, unit tests, third-party notices,
+// build, single-file check, e2e) and stops at the first failure.
 // Usage: npm run release
 import { execSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -48,6 +48,7 @@ try {
   run('npm run typecheck');
   run('npm run lint');
   run('npm test');
+  run('node scripts/make-notices.mjs --check --web');
   run('npm run build');
   run('npm run verify:single-file');
   run('npx playwright test --project=chromium');

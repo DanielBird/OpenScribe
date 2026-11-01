@@ -578,3 +578,21 @@ summarise them.
   already chosen the folder in Windows' own picker, which is the consent a desktop app asks for.
 - **Consequences:** access still covers only folders the user picks, and the page is DeScribe's own bundled code
   (the CSP allows no outside scripts). The HTML build is unchanged: Edge and Chrome still ask.
+
+### D36 — MIT licence, and Settings lists the software DeScribe includes (2026-11-01)
+- **Decision:** the source is under the MIT License (`LICENSE`). Settings → About has a **Licences** disclosure that
+  shows it, then `THIRD-PARTY-NOTICES.txt` (the npm packages in the bundle) and, in the desktop app only,
+  `THIRD-PARTY-NOTICES-DESKTOP.txt` (the Rust crates and Microsoft's WebView2 loader, which `webview2-com-sys` links
+  statically). `npm run notices` (`scripts/make-notices.mjs`) generates both: the npm list from the production
+  build's module graph, the Rust list from `cargo metadata` for `x86_64-pc-windows-msvc`, without build-only crates
+  and proc macros.
+- **Why:** DeScribe is offered free from the Microsoft Store as open source. The licences of the code it bundles (MIT,
+  Apache-2.0, BSD, ISC, OFL for the font) ask for their notices to go with every copy, and the HTML file and the MSIX
+  are copies: a page on GitHub is in neither. Reading the build, not `package.json`, lists exactly what ships,
+  including the DM Sans font (a dev dependency) and the libraries `docx` inlines.
+- **Consequences:** run `npm run notices` after any dependency change; `release` and `desktop:pack` fail while the
+  files are out of date. A package whose own files contain other software (`docx`, `webview2-com-sys`) is listed in
+  the script's PREBUNDLED tables with the version that was checked, and a new version stops the script until its
+  contents are checked again. Licence texts that a package doesn't ship, or ships too much of (Vite's lists Vite's own
+  dependencies; JSZip's adds the GPL it is also offered under), are kept in `scripts/notices/`. Of "MIT OR …", only
+  the MIT text is shown. The web build leaves out the desktop notices (`__DESKTOP__`).
