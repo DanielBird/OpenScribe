@@ -151,3 +151,7 @@ changes only some of Settings' wording. Decisions and their reasons are in [docs
 [MIT](LICENSE). The open-source software DeScribe includes, and its licences, are listed in
 [THIRD-PARTY-NOTICES.txt](THIRD-PARTY-NOTICES.txt) and, for the Windows app,
 [THIRD-PARTY-NOTICES-DESKTOP.txt](THIRD-PARTY-NOTICES-DESKTOP.txt). Settings shows both.
+
+The MIT License covers the code, not the DeScribe name or logo. You're welcome to fork, change and redistribute
+DeScribe, but give your version its own name and logo, and don't present it as DeScribe or as coming from its author.
+Saying it is based on DeScribe is fine.
