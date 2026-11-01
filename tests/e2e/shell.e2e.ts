@@ -61,7 +61,7 @@ test('opens on Home; Transcribe returns to the step left, and Home leads back', 
   await expect(heading('Analyse')).toBeFocused();
   await expect(page.getByRole('banner')).toHaveText(/^\s*Home\s*\/\s*Analyse\s*$/);
   await expect(
-    page.getByText('A project is a shared folder, for example in OneDrive.'),
+    page.getByText('A project can be a local folder or a shared one, for example in OneDrive.'),
   ).toBeVisible();
   await clickInHeader(page, 'Home');
   await expect(heading('Home')).toBeFocused();

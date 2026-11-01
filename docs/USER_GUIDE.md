@@ -131,13 +131,14 @@ The recording isn't saved. After a reload, attach it again in the player at the 
 
 ## 8. Projects
 
-A project is a folder that the team shares, for example in OneDrive, with every session's transcript and summary in
-it. In Analyse mode you can see all the sessions, read their summaries and search them together.
+A project is a folder with every session's transcript and summary in it. It can be a local folder, or a shared one (for
+example in OneDrive) that the whole team can use. In Analyse mode you can see all the sessions, read their summaries
+and search them together.
 
 **Open or create a project.** On Home, click **Analyse**.
 - **Open project…**: choose the project folder, the one with `describe-project.json` in it.
-- **New project…**: choose an empty folder inside your OneDrive (or a SharePoint library you sync), so the team gets
-  it too. DeScribe writes `describe-project.json` there and opens the **Brief**.
+- **New project…**: choose an empty folder. To share the project, put the folder in your OneDrive (or a SharePoint
+  library you sync). DeScribe writes `describe-project.json` there and opens the **Brief**.
 - The browser doesn't let you choose Documents, Desktop or Downloads themselves. Use a folder inside them.
 
 **Reconnect.** DeScribe remembers the project, and Home shows its name. Each time you start the browser again,

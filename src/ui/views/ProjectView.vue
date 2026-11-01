@@ -158,7 +158,6 @@ onMounted(() => {
     </p>
 
     <div v-else-if="showChooser" class="connect">
-      <p class="muted">A project is a shared folder, for example in OneDrive.</p>
       <div class="actions">
         <button type="button" class="button button-primary" @click="open">Open project…</button>
         <button type="button" class="button" @click="create">New project…</button>
@@ -166,6 +165,7 @@ onMounted(() => {
           Cancel
         </button>
       </div>
+      <p class="muted">A project can be a local or shared folder.</p>
       <p v-if="project.notice" class="notice" role="alert">{{ project.notice }}</p>
     </div>
 
@@ -264,15 +264,16 @@ onMounted(() => {
 }
 
 /*
- * The chooser and the other states, on the same tinted plane as the sessions. At least 34rem wide, and wider when the
- * buttons need it to stay on one row; the text keeps the measure it has at 34rem.
+ * The chooser and the other states, on the same tinted plane as the sessions. At least 38rem wide, so the chooser's
+ * line fits on one row, and wider when the buttons need it to stay on one row; the text keeps the measure it has at
+ * 38rem.
  */
 .connect {
   display: grid;
   justify-items: start;
   gap: var(--space-4);
   width: fit-content;
-  min-width: min(34rem, 100%);
+  min-width: min(38rem, 100%);
   max-width: 100%;
   padding: var(--space-6);
   border-radius: var(--radius-md);
@@ -280,13 +281,19 @@ onMounted(() => {
 }
 
 .connect > p {
-  max-width: calc(34rem - 2 * var(--space-6));
+  max-width: calc(38rem - 2 * var(--space-6));
 }
 
+/* One row of equal buttons, each as wide as the widest; stacked in a narrow window (below). */
 .actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2) var(--space-3);
+  display: grid;
+  grid-auto-columns: 1fr;
+  grid-auto-flow: column;
+  gap: var(--space-3) var(--space-3);
+}
+
+.actions > .button {
+  justify-content: center;
 }
 
 .notice {
@@ -434,6 +441,10 @@ onMounted(() => {
 
 /* Narrow: the list with the chat below it, or the selected summary alone; the page scrolls. */
 @media (max-width: 48rem) {
+  .actions {
+    grid-auto-flow: row;
+  }
+
   .panes {
     flex: none;
     grid-template-rows: none;

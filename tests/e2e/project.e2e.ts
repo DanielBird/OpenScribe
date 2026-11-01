@@ -49,7 +49,7 @@ test("New project creates the project file and opens the Brief; a folder that is
   await openHome(page);
   await enterProject(page);
   await expect(
-    page.getByText('A project is a shared folder, for example in OneDrive.'),
+    page.getByText('A project can be a local folder or a shared one, for example in OneDrive.'),
   ).toBeVisible();
 
   await page.getByRole('button', { name: 'New project…' }).click();
