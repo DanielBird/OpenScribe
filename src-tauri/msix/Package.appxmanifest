@@ -14,7 +14,7 @@
   <Identity
     Name="Dtype.DeScribe"
     Publisher="CN=91C9FF05-C619-4D52-8155-375ADA47D090"
-    Version="1.0.0.0"
+    Version="1.1.0.0"
     ProcessorArchitecture="x64" />
 
   <Properties>

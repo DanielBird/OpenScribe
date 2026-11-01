@@ -61,9 +61,7 @@ describe('ProjectView', () => {
   it('none: offers Open project and New project, with one line', () => {
     mountIn('none');
     expect(buttons()).toEqual(['Open project…', 'New project…']);
-    expect(wrapper!.text()).toContain(
-      'A project can be a local folder or a shared one, for example in OneDrive.',
-    );
+    expect(wrapper!.text()).toContain('A project can be a local or shared folder.');
   });
 
   it('none: Open project opens; a refused folder shows the notice', async () => {

@@ -6,6 +6,8 @@ All notable changes to DeScribe are recorded here. The format follows
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-11-01
+
 ### Added
 
 - **More languages:** Setup's **Language** list has the 36 languages ElevenLabs transcribes most accurately, from
@@ -101,5 +103,6 @@ The first release: one HTML file that colleagues open in Edge or Chrome.
 - On a slow laptop, renaming a speaker in a 3-hour transcript takes about 0.1–0.2 s per keystroke.
 - Firefox is not supported.
 
-[Unreleased]: https://github.com/DanielBird/Describe/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/DanielBird/Describe/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/DanielBird/Describe/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/DanielBird/Describe/releases/tag/v1.0.0
