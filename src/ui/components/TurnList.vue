@@ -9,6 +9,7 @@ import TurnItem from './TurnItem.vue';
 // `texts` (turn id → text) shows a translation instead of the original; speakers and times stay.
 // `activeId` is the turn being played; with `follow`, the list scrolls to it when it changes.
 // `editable` turns each text into a box (D19); `edit` passes on what was typed, for the store.
+// `outdated` lists the turns whose shown translation is out of date (D39).
 const props = withDefaults(
   defineProps<{
     turns: readonly Turn[];
@@ -20,6 +21,7 @@ const props = withDefaults(
     activeId?: string | null;
     follow?: boolean;
     editable?: boolean;
+    outdated?: ReadonlySet<string>;
   }>(),
   {
     playable: false,
@@ -28,6 +30,7 @@ const props = withDefaults(
     activeId: null,
     follow: false,
     editable: false,
+    outdated: undefined,
   },
 );
 const emit = defineEmits<{ select: [turn: Turn]; edit: [turnId: string, text: string] }>();
@@ -82,6 +85,7 @@ watch(
         playable,
         turn.id === activeId,
         editable,
+        outdated?.has(turn.id) ?? false,
       ]"
       :turn="turn"
       :label="infoFor(turn).label"
@@ -90,6 +94,7 @@ watch(
       :playable="playable"
       :active="turn.id === activeId"
       :editable="editable"
+      :outdated="outdated?.has(turn.id) ?? false"
       @select="emit('select', $event)"
       @edit="(turnId, text) => emit('edit', turnId, text)"
     />

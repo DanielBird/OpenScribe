@@ -48,9 +48,7 @@ test("New project creates the project file and opens the Brief; a folder that is
   const folder = await useProjectFolder(page, { [ROOT]: {}, Downloads: { 'notes.txt': 'x' } });
   await openHome(page);
   await enterProject(page);
-  await expect(
-    page.getByText('A project can be a local folder or a shared one, for example in OneDrive.'),
-  ).toBeVisible();
+  await expect(page.getByText('A project can be a local or shared folder.')).toBeVisible();
 
   await page.getByRole('button', { name: 'New project…' }).click();
   const dialog = page.getByRole('dialog', { name: 'Brief' });

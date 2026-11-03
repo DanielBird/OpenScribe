@@ -52,6 +52,11 @@ export interface AgentTool<I = unknown> {
 
 export type AgentEvent =
   | { type: 'text'; delta: string }
+  /**
+   * The provider is sending a request again because it couldn't use the reply. The last `discard` characters of the
+   * text streamed so far came from that reply: a consumer that shows the text drops them. Its usage still counts.
+   */
+  | { type: 'retry'; discard: number }
   | { type: 'tool'; name: string; activity: string; isError: boolean }
   | { type: 'usage'; usage: AgentUsage };
 

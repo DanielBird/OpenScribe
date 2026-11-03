@@ -9,10 +9,11 @@ import { useGlossaryStore } from './glossary';
 import { usePlaybackStore } from './playback';
 import { useSettingsStore } from './settings';
 import { useTranscriptStore } from './transcript';
+import { createUnloadGuard } from './unloadGuard';
 
 export type JobStatus = 'idle' | 'uploading' | 'processing' | 'done' | 'error' | 'cancelled';
 
-/** Everything a run needs, captured when it starts, so Try again repeats exactly the same request. */
+/** Everything a run needs, captured when it starts, so Try again repeats the same request (with the current key). */
 interface RunSnapshot {
   provider: TranscriptionProvider;
   input: TranscriptionInput;
@@ -22,13 +23,12 @@ interface RunSnapshot {
 
 const MESSAGES = {
   noFile: 'Choose a recording on the Setup tab first.',
+  noKey: 'Add your ElevenLabs API key in Settings.',
   unexpected: 'Something went wrong while transcribing. Try again.',
 } as const;
 
-/** Keeps the browser's "Leave site?" confirmation up while a run would be lost (Chromium 119+). */
-function onBeforeUnload(event: BeforeUnloadEvent): void {
-  event.preventDefault();
-}
+/** Asks before the page is left or reloaded while a run would be lost. */
+const unloadGuard = createUnloadGuard();
 
 //   idle ──start──▶ uploading ──upload done──▶ processing ──200──▶ done
 //                     │ cancel/error              │ cancel/error
@@ -64,7 +64,7 @@ export const useJobStore = defineStore('job', () => {
   function endRun(): void {
     controller = null;
     stopTicker();
-    window.removeEventListener('beforeunload', onBeforeUnload);
+    unloadGuard.release();
   }
 
   function snapshot(): RunSnapshot | null {
@@ -114,7 +114,7 @@ export const useJobStore = defineStore('job', () => {
     uploadDoneAt.value = null;
     elapsedSec.value = 0;
     stopTicker();
-    window.addEventListener('beforeunload', onBeforeUnload);
+    unloadGuard.hold();
 
     // Cancel (or a newer run) makes this run stale: whatever it produces afterwards is ignored.
     const isCurrent = () => controller === ctrl && !ctrl.signal.aborted;
@@ -174,10 +174,18 @@ export const useJobStore = defineStore('job', () => {
     endRun();
   }
 
-  /** Repeats the last run with the same file, key, options and terms. */
+  /** Repeats the last run with the same file, options and terms, and the key as it is now. */
   function retry(): Promise<void> {
     if (isActive.value) return Promise.resolve();
-    return lastSnapshot ? run(lastSnapshot) : start();
+    if (!lastSnapshot) return start();
+    // Read the key now, not at start: after a quota or rate-limit error, a key changed in Settings is used.
+    const apiKey = useSettingsStore().elevenLabsKey;
+    if (apiKey.trim() === '') {
+      error.value = new ProviderError('validation', MESSAGES.noKey);
+      status.value = 'error';
+      return Promise.resolve();
+    }
+    return run({ ...lastSnapshot, input: { ...lastSnapshot.input, apiKey } });
   }
 
   /**

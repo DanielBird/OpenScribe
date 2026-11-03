@@ -1,6 +1,7 @@
 // Test only: turns a Claude Messages API response into the server-sent events of a streamed reply, as the SDK's
 // stream reads them. Used by the unit tests' fake `fetch` and by the e2e `mockAnthropic`, so it imports nothing.
-// Supports text, thinking, tool_use and fallback blocks.
+// Supports text, thinking, tool_use and fallback blocks. A tool_use block whose `input` is a string streams it as it
+// is, so a test can send tool JSON the SDK can't parse.
 
 export interface ClaudeSseOptions {
   /** End with an `error` event after the content, as a stream that fails part-way does (e.g. `overloaded_error`). */
@@ -71,7 +72,9 @@ function blockEvents(block: Json, index: number): string[] {
         input: {},
       };
       events.push(event('content_block_start', { index, content_block: start }));
-      for (const partial_json of chunks(JSON.stringify(block.input ?? {}))) {
+      const json =
+        typeof block.input === 'string' ? block.input : JSON.stringify(block.input ?? {});
+      for (const partial_json of chunks(json)) {
         events.push(
           event('content_block_delta', {
             index,

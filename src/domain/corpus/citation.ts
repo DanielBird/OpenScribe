@@ -1,5 +1,6 @@
 // The text that **Copy** puts on the clipboard for a quote (PROJECTS.md §5.5):
 //   "I just put them on the charger by the bed." — Anna, 00:41:12, P02 – home visit, Lyon (translated from French)
+import { oneLine } from '../text';
 import { formatTimestamp, languageName } from '../transcript';
 
 export interface CitationParts {
@@ -8,10 +9,6 @@ export interface CitationParts {
   start: number;
   sessionTitle: string;
   translatedFrom: string | null; // language code of the original, when the text is a translation
-}
-
-function oneLine(text: string): string {
-  return text.replace(/\s+/g, ' ').trim();
 }
 
 /** One quote with its citation, on one line. */

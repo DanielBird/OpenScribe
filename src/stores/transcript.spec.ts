@@ -2,8 +2,14 @@ import 'fake-indexeddb/auto';
 import { createStore, set } from 'idb-keyval';
 import { createPinia, setActivePinia } from 'pinia';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { turnSourceHashes } from '../domain/translation';
 import * as idb from '../storage/idb';
-import { makeDoc, TEST_TRANSLATION_TEXTS, withTranslation } from '../testing/transcriptDoc';
+import {
+  makeDoc,
+  TEST_TRANSLATION_TEXTS,
+  withSourceHashes,
+  withTranslation,
+} from '../testing/transcriptDoc';
 import { SAVE_DELAY_MS, useTranscriptStore } from './transcript';
 
 // The real IndexedDB code (on fake-indexeddb), with the save and load counted.
@@ -179,7 +185,7 @@ describe('transcript store', () => {
   describe('editTurnText', () => {
     it('replaces only the edited turn, keeping its words, times and speaker', async () => {
       const store = useTranscriptStore();
-      const before = withTranslation(makeDoc());
+      const before = withSourceHashes(withTranslation(makeDoc()));
       await store.setDoc(before);
 
       store.editTurnText('t2', 'Danke, ich bin gern hier.');
@@ -195,6 +201,36 @@ describe('transcript store', () => {
       expect(after.speakers).toBe(before.speakers);
       expect(after.translations).toBe(before.translations);
       expect(before.turns[1]?.text).toBe(makeDoc().turns[1]?.text);
+    });
+
+    it("marks the edited turn's English out of date (D39)", async () => {
+      const store = useTranscriptStore();
+      await store.setDoc(withSourceHashes(withTranslation(makeDoc())));
+      expect(store.staleTurnIds).toEqual([]);
+      store.editTurnText('t2', 'Danke, ich bin gern hier.');
+      expect(store.staleTurnIds).toEqual(['t2']);
+    });
+
+    it('records what a translation from before D39 was made from: the text before the edit', async () => {
+      const store = useTranscriptStore();
+      const before = withTranslation(makeDoc());
+      await store.setDoc(before);
+
+      store.editTurnText('t2', 'Danke, ich bin gern hier.');
+
+      expect(store.doc?.translations.en?.sourceHashes).toEqual(turnSourceHashes(before.turns));
+      expect(store.doc?.translations.en?.texts).toBe(before.translations.en?.texts);
+      expect(store.staleTurnIds).toEqual(['t2']);
+      store.editTurnText('t4', 'Etwa zwei Jahre.');
+      expect(store.staleTurnIds).toEqual(['t2', 't4']);
+    });
+
+    it('leaves a doc without a translation without one', async () => {
+      const store = useTranscriptStore();
+      await store.setDoc(makeDoc());
+      store.editTurnText('t2', 'Danke.');
+      expect(store.doc?.translations).toEqual({});
+      expect(store.staleTurnIds).toEqual([]);
     });
 
     it('cleans the text', async () => {

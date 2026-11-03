@@ -6,6 +6,7 @@ import {
   englishText,
   isEnglishSession,
   isTranslatedSession,
+  lacksEnglish,
 } from '../../domain/corpus/sessionText';
 import { NOT_DISCUSSED, type SummaryQuote } from '../../domain/summary';
 import { formatDate, formatTimestamp, languageName } from '../../domain/transcript';
@@ -16,6 +17,7 @@ import { useProjectStore } from '../../stores/project';
 import { useTranscriptStore } from '../../stores/transcript';
 import { useConfirm } from '../composables/useConfirm';
 import ConfirmDialog from './ConfirmDialog.vue';
+import ErrorDetails from './ErrorDetails.vue';
 import PipelineStatus from './PipelineStatus.vue';
 import QuoteCard from './QuoteCard.vue';
 import SummariseDialog from './SummariseDialog.vue';
@@ -50,11 +52,17 @@ const droppedText = (n: number) =>
     ? "1 quote wasn't found in the transcript and was left out."
     : `${n} quotes weren't found in the transcript and were left out.`;
 
-/** "14 Sept 2026 · 01:32:10 · German, translated" */
+/** "14 Sept 2026 · 01:32:10 · German, translated". A language that is not known is left out ("Translated"). */
 const meta = computed(() => {
   const t = text.value;
   if (!t) return '';
-  const language = languageName(t.languageCode) + (isTranslatedSession(t) ? ', translated' : '');
+  const name = languageName(t.languageCode);
+  const translated = isTranslatedSession(t);
+  const language = name
+    ? name + (translated ? ', translated' : '')
+    : translated
+      ? 'Translated'
+      : null;
   return [
     formatDate(t.recordedAt),
     t.durationSec === null ? null : formatTimestamp(t.durationSec),
@@ -209,6 +217,7 @@ watch(
     <div v-else-if="status === 'failed' && failure" class="status status-failed">
       <p role="alert">{{ failure.error.userMessage }}</p>
       <button type="button" class="button" @click="summarise">Try again</button>
+      <ErrorDetails :error="failure.error" />
     </div>
     <div v-else-if="status === 'stale'" class="status">
       <p>Out of date: the transcript or the brief has changed.</p>
@@ -311,9 +320,7 @@ watch(
       title="Summarise"
       message=""
       confirm-label="Summarise"
-      :translates="
-        status !== 'ok' && !!text && !isEnglishSession(text) && !isTranslatedSession(text)
-      "
+      :translates="status !== 'ok' && !!text && lacksEnglish(text)"
       @confirm="onKeyConfirmed"
       @cancel="keyDialog = false"
     />

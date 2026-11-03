@@ -12,10 +12,13 @@ export function fileBaseName(fileName: string): string {
 // Characters Windows doesn't allow in file names, plus control characters.
 const UNSAFE = /[<>:"/\\|?*\u0000-\u001f]/g;
 
-/** `<base> - transcript (German).docx`, safe to save on Windows. */
+/**
+ * `<base> - transcript (German).docx`, safe to save on Windows. An original whose language isn't known is
+ * `<base> - transcript.docx`.
+ */
 export function exportFileName(doc: TranscriptDoc, version: TranscriptVersion): string {
   const safe = fileBaseName(doc.source.fileName).replace(UNSAFE, '_').trim();
   const base = Array.from(safe).slice(0, MAX_BASE_LENGTH).join('').trim() || 'Untitled';
   const language = version === 'en' ? 'English' : languageName(doc.result.languageCode);
-  return `${base} - transcript (${language}).docx`;
+  return language ? `${base} - transcript (${language}).docx` : `${base} - transcript.docx`;
 }

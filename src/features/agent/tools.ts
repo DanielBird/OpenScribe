@@ -5,12 +5,13 @@ import { parseQuery } from '../../domain/corpus/query';
 import type { SearchField, SessionHits } from '../../domain/corpus/search';
 import { englishText, type SessionTurn } from '../../domain/corpus/sessionText';
 import type { SummaryQuote } from '../../domain/summary';
-import { formatTimestamp, languageName } from '../../domain/transcript';
+import { oneLine, plural } from '../../domain/text';
+import { formatTimestamp, languageOrUnknown } from '../../domain/transcript';
 import { z } from '../../lib/zod';
 import type { AgentTool } from '../../providers/llm/types';
 import { themeKey, themeVocabulary } from '../summary/themes';
 import type { CorpusReader, CorpusSession } from './corpus';
-import { oneLine, sessionLanguage, speakerLabel, turnLine } from './format';
+import { sessionLanguage, speakerLabel, turnLine } from './format';
 import { AGENT_LIMITS, estimateTokens } from './limits';
 
 export const TOOL_BUDGET_REACHED = 'Tool budget reached. Answer now.';
@@ -38,8 +39,6 @@ type ToolResult = Awaited<ReturnType<AgentTool['run']>>;
 
 /** Sessions per page of search results: as many as fit the per-call hit cap at the per-session cap. */
 const SESSIONS_PER_PAGE = AGENT_LIMITS.hitsPerCall / AGENT_LIMITS.hitsPerSession;
-
-const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
 /** A tool whose input type is checked here; the provider validates the input against `input` before `run`. */
 function defineTool<I>(tool: AgentTool<I>): AgentTool {
@@ -250,14 +249,19 @@ function readTool(corpus: CorpusReader, budget: AgentBudget): AgentTool {
 
       const english = !input.original;
       const untranslated = english && text.turns.every((turn) => englishText(text, turn) === null);
-      const language = languageName(text.languageCode);
-      const version = !english
-        ? `${language} (original)`
-        : untranslated
-          ? `${language}, not translated yet: the original text, which can't be quoted`
-          : 'English';
+      const language = languageOrUnknown(text.languageCode);
+      // In a translated session, a turn changed since the translation has no English (DECISIONS.md D39): its line
+      // is the original, marked as in search results.
+      const isOriginal = (turn: SessionTurn) =>
+        english && !untranslated && englishText(text, turn) === null;
       const lineOf = (turn: SessionTurn) =>
-        turnLine(text, turn, (english ? englishText(text, turn) : null) ?? turn.text);
+        turnLine(
+          text,
+          turn,
+          (english ? englishText(text, turn) : null) ?? turn.text,
+          isOriginal(turn),
+        );
+      let marked = false;
 
       const lines: string[] = [];
       let spent = false;
@@ -274,6 +278,7 @@ function readTool(corpus: CorpusReader, budget: AgentBudget): AgentTool {
         budget.transcriptTokens += tokens;
         lines.push(line);
         lastShown = i;
+        if (isOriginal(turn)) marked = true;
       }
 
       if (lines.length === 0) {
@@ -282,6 +287,13 @@ function readTool(corpus: CorpusReader, budget: AgentBudget): AgentTool {
       const first = text.turns[from];
       const shownLast = text.turns[lastShown];
       const range = `${first?.id}–${shownLast?.id}`;
+      const version = !english
+        ? `${language} (original)`
+        : untranslated
+          ? `${language}, not translated yet: the original text, which can't be quoted`
+          : marked
+            ? `English, except turns marked (original): changed since the translation, so they can't be quoted`
+            : 'English';
       const header = `${session.key} · ${title} · turns ${range} of ${text.turns.length} · ${version}`;
       const times = `${formatTimestamp(first?.start ?? 0)}–${formatTimestamp(shownLast?.start ?? 0)}`;
       return {

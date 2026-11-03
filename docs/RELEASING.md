@@ -81,3 +81,10 @@ Any change to the **shape** of stored data needs one of these:
 
 It also needs a DECISIONS entry. Readers already validate what they load (zod) and fall back to defaults; they never
 try to repair it. Adding a new optional preference with a default doesn't count as a shape change.
+
+Data that DeScribe writes back (the project file, transcripts, chats) keeps the fields a build doesn't know, so a new
+optional field survives an older build's save (DECISIONS D38). Versions 1.1.0 and earlier still drop such fields.
+
+Project folders are shared too, by colleagues who may run different versions. The same policy applies to their
+files (`describe-project.json`, `sessions/`, `chats/`), with each file's `schemaVersion` in place of a namespace
+(DECISIONS D40).

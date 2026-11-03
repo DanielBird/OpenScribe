@@ -27,7 +27,8 @@ export interface TranscriptionRequestInfo {
 
 export interface TranscriptionResultInfo {
   providerTranscriptId: string | null;
-  languageCode: string; // as returned by the provider, e.g. 'deu'
+  /** As returned by the provider, e.g. 'deu'. If it returns none: the request's hint, or '' for 'auto'. */
+  languageCode: string;
   languageProbability: number | null;
   audioDurationSec: number | null;
 }
@@ -58,6 +59,11 @@ export interface Translation {
   model: string;
   createdAt: string; // ISO
   texts: Record<string, string>; // turnId → translated text (complete for all turns)
+  /**
+   * turnId → the hash of the turn's text when it was translated (DECISIONS.md D39). Missing in translations made
+   * before D39, or saved by 1.0.0 or 1.1.0, which count as current.
+   */
+  sourceHashes?: Record<string, string>;
 }
 
 export interface TranscriptDoc {
@@ -107,6 +113,12 @@ export function formatDate(ms: number, opts: { timeZone?: string } = {}): string
   );
 }
 
+/** A date as ms since the epoch → `2026-09-14` (UTC), as text sent to a model shows it. An invalid date gives null. */
+export function isoDate(ms: number): string | null {
+  const date = new Date(ms);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString().slice(0, 10);
+}
+
 /**
  * A language code (ISO 639-1/-2/-3, optionally with a region such as `en-GB`) in one form: ISO 639-1 where the
  * language has one (`deu`, `ger` and `de_AT` are all `de`), otherwise ISO 639-3 (`yue`). `Intl.Locale` does the
@@ -132,6 +144,11 @@ export function languageName(code: string): string {
     name = undefined; // not a language code at all, e.g. ''
   }
   return name ?? code.trim().toUpperCase();
+}
+
+/** `languageName()`, or 'Unknown language' for a code that names none (''). For text sent to a model. */
+export function languageOrUnknown(code: string): string {
+  return languageName(code) || 'Unknown language';
 }
 
 /** Default label for the speaker at `index` (0-based, in order of first appearance). */

@@ -10,9 +10,9 @@ describe('ExportDialog', () => {
     wrapper = null;
   });
 
-  async function mountOpen(initial: 'original' | 'en' = 'original') {
+  async function mountOpen(initial: 'original' | 'en' = 'original', language = 'German') {
     wrapper = mount(ExportDialog, {
-      props: { open: false, language: 'German', initial },
+      props: { open: false, language, initial },
       attachTo: document.body,
     });
     await wrapper.setProps({ open: true });
@@ -35,6 +35,22 @@ describe('ExportDialog', () => {
     expect(radio('original').element.checked).toBe(true);
     expect(dialog.get('legend').text()).toBe('Version');
     expect(document.activeElement).toBe(button('Download').element);
+  });
+
+  it('says only "Original" when the language is not known', async () => {
+    await mountOpen('original', '');
+    expect(wrapper!.get('dialog').findAll('label')[0]!.text()).toBe('Original');
+  });
+
+  it('says how many turns of the English are out of date (D39)', async () => {
+    await mountOpen();
+    const labels = () => wrapper!.findAll('label').map((l) => l.text());
+    await wrapper!.setProps({ stale: 3 });
+    expect(labels()[1]).toBe('English translation (3 turns out of date)');
+    await wrapper!.setProps({ stale: 1 });
+    expect(labels()[1]).toBe('English translation (1 turn out of date)');
+    await wrapper!.setProps({ stale: 0 });
+    expect(labels()[1]).toBe('English translation');
   });
 
   it('emits the chosen version on Download', async () => {

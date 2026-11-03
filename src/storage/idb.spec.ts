@@ -1,7 +1,7 @@
 import 'fake-indexeddb/auto';
 import { createStore, set } from 'idb-keyval';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { makeDoc } from '../testing/transcriptDoc';
+import { makeDoc, withFutureFields, withTranslation } from '../testing/transcriptDoc';
 import {
   clearLastTranscript,
   loadLastTranscript,
@@ -35,6 +35,12 @@ describe('last transcript in IndexedDB', () => {
       },
     });
     await expect(saveLastTranscript(doc)).resolves.toBe(true);
+    await expect(loadLastTranscript()).resolves.toEqual(doc);
+  });
+
+  it('keeps fields a newer build added (D38)', async () => {
+    const doc = withFutureFields(withTranslation(makeDoc()));
+    await writeRaw(doc);
     await expect(loadLastTranscript()).resolves.toEqual(doc);
   });
 

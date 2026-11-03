@@ -1,7 +1,17 @@
 import { readFileSync, statSync } from 'node:fs';
 import type { Download, Page, TestInfo } from '@playwright/test';
 import JSZip from 'jszip';
-import { expect, goToGlossary, mockElevenLabs, ok, openApp, reloadApp, run, test } from './helpers';
+import {
+  expect,
+  fixture,
+  goToGlossary,
+  mockElevenLabs,
+  ok,
+  openApp,
+  reloadApp,
+  run,
+  test,
+} from './helpers';
 
 const downloadButton = (page: Page) => page.getByRole('button', { name: 'Download .docx' });
 const versionDialog = (page: Page) => page.getByRole('dialog', { name: 'Which version?' });
@@ -10,6 +20,23 @@ const versionDialog = (page: Page) => page.getByRole('dialog', { name: 'Which ve
 async function transcribe(page: Page, fixture: string) {
   await mockElevenLabs(page, () => ok(0, fixture));
   await openApp(page);
+  await goToGlossary(page);
+  await run(page);
+  await expect(page.locator('li.turn').first()).toBeVisible();
+}
+
+/** Transcribes the test recording, answered with the German fixture without its `language_code`. */
+async function transcribeWithoutLanguageCode(page: Page, language?: string) {
+  const { language_code: _omitted, ...response } = JSON.parse(fixture('two-speakers-short')) as {
+    language_code: string;
+  };
+  await mockElevenLabs(page, async () => ({ status: 200, body: JSON.stringify(response) }));
+  await openApp(page);
+  if (language) {
+    const options = page.getByRole('heading', { level: 2, name: 'Options' }).getByRole('button');
+    await options.click();
+    await page.getByLabel('Language').selectOption(language);
+  }
   await goToGlossary(page);
   await run(page);
   await expect(page.locator('li.turn').first()).toBeVisible();
@@ -132,4 +159,42 @@ test('with a translation, Escape cancels and Original exports German', async ({
   const { xml } = await saveAndRead(download, testInfo);
   expect(xml).toContain('Guten Tag und willkommen zu unserem Gespräch.');
   expect(xml).toContain('German (detected)');
+});
+
+test('a response without a language code exports without one under Auto, on screen too (audit BUG-11)', async ({
+  page,
+}, testInfo) => {
+  await transcribeWithoutLanguageCode(page);
+  await expect(page.locator('.transcript-header dt')).toHaveText([
+    'Duration',
+    'Speakers',
+    'Transcribed',
+  ]);
+
+  const downloading = page.waitForEvent('download');
+  await downloadButton(page).click();
+  const download = await downloading;
+
+  expect(download.suggestedFilename()).toBe('tone-5s - transcript.docx');
+  const { xml } = await saveAndRead(download, testInfo);
+  expect(xml).toContain('Guten Tag und willkommen zu unserem Gespräch.');
+  expect(xml).toContain('>Speakers: </w:t>');
+  expect(xml).not.toContain('>Language: </w:t>');
+  expect(xml).not.toContain('(detected)');
+});
+
+test('a response without a language code takes the language chosen on Setup', async ({
+  page,
+}, testInfo) => {
+  await transcribeWithoutLanguageCode(page, 'de');
+  await expect(page.locator('.transcript-header')).toContainText('German');
+
+  const downloading = page.waitForEvent('download');
+  await downloadButton(page).click();
+  const download = await downloading;
+
+  expect(download.suggestedFilename()).toBe('tone-5s - transcript (German).docx');
+  const { xml } = await saveAndRead(download, testInfo);
+  expect(xml).toContain('>Language: </w:t>');
+  expect(xml).toContain('>German</w:t>');
 });

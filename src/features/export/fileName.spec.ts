@@ -44,6 +44,15 @@ describe('exportFileName', () => {
     expect(exportFileName(docNamed('a.mp3', 'zzz'), 'original')).toBe('a - transcript (ZZZ).docx');
   });
 
+  it('leaves the language out of an original whose language is not known', () => {
+    expect(exportFileName(docNamed('interview.mp3', ''), 'original')).toBe(
+      'interview - transcript.docx',
+    );
+    expect(exportFileName(docNamed('interview.mp3', ''), 'en')).toBe(
+      'interview - transcript (English).docx',
+    );
+  });
+
   it('replaces characters Windows does not allow, and control characters', () => {
     expect(exportFileName(docNamed('a<b>c:d"e/f\\g|h?i*j\tk\u0001l.mp3'), 'original')).toBe(
       'a_b_c_d_e_f_g_h_i_j_k_l - transcript (German).docx',

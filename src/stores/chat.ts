@@ -30,6 +30,7 @@ import {
   type AgentUsage,
 } from '../providers/llm/types';
 import { FolderError, type FileStat } from '../storage/folder';
+import { sameStat } from '../storage/projectFiles';
 import { useProjectStore, type ProjectChat } from './project';
 import { useSettingsStore } from './settings';
 
@@ -110,6 +111,11 @@ interface ChatTarget {
   stat: FileStat | null;
   /** A save failed; the next one, or a reconnect, tries again. */
   dirty: boolean;
+  /**
+   * The file as it was opened, `null` for a new chat or a copy. Saves start from it, so fields a newer build wrote
+   * are kept (D38).
+   */
+  opened: ChatFile | null;
 }
 
 const now = () => new Date().toISOString();
@@ -198,6 +204,8 @@ export const useChatStore = defineStore('chat', () => {
   let conversation: AgentConversation | null = null;
   /** An opened chat's questions and answers (after its summary, if any), sent back with its next question. */
   let history: ChatExchange[] = [];
+  /** An opened chat's messages by id, as they were read: saves, copies too, write them back unchanged (D38). */
+  let openedMessages = new Map<string, ChatFileMessage>();
   let target: ChatTarget | null = null;
   let saving: Promise<void> = Promise.resolve();
   let controller: AbortController | null = null;
@@ -327,6 +335,7 @@ export const useChatStore = defineStore('chat', () => {
         forkedFrom: target?.id ?? null,
         stat: null,
         dirty: false,
+        opened: null,
       };
       chatId.value = target.id;
       owner.value = author;
@@ -334,6 +343,7 @@ export const useChatStore = defineStore('chat', () => {
     const to = target;
     to.author = author; // Your name may have changed.
     const file: ChatFile = {
+      ...to.opened,
       kind: 'describe.chat',
       schemaVersion: CHAT_SCHEMA_VERSION,
       id: to.id,
@@ -341,10 +351,11 @@ export const useChatStore = defineStore('chat', () => {
       title: to.title,
       createdAt: to.createdAt,
       updatedAt: now(),
-      author: { id: author.id, name: author.name },
+      author: { ...to.opened?.author, id: author.id, name: author.name },
       forkedFrom: to.forkedFrom,
       sessionKeys: Object.fromEntries(corpus.sessions.map((s) => [s.text.sessionId, s.key])),
-      messages: kept,
+      // A saved message never changes, so the one that was read is written back as it was.
+      messages: kept.map((m) => openedMessages.get(m.id) ?? m),
     };
     saving = saving.then(() => write(to, file));
   }
@@ -443,6 +454,9 @@ export const useChatStore = defineStore('chat', () => {
     const onEvent = (event: AgentEvent) => {
       if (!isCurrent()) return;
       if (event.type === 'text') draft += event.delta;
+      // A request sent again: what its failed reply streamed goes, so Stop never saves it twice (audit BUG-5).
+      else if (event.type === 'retry')
+        draft = draft.slice(0, Math.max(0, draft.length - event.discard));
       else if (event.type === 'tool')
         activity = [
           ...activity,
@@ -639,6 +653,7 @@ export const useChatStore = defineStore('chat', () => {
     snapshot.value = null;
     conversation = null;
     history = [];
+    openedMessages = new Map();
     target = null;
     chatId.value = null;
     owner.value = null;
@@ -652,9 +667,15 @@ export const useChatStore = defineStore('chat', () => {
    * Opens a saved chat (D29): its messages, with the quotes checked again against the sessions as they are now, and
    * its session keys kept. Its next question sends the earlier ones back as text: from its latest summary, if it was
    * compacted (D33).
+   *
+   * Opening the open chat again reads it again when its file changed meanwhile (a colleague's rescan, audit BUG-9),
+   * unless an answer is running or a save failed: then what's on screen stays, since its file doesn't have it all.
    */
   function open(chat: ProjectChat): void {
-    if (chatId.value === chat.file.id) return;
+    if (chatId.value === chat.file.id) {
+      if (running.value || target === null || target.dirty) return;
+      if (target.stat !== null && sameStat(target.stat, chat.stat)) return;
+    }
     newChat();
     const { file } = chat;
     target = {
@@ -665,7 +686,9 @@ export const useChatStore = defineStore('chat', () => {
       forkedFrom: file.forkedFrom,
       stat: chat.stat,
       dirty: false,
+      opened: file,
     };
+    openedMessages = new Map(file.messages.map((m) => [m.id, m]));
     chatId.value = file.id;
     owner.value = file.author;
     const opened = takeSnapshot(file.sessionKeys);

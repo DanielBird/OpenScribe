@@ -208,12 +208,49 @@ describe('createAgentTools', () => {
       expect(original.activity).toBe('Read P02 – home visit, Hamburg 00:00:40–00:00:40 (original)');
     });
 
+    it('names a language that is not known as such, here and in the summaries', async () => {
+      const session = makeSessionText(1, {
+        languageCode: '',
+        turns: [{ id: 't1', speakerId: 'speaker_0', start: 5, text: 'Wann?', en: 'When?' }],
+      });
+      const { call } = tools(createCorpusReader([session], new Map()));
+      const original = await call('read_transcript', { session: 's1', original: true });
+      expect(original.content.split('\n')[0]).toBe(
+        's1 · P01 interview.m4a · turns t1–t1 of 1 · Unknown language (original)',
+      );
+      const summaries = await call('get_summaries', { sessions: ['s1'] });
+      expect(summaries.content.split('\n')[0]).toBe(
+        's1 · P01 interview.m4a · Unknown language, translated',
+      );
+    });
+
     it("says when a session isn't translated yet", async () => {
       const result = await tools().call('read_transcript', { session: 's3' });
       expect(result.content.split('\n')[0]).toBe(
         "s3 · P03 interview.m4a · turns t1–t2 of 2 · French, not translated yet: the original text, which can't be quoted",
       );
       expect(result.content).toContain('t2 [00:00:30] Anna: La nuit, sur le chargeur.');
+    });
+
+    it('marks the turns changed since the translation, which have no English (D39)', async () => {
+      const session = makeSessionText(1, {
+        languageCode: 'deu',
+        turns: [
+          { id: 't1', speakerId: 'speaker_0', start: 5, text: 'Wann?', en: 'When?' },
+          { id: 't2', speakerId: 'speaker_1', start: 40, text: 'Abends, korrigiert.', en: null },
+        ],
+      });
+      const { call } = tools(createCorpusReader([session], new Map()));
+      const result = await call('read_transcript', { session: 's1' });
+      const [header, ...lines] = result.content.split('\n');
+      expect(header).toMatch(
+        /· English, except turns marked \(original\): changed since the translation, so they can't be quoted$/,
+      );
+      expect(lines[0]).toMatch(/^t1 \[00:00:05\] [^(]+: When\?$/);
+      expect(lines[1]).toMatch(/^t2 \[00:00:40\] .+ \(original\): Abends, korrigiert\.$/);
+
+      const first = await call('read_transcript', { session: 's1', from: 't1', to: 't1' });
+      expect(first.content.split('\n')[0]).toMatch(/· English$/);
     });
 
     it('reports unknown sessions and turns', async () => {

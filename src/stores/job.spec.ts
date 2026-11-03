@@ -305,11 +305,11 @@ describe('job store', () => {
   });
 
   describe('retry', () => {
-    it('repeats the same request, even after the settings changed', async () => {
+    it('repeats the same request with the current key, even after the settings changed', async () => {
       const settings = makeReady();
       const job = useJobStore();
       const first = job.start();
-      call(0).reject(new ProviderError('rate_limit', 'busy'));
+      call(0).reject(new ProviderError('quota', 'no credits'));
       await first;
 
       settings.elevenLabsKey = 'other-key';
@@ -319,22 +319,40 @@ describe('job store', () => {
       const second = job.retry();
       expect(job.status).toBe('uploading');
       expect(job.error).toBeNull();
-      expect(call(1).input).toEqual(call(0).input);
+      expect(call(1).input).toEqual({ ...call(0).input, apiKey: 'other-key' });
       call(1).resolve(RESULT);
       await second;
       expect(job.status).toBe('done');
       expect(useTranscriptStore().doc?.request.languageHint).toBe('de');
     });
 
-    it('starts again after a cancel', () => {
-      makeReady();
+    it('starts again after a cancel, with the current key', () => {
+      const settings = makeReady();
       const job = useJobStore();
       void job.start();
       job.cancel();
+      settings.elevenLabsKey = 'other-key';
       void job.retry();
       expect(job.status).toBe('uploading');
       expect(fake.calls).toHaveLength(2);
       expect(call(1).signal.aborted).toBe(false);
+      expect(call(1).input.apiKey).toBe('other-key');
+    });
+
+    it('fails with a validation error and sends nothing when the key was removed', async () => {
+      const settings = makeReady();
+      const job = useJobStore();
+      const first = job.start();
+      call(0).reject(new ProviderError('rate_limit', 'busy'));
+      await first;
+
+      settings.elevenLabsKey = '  ';
+      await job.retry();
+      expect(job.status).toBe('error');
+      expect(job.error?.kind).toBe('validation');
+      expect(job.error?.userMessage).toBe('Add your ElevenLabs API key in Settings.');
+      expect(fake.calls).toHaveLength(1);
+      expect(beforeUnloadPrevented()).toBe(false);
     });
 
     it('starts a new run when there was none', () => {

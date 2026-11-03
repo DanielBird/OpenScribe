@@ -10,6 +10,7 @@ import {
   watch,
 } from 'vue';
 import type { SearchHit, SessionHits } from '../../domain/corpus/search';
+import { plural } from '../../domain/text';
 import { formatTimestamp } from '../../domain/transcript';
 import { useProjectStore } from '../../stores/project';
 import { writeClipboard } from '../clipboard';
@@ -35,8 +36,6 @@ const sessions = shallowRef<SessionHits[]>([]);
 const totals = ref({ hits: 0, sessions: 0 });
 const nextOffset = ref<number | null>(null);
 const active = computed(() => searched.value !== '' && error.value === '');
-
-const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
 const countText = computed(() => {
   if (!active.value) return '';

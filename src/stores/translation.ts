@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia';
 import { computed, onScopeDispose, ref, shallowRef, toRaw, watch } from 'vue';
 import type { LlmProviderId } from '../domain/transcript';
+import { staleTurnIds, type TranslationTexts } from '../domain/translation';
 import {
   TranslationError,
   translateTranscript,
@@ -10,6 +11,7 @@ import { ProviderError } from '../providers/errors';
 import { getLlmProvider } from '../providers/index';
 import { useSettingsStore } from './settings';
 import { useTranscriptStore } from './transcript';
+import { createUnloadGuard } from './unloadGuard';
 
 export type TranslationStatus = 'idle' | 'running' | 'error' | 'cancelled';
 
@@ -25,15 +27,14 @@ const KEY_MISSING: Record<LlmProviderId, string> = {
   gemini: 'Enter your Gemini API key first.',
 };
 
-/** Keeps the browser's "Leave site?" confirmation up while a translation would be lost. */
-function onBeforeUnload(event: BeforeUnloadEvent): void {
-  event.preventDefault();
-}
+/** Asks before the page is left or reloaded while a translation would be lost. */
+const unloadGuard = createUnloadGuard();
 
 //   idle ──start──▶ running ──done──▶ idle (doc.translations.en saved, view 'en')
 //                     │ cancel    │ error
 //                     ▼           ▼
 //                 cancelled     error ──resume──▶ running (skips the batches already done)
+// When some turns changed since the translation (DECISIONS.md D39), start updates it: only their batches are sent.
 export const useTranslationStore = defineStore('translation', () => {
   const transcript = useTranscriptStore();
   const settings = useSettingsStore();
@@ -41,8 +42,8 @@ export const useTranslationStore = defineStore('translation', () => {
   const status = ref<TranslationStatus>('idle');
   const progress = ref<{ batch: number; totalBatches: number } | null>(null);
   const error = shallowRef<ProviderError | null>(null);
-  /** Turns translated before an error, for Resume. Never saved. */
-  const partial = shallowRef<Record<string, string> | null>(null);
+  /** Turns translated before an error, and what they were made from, for Resume. Never saved. */
+  const partial = shallowRef<TranslationTexts | null>(null);
   /** The current or last run. */
   const target = shallowRef<RunTarget | null>(null);
 
@@ -52,10 +53,10 @@ export const useTranslationStore = defineStore('translation', () => {
 
   function endRun(): void {
     controller = null;
-    window.removeEventListener('beforeunload', onBeforeUnload);
+    unloadGuard.release();
   }
 
-  async function run(next: RunTarget, resumeFrom: Record<string, string> | undefined) {
+  async function run(next: RunTarget, resumeFrom: TranslationTexts | undefined) {
     const doc = transcript.doc;
     if (!doc || doc.id !== next.docId) return;
     target.value = next;
@@ -73,13 +74,13 @@ export const useTranslationStore = defineStore('translation', () => {
     const ctrl = new AbortController();
     controller = ctrl;
     status.value = 'running';
-    window.addEventListener('beforeunload', onBeforeUnload);
+    unloadGuard.hold();
     // Cancel, a newer run or another transcript makes this run stale: its results are ignored.
     const isCurrent = () => controller === ctrl && !ctrl.signal.aborted;
 
     try {
       const provider = getLlmProvider(next.providerId, apiKey, next.model);
-      const texts = await translateTranscript(toRaw(doc), provider, {
+      const result = await translateTranscript(toRaw(doc), provider, {
         signal: ctrl.signal,
         resumeFrom,
         onProgress: (p) => {
@@ -92,7 +93,7 @@ export const useTranslationStore = defineStore('translation', () => {
         provider: next.providerId,
         model: next.model,
         createdAt: new Date().toISOString(),
-        texts,
+        ...result,
       });
       status.value = 'idle';
       progress.value = null;
@@ -113,20 +114,29 @@ export const useTranslationStore = defineStore('translation', () => {
     }
   }
 
-  /** Translates the current transcript. Does nothing while a translation runs. */
+  /** The translation to update, when some turns changed since it was made (**Update English**). */
+  function toUpdate(): TranslationTexts | undefined {
+    const doc = transcript.doc;
+    return doc && staleTurnIds(doc).length > 0 ? doc.translations.en : undefined;
+  }
+
+  /**
+   * Translates the current transcript: only the turns changed since its translation, if there are any, otherwise
+   * all of them. Does nothing while a translation runs.
+   */
   function start(providerId: LlmProviderId, model: string): Promise<void> {
     const doc = transcript.doc;
     if (isRunning.value || !doc) return Promise.resolve();
     settings.translationProvider = providerId;
     settings.translationModel = model;
     partial.value = null;
-    return run({ docId: doc.id, providerId, model }, undefined);
+    return run({ docId: doc.id, providerId, model }, toUpdate());
   }
 
   /** Continues a failed translation from the batch that failed. */
   function resume(): Promise<void> {
     if (status.value !== 'error' || !target.value) return Promise.resolve();
-    return run(target.value, partial.value ?? undefined);
+    return run(target.value, partial.value ?? toUpdate());
   }
 
   /** Aborts the request. Nothing is saved, and a late reply is ignored. */

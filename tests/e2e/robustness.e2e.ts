@@ -218,4 +218,25 @@ test.describe('offline', () => {
     await expect(page.getByRole('button', { name: 'Resume' })).toBeVisible();
     dropFailedLoads(consoleErrors);
   });
+
+  // Gemini's SDK has no connection error class, so this pins the message Chromium's fetch rejects with (audit BUG-10).
+  test('a translation explains that Gemini can’t be reached and offers Resume', async ({
+    page,
+    consoleErrors,
+  }) => {
+    await transcribe(page, 'two-speakers-short');
+    await goOffline(page, ['https://generativelanguage.googleapis.com']);
+
+    await page.getByRole('button', { name: 'Translate to English' }).click();
+    const dialog = page.getByRole('dialog', { name: 'Translate to English' });
+    await dialog.getByRole('radio', { name: 'Gemini' }).check();
+    await dialog.getByLabel('Gemini (Google) API key').fill('test-key');
+    await dialog.getByRole('button', { name: 'Translate', exact: true }).click();
+
+    await expect(page.getByRole('alert')).toContainText("Couldn't reach Gemini.", {
+      timeout: 15_000,
+    });
+    await expect(page.getByRole('button', { name: 'Resume' })).toBeVisible();
+    dropFailedLoads(consoleErrors);
+  });
 });

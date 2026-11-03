@@ -7,9 +7,11 @@ import { useTranscriptStore } from '../../stores/transcript';
 const transcript = useTranscriptStore();
 
 const hasTranslation = computed(() => transcript.doc?.translations.en !== undefined);
-const language = computed(() =>
-  transcript.doc ? languageName(transcript.doc.result.languageCode) : '',
-);
+// "Original (German)", or "Original" when the language is not known.
+const original = computed(() => {
+  const language = transcript.doc ? languageName(transcript.doc.result.languageCode) : '';
+  return language ? `Original (${language})` : 'Original';
+});
 </script>
 
 <template>
@@ -20,7 +22,7 @@ const language = computed(() =>
       :aria-pressed="transcript.view === 'original'"
       @click="transcript.view = 'original'"
     >
-      Original ({{ language }})
+      {{ original }}
     </button>
     <button
       type="button"

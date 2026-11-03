@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ProviderError, redactSecret, withoutSecret } from './errors';
+import { ProviderError, redactSecret, technicalDetails, withoutSecret } from './errors';
 
 describe('ProviderError', () => {
   it('carries kind, message and options', () => {
@@ -54,5 +54,33 @@ describe('secret redaction', () => {
   it('returns the same error when there is nothing to redact', () => {
     const err = new ProviderError('server', 'Oops.', { status: 500 });
     expect(withoutSecret(err, key)).toBe(err);
+  });
+});
+
+describe('technicalDetails', () => {
+  it('gives the kind and status, then the detail', () => {
+    const err = new ProviderError('auth', 'Bad key.', {
+      status: 401,
+      detail: 'invalid_api_key: Invalid API key (request r-1)',
+    });
+    expect(technicalDetails(err)).toBe(
+      'auth · HTTP 401\ninvalid_api_key: Invalid API key (request r-1)',
+    );
+  });
+
+  it('leaves out what the error lacks', () => {
+    expect(technicalDetails(new ProviderError('rate_limit', 'x', { status: 429 }))).toBe(
+      'rate_limit · HTTP 429',
+    );
+    expect(technicalDetails(new ProviderError('refused', 'x', { detail: 'refusal: cyber' }))).toBe(
+      'refused\nrefusal: cyber',
+    );
+  });
+
+  it('is null with nothing beyond the message', () => {
+    expect(technicalDetails(new ProviderError('aborted', 'Cancelled.'))).toBeNull();
+    expect(technicalDetails(new ProviderError('unknown', 'x', { detail: '' }))).toBeNull();
+    expect(technicalDetails(new Error('boom'))).toBeNull();
+    expect(technicalDetails(null)).toBeNull();
   });
 });

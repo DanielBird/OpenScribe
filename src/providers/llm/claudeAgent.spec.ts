@@ -3,9 +3,11 @@ import { z } from '../../lib/zod';
 import {
   agentMessage,
   apiError,
+  brokenToolUseBlock,
   fallbackBlock,
   heldReply,
   scriptedFetch,
+  streamedText,
   textBlock,
   thinkingBlock,
   toolUseBlock,
@@ -343,6 +345,91 @@ describe('createClaudeAgent', () => {
     expect(req.events.flatMap((e) => (e.type === 'text' ? [e.delta] : [])).join('')).toBe(
       result.text,
     );
+  });
+
+  it("sends the request again after tool JSON it can't parse, takes back that text, and counts its usage", async () => {
+    const calls: string[] = [];
+    const { agent, requests } = setup([
+      {
+        message: agentMessage(
+          [textBlock('Let me look.'), brokenToolUseBlock('tu_1', 'search_transcripts')],
+          { usage: usage(1000, 40) },
+        ),
+      },
+      {
+        message: agentMessage(
+          [textBlock('Let me look.'), toolUseBlock('tu_2', 'search_transcripts', { query: 'bed' })],
+          { usage: usage(1000, 40) },
+        ),
+      },
+      { message: agentMessage([textBlock('By the bed.')], { usage: usage(200, 30) }) },
+    ]);
+    const req = request({ tools: [searchTool(calls) as AgentTool] });
+    const result = await agent.run(req);
+
+    expect(requests).toHaveLength(3);
+    expect(requests[1]!.body.messages).toEqual(requests[0]!.body.messages);
+    expect(calls).toEqual(['bed']);
+    expect(req.events.filter((e) => e.type === 'retry')).toEqual([
+      { type: 'retry', discard: 'Let me look.'.length },
+    ]);
+    expect(result.text).toBe('Let me look.\n\nBy the bed.');
+    expect(streamedText(req.events)).toBe(result.text);
+    // The failed attempt's input counts; its output isn't known before `message_delta`.
+    expect(result.usage).toMatchObject({ inputTokens: 2200, outputTokens: 70 });
+  });
+
+  it('a request sent again after a tool turn puts its line break back', async () => {
+    const { agent } = setup([
+      {
+        message: agentMessage([
+          textBlock('Let me look.'),
+          toolUseBlock('tu_1', 'search_transcripts', { query: 'bed' }),
+        ]),
+      },
+      {
+        message: agentMessage([
+          textBlock('Found it.'),
+          brokenToolUseBlock('tu_2', 'read_transcript'),
+        ]),
+      },
+      {
+        message: agentMessage([
+          textBlock('Found it.'),
+          toolUseBlock('tu_3', 'read_transcript', { session: 's3' }),
+        ]),
+      },
+      { message: agentMessage([textBlock('By the bed.')]) },
+    ]);
+    const req = request();
+    const result = await agent.run(req);
+
+    expect(req.events.filter((e) => e.type === 'retry')).toEqual([
+      { type: 'retry', discard: '\n\nFound it.'.length },
+    ]);
+    expect(result.text).toBe('Let me look.\n\nFound it.\n\nBy the bed.');
+    expect(streamedText(req.events)).toBe(result.text);
+  });
+
+  it('gives `bad_output` after two re-sends in a row, with the usage of all three', async () => {
+    const broken = (): ScriptedReply => ({
+      message: agentMessage([
+        textBlock('Let me look.'),
+        brokenToolUseBlock('tu_1', 'search_transcripts'),
+      ]),
+    });
+    const { agent, requests } = setup([broken(), broken(), broken()]);
+    const req = request();
+    const err = await errorOf(agent.run(req));
+
+    expect(err.kind).toBe('bad_output');
+    expect(err.opts.detail).toContain('Unable to parse tool parameter JSON');
+    expect(requests).toHaveLength(3);
+    expect(req.events.filter((e) => e.type === 'retry')).toHaveLength(2);
+    const inputTokens = req.events.flatMap((e) =>
+      e.type === 'usage' ? [e.usage.inputTokens] : [],
+    );
+    expect(inputTokens).toEqual([100, 100, 100]);
   });
 
   it('resumes a paused turn', async () => {

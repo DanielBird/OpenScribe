@@ -191,6 +191,18 @@ describe('buildDocModel', () => {
     );
   });
 
+  it('leaves the language out when it is not known', () => {
+    const doc = makeDoc();
+    const unknown = { ...doc, result: { ...doc.result, languageCode: '' } };
+    expect(metaOf(unknown)).not.toHaveProperty('Language');
+    expect(
+      metaOf({ ...unknown, request: { ...unknown.request, languageHint: 'de' } }),
+    ).not.toHaveProperty('Language');
+    expect(metaOf(withTranslation(unknown), { version: 'en' }).Language).toBe(
+      'English (translated with Claude, claude-opus-5-5)',
+    );
+  });
+
   it('names the translation provider and model', () => {
     const doc = withTranslation(makeDoc());
     expect(metaOf(doc, { version: 'en' }).Language).toBe(

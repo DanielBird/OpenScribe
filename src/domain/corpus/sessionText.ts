@@ -2,13 +2,16 @@
 // word timings, which are most of a transcript file's size.
 import { hashParts } from '../hash';
 import { normalizeLanguage, type Speaker, type TranscriptDoc } from '../transcript';
+import { currentTexts } from '../translation';
 
 export interface SessionTurn {
   id: string;
   speakerId: string;
   start: number; // seconds
   text: string; // original language
-  en: string | null; // the English translation; null for English sessions and untranslated ones
+  // The English translation; null for English sessions, untranslated ones, and a turn whose text changed since it
+  // was translated (DECISIONS.md D39).
+  en: string | null;
 }
 
 export interface SessionText {
@@ -26,10 +29,14 @@ function isEnglish(languageCode: string): boolean {
   return normalizeLanguage(languageCode) === 'en';
 }
 
-/** The turn texts of the English translation, unless the session is in English (then its text is the English). */
+/**
+ * The turn texts of the English translation that are still current (DECISIONS.md D39), unless the session is in
+ * English (then its text is the English).
+ */
 function translationTexts(doc: TranscriptDoc): Record<string, string> | null {
   if (isEnglish(doc.result.languageCode)) return null;
-  return doc.translations.en?.texts ?? null;
+  const en = doc.translations.en;
+  return en ? currentTexts(en, doc.turns) : null;
 }
 
 export function toSessionText(doc: TranscriptDoc): SessionText {
@@ -48,16 +55,19 @@ export function toSessionText(doc: TranscriptDoc): SessionText {
       text: turn.text,
       en: texts?.[turn.id] ?? null,
     })),
-    transcriptHash: transcriptHash(doc),
+    transcriptHash: hashOf(doc, texts),
   };
 }
 
 /**
- * A hash of what a summary is made from: the speaker labels and every turn's id, speaker, text and English
+ * A hash of what a summary is made from: the speaker labels and every turn's id, speaker, text and current English
  * text. A rename, a text edit or a new translation changes it; word timings, playback and the view don't.
  */
 export function transcriptHash(doc: TranscriptDoc): string {
-  const texts = translationTexts(doc);
+  return hashOf(doc, translationTexts(doc));
+}
+
+function hashOf(doc: TranscriptDoc, texts: Record<string, string> | null): string {
   const parts = [String(doc.speakers.length), texts ? 'en' : ''];
   for (const speaker of doc.speakers) parts.push(speaker.id, speaker.label);
   for (const turn of doc.turns) {
@@ -71,11 +81,16 @@ export function isEnglishSession(session: SessionText): boolean {
 }
 
 /**
- * The English text of a turn: its translation, or its own text in an English session. A session in another language
- * without a translation has no English text yet (`null`).
+ * The English text of a turn: its translation, or its own text in an English session. In another language, a turn
+ * without a translation, or changed since it was translated, has no English text (`null`).
  */
 export function englishText(session: SessionText, turn: SessionTurn): string | null {
   return turn.en ?? (isEnglishSession(session) ? turn.text : null);
+}
+
+/** True when the session isn't in English and some turn has no English text: it needs translating first. */
+export function lacksEnglish(session: SessionText): boolean {
+  return !isEnglishSession(session) && session.turns.some((turn) => turn.en === null);
 }
 
 /** True when the session isn't in English and has an English translation. */

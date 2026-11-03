@@ -79,6 +79,18 @@ describe('JobStatus', () => {
     });
   });
 
+  it('keeps the technical details under the error, out of the announcement', async () => {
+    mountIn({ status: 'error' });
+    useJobStore().error = new ProviderError('auth', 'ElevenLabs rejected the API key.', {
+      status: 401,
+      detail: 'invalid_api_key: Invalid API key (request r-7)',
+    });
+    await wrapper!.vm.$nextTick();
+    expect(status()).toBe('ElevenLabs rejected the API key.');
+    expect(wrapper!.get('details summary').text()).toBe('Technical details');
+    expect(wrapper!.get('details pre').text()).toContain('auth · HTTP 401\ninvalid_api_key');
+  });
+
   it('Try again and Start again retry the run', async () => {
     const job = mountIn({ status: 'error' });
     job.error = new ProviderError('rate_limit', 'Busy.');

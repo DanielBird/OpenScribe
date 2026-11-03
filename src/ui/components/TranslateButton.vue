@@ -3,10 +3,12 @@ import { computed, nextTick, ref, useTemplateRef, watch } from 'vue';
 import { normalizeLanguage, type LlmProviderId } from '../../domain/transcript';
 import { useTranscriptStore } from '../../stores/transcript';
 import { useTranslationStore } from '../../stores/translation';
+import ErrorDetails from './ErrorDetails.vue';
 import TranslateDialog from './TranslateDialog.vue';
 
 // "Translate to English" and, while it runs, its progress in the actions row (DECISIONS.md D14).
 // Hidden for English transcripts: there is nothing to translate (D13: hidden rather than disabled).
+// Once turns have changed since the translation, it updates the English of those turns only (D39).
 const transcript = useTranscriptStore();
 const translation = useTranslationStore();
 
@@ -22,6 +24,15 @@ const available = computed(() => {
   );
 });
 const hasTranslation = computed(() => transcript.doc?.translations.en !== undefined);
+const mode = computed(() => {
+  if (!hasTranslation.value) return 'new';
+  return transcript.staleTurnIds.length > 0 ? 'update' : 'replace';
+});
+const LABELS = {
+  new: 'Translate to English',
+  update: 'Update English…',
+  replace: 'Re-translate…',
+} as const;
 
 /** "batch 3 of 12" when there is more than one; a single batch just shows the spinner. */
 const batches = computed(() => {
@@ -86,7 +97,7 @@ async function onTranslate(provider: LlmProviderId, model: string): Promise<void
       class="button"
       @click="choosing = true"
     >
-      {{ hasTranslation ? 'Re-translate…' : 'Translate to English' }}
+      {{ LABELS[mode] }}
     </button>
 
     <div v-if="translation.isRunning" class="running">
@@ -111,13 +122,15 @@ async function onTranslate(provider: LlmProviderId, model: string): Promise<void
       <button ref="resumeButton" type="button" class="button" @click="translation.resume()">
         Resume
       </button>
+      <ErrorDetails :error="translation.error" />
     </div>
 
     <span class="visually-hidden" role="status" aria-live="polite">{{ announcement }}</span>
 
     <TranslateDialog
       :open="choosing"
-      :replaces="hasTranslation"
+      :mode="mode"
+      :changed="transcript.staleTurnIds.length"
       @translate="onTranslate"
       @cancel="choosing = false"
     />

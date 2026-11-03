@@ -93,6 +93,32 @@ describe('TurnList', () => {
     expect(wrapper.get('ol').attributes('lang')).toBe('de');
   });
 
+  it('marks the turns whose translation is out of date, and only those (D39)', async () => {
+    const wrapper = mount(TurnList, {
+      props: {
+        turns: doc.turns,
+        speakers: doc.speakers,
+        texts: TEST_TRANSLATION_TEXTS,
+        outdated: new Set(['t2']),
+      },
+    });
+    const items = wrapper.findAll('li');
+    expect(items.map((li) => li.find('.outdated').exists())).toEqual([
+      false,
+      true,
+      false,
+      false,
+      false,
+    ]);
+    expect(items[1]?.get('.outdated').text()).toBe('Changed since translation');
+    expect(items[1]?.text()).toBe(
+      `00:00:03Changed since translationSpeaker 2: ${TEST_TRANSLATION_TEXTS.t2}`,
+    );
+
+    await wrapper.setProps({ outdated: undefined });
+    expect(wrapper.find('.outdated').exists()).toBe(false);
+  });
+
   it('falls back to the original text for a turn without a translation', () => {
     const wrapper = mount(TurnList, {
       props: { turns: doc.turns, speakers: doc.speakers, texts: { t1: 'Hello.' } },

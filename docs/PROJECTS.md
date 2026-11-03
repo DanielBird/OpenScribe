@@ -171,8 +171,9 @@ interface SessionSummaryFile {
 }
 ```
 
-The new files have their own `kind` and `schemaVersion`, so D18 applies to them from the start. The handle to the
-folder is kept in IndexedDB under `describe.v1.projectFolder`. That is a new key, not a change of shape.
+The new files have their own `kind` and `schemaVersion`, so D18 applies to them from the start. A build keeps the
+fields it doesn't know when it writes a file back (D38). The handle to the folder is kept in IndexedDB under
+`describe.v1.projectFolder`. That is a new key, not a change of shape.
 
 **Permissions.**
 - The first time, **Open project…** or **New project…** opens the folder picker.
@@ -273,7 +274,9 @@ This is the agent's search tool. The same engine drives the researchers' search 
 ### 5.5 The project agent
 
 **Loop.** A Claude tool-use loop runs in the browser, in `providers/llm/claudeAgent.ts`:
-- It uses the SDK's beta tool runner, with streaming.
+- It is a manual streamed loop, not the SDK's tool runner: after a mid-output refusal fallback, the API wants some
+  blocks left out when the turn is sent back, and the runner would send them (reference/llm-providers.md). The loop
+  is shared with Gemini, in `providers/llm/agentLoop.ts`.
 - The model is the project model: Sonnet 5.5 by default, or Opus 5.5 (A17). The effort is set explicitly to
   `medium`, because the two models have different API defaults.
 - A conversation keeps the model it started with. Thinking blocks belong to one model, and switching would also
@@ -302,6 +305,7 @@ interface AgentTool<I> {
 }
 type AgentEvent =
   | { type: 'text'; delta: string }
+  | { type: 'retry'; discard: number }  // a request sent again: the last `discard` characters of text go
   | { type: 'tool'; name: string; activity: string; isError: boolean }
   | { type: 'usage'; inputTokens: number; cacheReadTokens: number; cacheWriteTokens: number; outputTokens: number };
 interface AgentProvider {
@@ -430,8 +434,9 @@ src/
     chat.ts        a saved chat's file (Phase 21, D29); storage/chatFiles.ts reads and writes chats/
   providers/llm/
     types.ts       + AgentProvider, AgentTool, AgentEvent, AgentConversation
-    claudeAgent.ts the tool loop (load the claude-api skill first)
-    geminiAgent.ts the same contract for Gemini (Phase 20)
+    agentLoop.ts   the tool loop both agents share: conversation, streamed text, re-sends, tools
+    claudeAgent.ts Claude's request and reply checks for it (load the claude-api skill first)
+    geminiAgent.ts the same for Gemini (Phase 20)
     claude.ts      generateStructured streams internally
     gemini.ts      generateStructured streams internally too (Phase 19)
     models.ts      + PROJECT_MODELS (Sonnet 5.5 default, Opus 5.5; Gemini from Phase 19), project effort and
@@ -540,11 +545,12 @@ file in [phases/](phases/).
 | 15 | [Add to project and session summaries](phases/15-add-to-project.md) | 14 | 16 |
 | 16 | [Project agent core](phases/16-agent-core.md) | 12, 13 | 10, 11, 14, 15 |
 | 17 | [Project chat](phases/17-project-chat.md) | 15, 16 | – |
-| 18 | [Hardening and the 2.0 release](phases/18-release-2.md) | 10–17, 19, 20 | – |
+| 18 | [Hardening release 2](phases/18-release-2.md) | 10–17, 19–22 | – |
 | 19 | [Gemini for the pipeline and summaries](phases/19-gemini-summaries.md) | 15 | 16, 17 |
 | 20 | [Gemini for the project agent](phases/20-gemini-agent.md) | 16, 17, 19 | – |
 
 Phases 19 and 20 were added on 2026-10-21 (D26). Both ship in 2.0 (maintainer, 2026-10-21), so 18 depends on both.
+*Both shipped in 1.1.0, with Phases 21 and 22 ([ROADMAP.md](ROADMAP.md) §7), and Phase 18 hardens them all (D40).*
 
 ```mermaid
 graph LR
@@ -558,7 +564,7 @@ graph LR
   P13 --> P16
   P15 --> P17[17 Project chat]
   P16 --> P17
-  P17 --> P18[18 Hardening + 2.0]
+  P17 --> P18[18 Hardening]
   P15 --> P19[19 Gemini: pipeline + summaries]
   P19 --> P18
   P16 --> P20[20 Gemini agent]
@@ -620,10 +626,10 @@ It produces `docs/reference/file-system-access.md` and a go/no-go decision.
   - the new-sessions, model and long-chat notices.
 - `AnswerBlocks`, with no `v-html`.
 
-**18 — Hardening and 2.0.**
+**18 — Hardening release 2.**
 - Perf at 300 hours, robustness, axe, keyboard, and the D13 review.
 - The live checks, and a manual checklist for two people on one OneDrive project.
-- The docs, the CHANGELOG, and the release of `DeScribe-v2.0.0.html`.
+- The docs, the CHANGELOG, and the next release, the first colleagues get with projects (D40).
 
 **19 — Gemini for the pipeline and summaries** (D26).
 - `PROJECT_MODELS` lists Gemini models, each with its provider. The model select groups them by provider.

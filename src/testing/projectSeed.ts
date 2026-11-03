@@ -139,6 +139,23 @@ export function makeChatFile(overrides: Partial<ChatFile> = {}): ChatFile {
   };
 }
 
+/** A field this build doesn't know, as a newer build might add one (DECISIONS.md D38). */
+export const FUTURE_FIELD = { addedLater: 'by a newer build' } as const;
+
+/** `file` with `FUTURE_FIELD` on it and on every object in it, as a newer build might have saved it (D38). */
+export function withFutureChatFields(file: ChatFile): ChatFile {
+  return {
+    ...file,
+    ...FUTURE_FIELD,
+    author: { ...file.author, ...FUTURE_FIELD },
+    messages: file.messages.map((m) =>
+      m.role === 'assistant'
+        ? { ...m, ...FUTURE_FIELD, activity: m.activity.map((a) => ({ ...a, ...FUTURE_FIELD })) }
+        : { ...m, ...FUTURE_FIELD },
+    ),
+  };
+}
+
 /** `chats/<base>.chat.json` for a chat. */
 export function chatPath(file: ChatFile): string {
   return `${CHATS_DIR}/${chatFileName(chatBaseName(file.createdAt, file.id))}`;

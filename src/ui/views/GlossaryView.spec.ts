@@ -96,10 +96,25 @@ describe('GlossaryView', () => {
   });
 
   describe('with a last transcript', () => {
-    /** Run asks first; the stub starts like the real start() would. */
-    async function clickRun() {
+    /**
+     * Run asks first; the stub starts like the real start() would. `unsaved`: the transcript is in a project whose
+     * file doesn't have its latest change.
+     */
+    async function clickRun({ unsaved = false } = {}) {
       makeReady();
-      await useTranscriptStore().setDoc(makeDoc());
+      const transcript = useTranscriptStore();
+      const doc = makeDoc();
+      await transcript.setDoc(doc);
+      if (unsaved) {
+        transcript.projectLink = {
+          docId: doc.id,
+          projectId: 'project-1',
+          projectName: 'Hearing at home 2026',
+          fileName: 'interview.describe.json',
+          stat: { size: 1, lastModified: 1 },
+        };
+        transcript.folderUnsaved = true;
+      }
       useNavStore().goTo('glossary');
       const job = useJobStore();
       const start = vi.spyOn(job, 'start').mockImplementation(() => {
@@ -123,6 +138,12 @@ describe('GlossaryView', () => {
       expect(dialog.attributes('open')).toBeDefined();
       expect(dialog.get('h2').text()).toBe('Start a new transcription?');
       expect(dialog.get('p').text()).toBe('This replaces your last transcript ("interview.mp3").');
+      expect(
+        dialog
+          .findAll('button')
+          .find((b) => b.text() === 'Run')!
+          .classes(),
+      ).toContain('button-primary');
 
       await dialog
         .findAll('button')
@@ -144,6 +165,29 @@ describe('GlossaryView', () => {
       expect(start).toHaveBeenCalledOnce();
       expect(start.mock.invocationCallOrder[0]).toBeLessThan(goTo.mock.invocationCallOrder[0]!);
       expect(useNavStore().step).toBe('output');
+    });
+
+    it("warns, in red, when its latest changes aren't saved in its project", async () => {
+      const { start, dialog } = await clickRun({ unsaved: true });
+      expect(dialog.get('p').text()).toBe(
+        'This replaces your last transcript ("interview.mp3"). ' +
+          "Its latest changes aren't saved in its project.",
+      );
+      expect(
+        dialog
+          .findAll('button')
+          .find((b) => b.text() === 'Run')!
+          .classes(),
+      ).toContain('button-danger');
+      expect(document.activeElement?.textContent?.trim()).toBe('Cancel');
+
+      await dialog
+        .findAll('button')
+        .find((b) => b.text() === 'Cancel')!
+        .trigger('click');
+      await flushPromises();
+      expect(start).not.toHaveBeenCalled();
+      expect(useTranscriptStore().projectLink).not.toBeNull();
     });
   });
 

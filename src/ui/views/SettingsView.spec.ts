@@ -152,6 +152,7 @@ describe('SettingsView', () => {
       expect(confirmDialog().text()).toContain(
         "Your API keys stay, and so do the project's files.",
       );
+      expect(confirmDialog().text()).not.toContain("aren't saved in its project");
       expect(document.activeElement?.textContent?.trim()).toBe('Cancel');
 
       await confirmDialog()
@@ -180,6 +181,26 @@ describe('SettingsView', () => {
       expect(useGlossaryStore().terms).toEqual([]);
       expect(useTranscriptStore().doc).toBeNull();
       expect(useSettingsStore().elevenLabsKey).toBe('test-key');
+    });
+
+    it("warns when the last transcript's latest changes aren't saved in its project", async () => {
+      await withSavedData();
+      const transcript = useTranscriptStore();
+      transcript.projectLink = {
+        docId: transcript.doc!.id,
+        projectId: 'project-1',
+        projectName: 'Hearing at home 2026',
+        fileName: 'interview.describe.json',
+        stat: { size: 1, lastModified: 1 },
+      };
+      transcript.folderUnsaved = true;
+      mountView();
+      await buttonNamed('Clear saved data…')!.trigger('click');
+      await flushPromises();
+      expect(confirmDialog().text()).toContain(
+        "Your API keys stay, and so do the project's files. " +
+          "Your last transcript's latest changes aren't saved in its project.",
+      );
     });
   });
 

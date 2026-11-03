@@ -18,6 +18,8 @@ export interface CheckedSummary {
   summary: SessionSummary;
   /** Quotes removed because they weren't found in their turn (or the turn doesn't exist). */
   droppedQuotes: number;
+  /** Quotes found in their turn, before the cap. */
+  verifiedQuotes: number;
   /** `droppedQuotes` out of the quotes that were checked; 0 when none were. */
   quoteFailureRate: number;
 }
@@ -82,6 +84,7 @@ export function checkSummary(
 
   let checkedQuotes = 0;
   let droppedQuotes = 0;
+  let verifiedQuotes = 0;
   /** An entry's quotes that are found in their turn, in its own words, up to the cap. The others are counted. */
   const checkQuotes = (given: readonly SummaryQuote[]): SummaryQuote[] => {
     const kept: SummaryQuote[] = [];
@@ -91,6 +94,7 @@ export function checkSummary(
       const english = turn ? englishText(session, turn) : null;
       const result = turn && english !== null ? checkQuote(english, quote.text) : null;
       if (turn && result?.status === 'verified') {
+        verifiedQuotes++;
         kept.push({ turnId: turn.id, text: result.sourceText });
       } else {
         droppedQuotes++;
@@ -118,6 +122,7 @@ export function checkSummary(
   return {
     summary,
     droppedQuotes,
+    verifiedQuotes,
     quoteFailureRate: checkedQuotes === 0 ? 0 : droppedQuotes / checkedQuotes,
   };
 }

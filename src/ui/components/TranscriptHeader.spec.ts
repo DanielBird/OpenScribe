@@ -42,6 +42,15 @@ describe('TranscriptHeader', () => {
     expect(values(unknown)[0]).toBe('German (97%)');
   });
 
+  it('leaves the language out when it is not known', () => {
+    const doc = makeDoc();
+    expect(values({ ...doc, result: { ...doc.result, languageCode: '' } })).toEqual([
+      '00:00:16',
+      '2 speakers',
+      formatDateTime('2026-10-13T12:05:00.000Z'),
+    ]);
+  });
+
   it('shows the confidence only when the language was detected', () => {
     const doc = makeDoc({ request: { ...TEST_REQUEST, languageHint: 'de' } });
     expect(values(doc)).toContain('German');

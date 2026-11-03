@@ -3,6 +3,7 @@ import { computed } from 'vue';
 import { formatBytes } from '../../domain/filecheck';
 import { formatTimestamp } from '../../domain/transcript';
 import { useJobStore } from '../../stores/job';
+import ErrorDetails from './ErrorDetails.vue';
 
 // Progress, error and cancelled states of a transcription run. Only the phase is announced (the
 // status line); the changing percentage and the timer are not, so screen readers aren't flooded.
@@ -68,6 +69,7 @@ const canRetry = computed(
         }}</span>
       </p>
     </div>
+    <ErrorDetails v-if="job.status === 'error'" :error="job.error" />
 
     <progress
       v-if="job.status === 'uploading'"

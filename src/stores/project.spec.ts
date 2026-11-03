@@ -18,6 +18,7 @@ import { memoryFolder, type MemoryFolder } from '../testing/memoryFolder';
 import {
   chatFileText,
   chatPath,
+  FUTURE_FIELD,
   makeChatFile,
   makeProjectFile,
   makeSummaryFile,
@@ -484,6 +485,21 @@ describe('the brief', () => {
     expect(project.projectName).toBe('Hearing 2027');
     expect(mocks.stored?.projectName).toBe('Hearing 2027');
     expect(project.projectStat).toEqual(await folder.stat(PROJECT_FILE));
+  });
+
+  it('keeps fields a newer build added to the project file and its brief (D38)', async () => {
+    const folder = memoryFolder(
+      'P',
+      projectFiles([], { ...FUTURE_FIELD, brief: { ...TEST_BRIEF, ...FUTURE_FIELD } }),
+    );
+    const project = await readyStore(folder);
+    const result = await project.saveBrief('Hearing 2027', TEST_BRIEF, project.projectStat!);
+    expect(result).toEqual({ ok: true });
+    expect(JSON.parse(folder.text(PROJECT_FILE)!)).toMatchObject({
+      ...FUTURE_FIELD,
+      name: 'Hearing 2027',
+      brief: { ...TEST_BRIEF, ...FUTURE_FIELD },
+    });
   });
 
   it("never overwrites a colleague's brief: it reports the conflict, and Reload gets theirs", async () => {

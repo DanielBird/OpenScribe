@@ -23,13 +23,14 @@ import { z } from '../lib/zod';
 import { FOLDER_MESSAGES, FolderError, type FileStat, type ProjectFolder } from './folder';
 import { SessionSummarySchema, TranscriptDocSchema } from './schemas';
 
-const BriefSchema = z.object({
+// The project file is read and written back, so it keeps the fields this build doesn't know (D38).
+const BriefSchema = z.looseObject({
   researchQuestions: z.array(z.string()),
   context: z.string(),
   metadataFields: z.array(z.string()),
 }) satisfies z.ZodType<ProjectBrief>;
 
-export const ProjectFileSchema = z.object({
+export const ProjectFileSchema = z.looseObject({
   kind: z.literal('describe.project'),
   schemaVersion: z.literal(PROJECT_SCHEMA_VERSION),
   id: z.string().min(1),
@@ -39,6 +40,7 @@ export const ProjectFileSchema = z.object({
   brief: BriefSchema,
 }) satisfies z.ZodType<ProjectFile>;
 
+// The wrapper is made anew on every save (`writeTranscriptFile`), so new fields go in `doc`, which keeps them (D38).
 export const SessionTranscriptFileSchema = z.object({
   kind: z.literal('describe.transcript'),
   schemaVersion: z.literal(SESSION_TRANSCRIPT_SCHEMA_VERSION),
@@ -46,6 +48,7 @@ export const SessionTranscriptFileSchema = z.object({
   doc: TranscriptDocSchema,
 }) satisfies z.ZodType<SessionTranscriptFile>;
 
+// A summary is replaced, never read and written back, so it needs to keep nothing (D38).
 export const SessionSummaryFileSchema = z.object({
   kind: z.literal('describe.summary'),
   schemaVersion: z.literal(SUMMARY_SCHEMA_VERSION),

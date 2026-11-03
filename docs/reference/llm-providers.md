@@ -32,6 +32,11 @@ Adapters map SDK errors to `ProviderError` (`src/providers/errors.ts`) with thes
 `quota`, `validation`, `server`, `network`, `aborted`, `refused` (the model declined), `bad_output` (output didn't
 match the schema).
 
+**Translation batches** (`features/translation/translate.ts`, with either provider) are retried once on
+`bad_output`, which includes a reply whose turn ids don't match the request or that leaves a turn's text empty. If
+only empty texts remain on the retry, for at most a third of the batch (and always one turn), those turns keep their
+original text (DECISIONS.md D42).
+
 **Key check (Verify key in Settings).** `verifyClaudeKey` and `verifyGeminiKey` (reached through `verifyLlmKey` in
 `src/providers/index.ts`) list one model: `GET api.anthropic.com/v1/models?limit=1` with `client.models.list`, and
 `GET generativelanguage.googleapis.com/v1beta/models?pageSize=1` with `ai.models.list`. Neither sends text, spends
@@ -166,6 +171,12 @@ cancelled, like ElevenLabs' `verifyKey`. Only the Settings view shows the button
   - 401/403 → `auth`; 404 → the model isn't available to this key.
   - Finish reasons `SAFETY`, `RECITATION`, `BLOCKLIST`, `PROHIBITED_CONTENT` and `SPII` → `refused`; `MAX_TOKENS`
     → `bad_output`.
+  - **Network failures (audit BUG-10):** the SDK has no connection error class. It passes fetch's rejection through
+    as it is, a `TypeError`, and a fault in the SDK or the adapter is a `TypeError` too. So only Chromium's two fetch
+    messages are `network`: "Failed to fetch" before a response (offline, DNS, a blocked host) and "network error"
+    when the body stops part-way. The SDK's retry, p-retry 4, matches on the first. Any `TypeError` while
+    `navigator.onLine` is `false` is `network` too. Any other `TypeError` is `unknown`, which isn't retried. The
+    offline e2e spec in `robustness.e2e.ts` checks the first message in Chromium.
 
 ## Session summaries (Phase 13)
 
@@ -205,6 +216,9 @@ the entry point.
     language without a translation is refused before any request.
   - The Speakers line shows each speaker's id, because a respondent's `speakerId` must be one of them.
   - The date is the recording file's date (UTC).
+  - A session whose language isn't known (Auto, and ElevenLabs returned none) is "Unknown language", here and in
+    the agent's session list and tool results (`languageOrUnknown()`). The translation prompt then names no source
+    language.
 - **Output** (`schema.ts`): `SessionSummary` (title, synopsis, overview, respondents with attributes, a finding
   per research question, themes). Each finding and theme has up to 2 supporting quotes (`turnId`, `text`). Every
   field has a short description. There are no counts or lengths in the schema; one nullable field (`speakerId`).
@@ -219,7 +233,8 @@ the entry point.
     counted (`droppedQuotes`);
   - caps: 12 themes, 3 quotes per finding or theme; the title is cut to 80 characters.
 - **Retry:** one more request if the reply can't be read (`bad_output`) or more than a third of its quotes aren't
-  found. The checked result with fewer dropped quotes is kept.
+  found. The checked result with the smaller share of quotes not found is kept; on a tie, the one with more verified
+  quotes (`verifiedQuotes`, counted before the cap). A reply without quotes has none not found, as in the retry check.
 - **Theme vocabulary** (`themes.ts`): every theme name across the project's summaries, with the number of
   summaries using it. Names that differ only in case or spacing are merged. The pipeline (Phase 15) leaves out the
   session's own summary, so a **Regenerate** isn't steered by its old themes.
@@ -232,7 +247,10 @@ the entry point.
 
 The engine behind the project chat (PROJECTS.md §5.5) with Claude; Gemini is in "Project agent with Gemini"
 below. The provider is `src/providers/llm/claudeAgent.ts` (`createClaudeAgent`); the tools, context,
-instructions, caps and answer parsing are in `src/features/agent/`; `askProject()` runs one question.
+instructions, caps and answer parsing are in `src/features/agent/`; `askProject()` runs one question. The loop
+itself is `src/providers/llm/agentLoop.ts` (`runAgentLoop`), shared with Gemini: the conversation, the streamed text
+and its line breaks, re-sends, running the tools and ending the run. `claudeAgent.ts` makes one request and reads
+its reply (`AgentAdapter`).
 
 - **Loop: manual, streamed** (`client.beta.messages.stream` + `finalMessage()` per request), not the SDK's tool
   runner. After a **mid-output refusal fallback**, the API wants the `thinking`, `redacted_thinking` and `tool_use`
@@ -267,13 +285,17 @@ instructions, caps and answer parsing are in `src/features/agent/`; `askProject(
   `safeParse`s each one: a rejected input, an unknown tool or a tool that throws becomes a `tool_result` with
   `is_error: true` and a short message. The calls of one turn run with `Promise.all`, and all their results go back
   in one user message, in the model's order. A tool's input JSON that the stream can't parse (an `AnthropicError`
-  that isn't an `APIError`) re-sends the request, at most twice in a row, then `bad_output`.
+  that isn't an `APIError`) re-sends the request, at most twice in a row, then `bad_output`. Before each re-send, a
+  `retry` event's `discard` takes back the text that attempt streamed, its line break included, so **Stop** doesn't
+  save it twice. The attempt's usage counts too, from `stream.currentMessage`. SDK 0.133 raises the error at the tool
+  block's `content_block_stop`, before `message_delta`, so that usage has the input and cache tokens but only the
+  output tokens `message_start` reported.
 - **Caching:** tools → system → messages is the API's prefix order, so the first breakpoint caches the tools and the
   instructions, the second adds the frozen context, and the automatic one moves along the conversation. 3 of 4
   breakpoints, all 5-minute. The minimum cacheable prefix on both models is 512 tokens. The unit tests check the
   request shape; the cache read share is live check A2.
-- **Conversation:** an opaque `AgentConversation` with the model id; the messages live in a `WeakMap` inside the
-  provider. Each assistant turn goes in as received (apart from the fallback rule above) and is never edited, so
+- **Conversation:** an opaque `AgentConversation` with the model id; the messages live in a `WeakMap` that belongs
+  to the provider module (`createConversations` in `agentLoop.ts`). Each assistant turn goes in as received (apart from the fallback rule above) and is never edited, so
   thinking blocks and their signatures go back unchanged. A conversation from another model, or one the provider
   didn't make, throws an `Error` (a programming error, not a `ProviderError`).
 - **Stop reasons:** `tool_use` runs the tools; `pause_turn` resends; `end_turn` ends with `stopped: 'done'`;
@@ -282,12 +304,11 @@ instructions, caps and answer parsing are in `src/features/agent/`; `askProject(
   `stop_details.category` in `detail`, and the partial reply isn't kept. After `maxIterations` (35) requests with
   tools still running, the run ends with `stopped: 'limit'`; the conversation then ends with the tool results, and
   a follow-up question joins that user turn.
-- **Events:** `text` deltas as they stream (with a `
-
-` delta between the text of two replies), a `tool` event as
-  each call finishes (`activity`, `isError`), and `usage` after each request: `input_tokens`, `output_tokens`,
-  `cache_read_input_tokens`, `cache_creation_input_tokens`. The run returns the summed usage. After a fallback the
-  top-level usage covers the attempt that produced the message (`usage.iterations` isn't read).
+- **Events:** `text` deltas as they stream (with a blank-line delta, `"\n\n"`, between the text of two replies; an
+  empty delta isn't passed on, so the blank line waits for real text), a `tool` event as each call finishes (`activity`, `isError`), `retry` before a re-send (see *Tools*), and `usage` after each
+  request: `input_tokens`, `output_tokens`, `cache_read_input_tokens`, `cache_creation_input_tokens`. The run
+  returns the summed usage. After a fallback the top-level usage covers the attempt that produced the message
+  (`usage.iterations` isn't read).
 - **Errors:** `toProviderError` from `claude.ts`, then `withoutSecret`. An abort is `aborted`, also between tool
   calls.
 - **Cost:** `estimateCostUsd(model, usage)` in `models.ts`, from `MODEL_PRICES` (per million tokens): Sonnet 5.5
@@ -296,7 +317,8 @@ instructions, caps and answer parsing are in `src/features/agent/`; `askProject(
 ## Project agent with Gemini (Phase 20)
 
 `src/providers/llm/geminiAgent.ts` (`createGeminiAgent`) implements the same `AgentProvider` contract as
-`claudeAgent.ts`; `getAgentProvider(id, key, model)` picks one by the project model's provider. `askProject`, the
+`claudeAgent.ts`, on the same loop (`agentLoop.ts`); `getAgentProvider(id, key, model)` picks one by the project
+model's provider. `askProject`, the
 tools, the caps, the instructions and `parseAnswer` are shared and unchanged.
 
 - **Loop: manual, streamed.** `ai.models.generateContentStream` per request, with `automaticFunctionCalling: {
@@ -357,12 +379,13 @@ tools, the caps, the instructions and `parseAnswer` are shared and unchanged.
   | no function call | `stopped: 'done'` |
 
   Google documents no retry policy for a malformed call. Forum reports describe it as intermittent (sometimes
-  deterministic on long contexts), so one re-send, as Claude's unreadable tool JSON gets, and then an error.
+  deterministic on long contexts), so one re-send, as Claude's unreadable tool JSON gets, and then an error. As with
+  Claude, a `retry` event takes back the text the malformed attempt streamed. Its usage is already counted.
 - **Errors:** an abort is `aborted` (checked first, also between tool calls). Otherwise `toProviderError` from
   `gemini.ts` (401/403/`API_KEY_INVALID` → `auth`, 402 and a daily quota → `quota`, 429 → `rate_limit`, 5xx →
-  `server`, a failed fetch → `network`), then `withoutSecret`.
-- **Conversation:** an opaque `AgentConversation` with the model id; the contents live in a `WeakMap` inside the
-  provider. A conversation from another model, another provider (a Claude conversation is unknown here) or one the
+  `server`, a failed fetch → `network`, another `TypeError` → `unknown`), then `withoutSecret`.
+- **Conversation:** an opaque `AgentConversation` with the model id; the contents live in a `WeakMap` that belongs
+  to the provider module, as Claude's do. A conversation from another model, another provider (a Claude conversation is unknown here) or one the
   provider didn't make throws an `Error`.
 - **Cost:** `MODEL_PRICES` (per million tokens) has 3.8 Flash $1.50 in, $7.50 out, $0.15 cache read and 4 Argon $4,
   $20, $0.20, no cache writes. These are the prices from 2026-12-01 (Argon) and 2027-01-01 (Flash), twice today's:

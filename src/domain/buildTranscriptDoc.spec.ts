@@ -56,6 +56,21 @@ describe('buildTranscriptDoc', () => {
     });
   });
 
+  it('takes the chosen language when the result has no language code, and leaves Auto empty', () => {
+    const { language_code: _omitted, ...withoutCode } = twoSpeakers;
+    const norm = toNormalized(withoutCode);
+    const languageOf = (languageHint: string) =>
+      buildTranscriptDoc(norm, source, { ...request, languageHint }).result.languageCode;
+    expect(languageOf('de')).toBe('de');
+    expect(languageOf('auto')).toBe('');
+    // A code the result has wins over the hint.
+    const german = buildTranscriptDoc(toNormalized(twoSpeakers), source, {
+      ...request,
+      languageHint: 'es',
+    });
+    expect(german.result.languageCode).toBe('deu');
+  });
+
   it('uses crypto.randomUUID and the current time by default', () => {
     const doc = buildTranscriptDoc(toNormalized(twoSpeakers), source, request);
     expect(doc.id).toMatch(/^[0-9a-f-]{36}$/);

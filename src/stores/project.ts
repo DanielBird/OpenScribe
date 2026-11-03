@@ -795,11 +795,13 @@ export const useProjectStore = defineStore('project', () => {
     const current = project.value;
     if (!f || !current)
       return { ok: false, reason: 'failed', message: PROJECT_MESSAGES.unexpected };
+    // Spread, so fields a newer build wrote are kept (D38).
     const next: ProjectFile = {
       ...current,
       name: name.trim(),
       updatedAt: new Date().toISOString(),
       brief: {
+        ...current.brief,
         researchQuestions: cleanLines(brief.researchQuestions),
         context: brief.context.trim(),
         metadataFields: cleanLines(brief.metadataFields),
@@ -1069,7 +1071,6 @@ export const useProjectStore = defineStore('project', () => {
     chats,
     chatProblems,
     chatsLoaded,
-    briefHash: currentBriefHash,
     themeVocabulary,
     init,
     load,

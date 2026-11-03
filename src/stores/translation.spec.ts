@@ -6,7 +6,8 @@ import { ProviderError } from '../providers/errors';
 import { setLlmProviderFactoryForTests } from '../providers/index';
 import type { LlmProvider, StructuredRequest } from '../providers/llm/types';
 import { saveLastTranscript } from '../storage/idb';
-import { makeDoc, makeLargeDoc } from '../testing/transcriptDoc';
+import { staleTurnIds, turnSourceHashes } from '../domain/translation';
+import { makeDoc, makeLargeDoc, withSourceHashes, withTranslation } from '../testing/transcriptDoc';
 import { useSettingsStore } from './settings';
 import { useTranscriptStore } from './transcript';
 import { useTranslationStore } from './translation';
@@ -119,6 +120,29 @@ describe('translation store', () => {
     expect(store.error).toBeNull();
   });
 
+  it('saves a turn that comes back empty twice with its original text, as up to date (D42)', async () => {
+    const { calls } = fakeProviders();
+    const doc = await withDoc();
+    const store = useTranslationStore();
+    const emptyT2 = {
+      translations: doc.turns.map((t) => ({ id: t.id, text: t.id === 't2' ? '' : `EN ${t.id}` })),
+    };
+
+    const running = store.start('claude', 'claude-opus-5-5');
+    for (let i = 0; i < 2; i++) {
+      await flushPromises();
+      calls[i]!.answer(emptyT2);
+    }
+    await running;
+
+    const saved = useTranscriptStore().doc!;
+    expect(calls).toHaveLength(2);
+    expect(store.status).toBe('idle');
+    expect(store.error).toBeNull();
+    expect(saved.translations.en?.texts).toMatchObject({ t1: 'EN t1', t2: doc.turns[1]!.text });
+    expect(staleTurnIds(saved)).toEqual([]);
+  });
+
   it('remembers the provider and model for next time', async () => {
     const { calls } = fakeProviders();
     useSettingsStore().geminiKey = 'test-key';
@@ -175,7 +199,7 @@ describe('translation store', () => {
 
     expect(store.status).toBe('error');
     expect(store.error?.kind).toBe('auth');
-    expect(Object.keys(store.partial ?? {})).toHaveLength(60);
+    expect(Object.keys(store.partial?.texts ?? {})).toHaveLength(60);
     expect(useTranscriptStore().doc?.translations.en).toBeUndefined();
     expect(save).not.toHaveBeenCalled();
 
@@ -191,6 +215,80 @@ describe('translation store', () => {
     expect(Object.keys(useTranscriptStore().doc?.translations.en?.texts ?? {})).toHaveLength(130);
     expect(store.status).toBe('idle');
     expect(store.partial).toBeNull();
+  });
+
+  describe('with turns changed since the translation (D39)', () => {
+    const english = (count: number) =>
+      Object.fromEntries(Array.from({ length: count }, (_, i) => [`t${i + 1}`, `Old t${i + 1}`]));
+
+    it('updates the English: only the batch with a changed turn is sent', async () => {
+      const { calls } = fakeProviders();
+      await withDoc(withSourceHashes(withTranslation(makeLargeDoc(130), english(130))));
+      const transcript = useTranscriptStore();
+      transcript.editTurnText('t70', 'Turn number seventy.');
+      expect(transcript.staleTurnIds).toEqual(['t70']);
+
+      const store = useTranslationStore();
+      const running = store.start('claude', 'claude-sonnet-5-5');
+      await answerAll(calls);
+      await running;
+
+      expect(calls.map((c) => c.segments[0])).toEqual(['t61']);
+      const en = transcript.doc?.translations.en;
+      expect(en?.texts.t1).toBe('Old t1');
+      expect(en?.texts.t70).toBe('EN t70');
+      expect(en?.texts.t121).toBe('Old t121');
+      expect(en?.sourceHashes).toEqual(turnSourceHashes(transcript.doc!.turns));
+      expect(en?.model).toBe('claude-sonnet-5-5');
+      expect(transcript.staleTurnIds).toEqual([]);
+    });
+
+    it('translates everything again when no turn changed (Re-translate)', async () => {
+      const { calls } = fakeProviders();
+      await withDoc(withSourceHashes(withTranslation(makeLargeDoc(130), english(130))));
+      const store = useTranslationStore();
+      const running = store.start('claude', 'claude-opus-5-5');
+      await answerAll(calls);
+      await running;
+      expect(calls.map((c) => c.segments[0])).toEqual(['t1', 't61', 't121']);
+    });
+
+    it('Resume sends again a finished batch whose turn was edited after the error', async () => {
+      const { calls } = fakeProviders();
+      await withDoc(makeLargeDoc(130));
+      const store = useTranslationStore();
+      const running = store.start('claude', 'claude-opus-5-5');
+      await flushPromises();
+      calls[0]!.answer();
+      await flushPromises();
+      calls[1]!.fail(new ProviderError('rate_limit', 'Busy.'));
+      await running;
+
+      useTranscriptStore().editTurnText('t5', 'Turn number five, corrected.');
+      const resumed = store.resume();
+      await answerAll(calls, 2);
+      await resumed;
+
+      expect(calls.map((c) => c.segments[0])).toEqual(['t1', 't61', 't1', 't61', 't121']);
+      expect(useTranscriptStore().staleTurnIds).toEqual([]);
+    });
+
+    it('Resume after a missing key still updates only the changed turns', async () => {
+      const { calls } = fakeProviders();
+      await withDoc(withSourceHashes(withTranslation(makeLargeDoc(130), english(130))));
+      useTranscriptStore().editTurnText('t130', 'The last turn.');
+      const settings = useSettingsStore();
+      settings.claudeKey = '';
+      const store = useTranslationStore();
+      await store.start('claude', 'claude-opus-5-5');
+      expect(store.status).toBe('error');
+
+      settings.claudeKey = 'test-key';
+      const resumed = store.resume();
+      await answerAll(calls);
+      await resumed;
+      expect(calls.map((c) => c.segments[0])).toEqual(['t121']);
+    });
   });
 
   it('cancel aborts the request, saves nothing and ignores a late reply', async () => {

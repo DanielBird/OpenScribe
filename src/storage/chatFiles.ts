@@ -12,25 +12,26 @@ import { z } from '../lib/zod';
 import { FOLDER_MESSAGES, FolderError, type FileStat, type ProjectFolder } from './folder';
 import { parseJsonFile, sameStat } from './projectFiles';
 
-const ChatQuestionSchema = z.object({
+// A chat is read and written back, so it keeps the fields this build doesn't know, at every level (D38).
+const ChatQuestionSchema = z.looseObject({
   role: z.literal('user'),
   id: z.string().min(1),
   at: z.string(),
   text: z.string(),
 });
 
-const ChatAnswerSchema = z.object({
+const ChatAnswerSchema = z.looseObject({
   role: z.literal('assistant'),
   id: z.string().min(1),
   at: z.string(),
   text: z.string(),
   status: z.enum(['done', 'limit', 'stopped']),
-  activity: z.array(z.object({ tool: z.string(), line: z.string(), isError: z.boolean() })),
+  activity: z.array(z.looseObject({ tool: z.string(), line: z.string(), isError: z.boolean() })),
   costUsd: z.number().nullable(),
   model: z.string(),
 });
 
-const ChatCompactionSchema = z.object({
+const ChatCompactionSchema = z.looseObject({
   role: z.literal('compaction'),
   id: z.string().min(1),
   at: z.string(),
@@ -40,7 +41,7 @@ const ChatCompactionSchema = z.object({
   model: z.string(),
 });
 
-export const ChatFileSchema = z.object({
+export const ChatFileSchema = z.looseObject({
   kind: z.literal('describe.chat'),
   schemaVersion: z.literal(CHAT_SCHEMA_VERSION),
   id: z.string().min(1),
@@ -48,7 +49,7 @@ export const ChatFileSchema = z.object({
   title: z.string(),
   createdAt: z.string(),
   updatedAt: z.string(),
-  author: z.object({ id: z.string().min(1), name: z.string() }),
+  author: z.looseObject({ id: z.string().min(1), name: z.string() }),
   forkedFrom: z.string().nullable(),
   sessionKeys: z.record(z.string(), z.string()),
   messages: z.array(

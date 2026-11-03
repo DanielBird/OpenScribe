@@ -174,6 +174,50 @@ test("a colleague's chat is listed with their name, and asking in it saves a cop
   await expect(options.nth(1)).toContainText(COLLEAGUE.name);
 });
 
+test('selecting the open chat again shows what a colleague added to it since (audit BUG-9)', async ({
+  page,
+}) => {
+  const theirs = makeChatFile({ sessionKeys: { [DOCS[0]!.id]: 's1', [DOCS[1]!.id]: 's2' } });
+  const folder = await useProjectFolder(page, {
+    [ROOT]: { ...SEEDED, [chatPath(theirs)]: chatFileText(theirs) },
+  });
+  await openProject(page);
+
+  await chatsTab(page).click();
+  const option = page.getByRole('option', { name: new RegExp(`^${theirs.title}`) });
+  await option.click();
+  await expect(answers(page)).toHaveCount(1);
+  const listed = await option.textContent();
+
+  const added: ChatFile = {
+    ...theirs,
+    updatedAt: '2026-10-21T09:01:00.000Z',
+    messages: [
+      ...theirs.messages,
+      { role: 'user', id: 'q2', at: '2026-10-21T09:00:00.000Z', text: 'And at work?' },
+      {
+        role: 'assistant',
+        id: 'a2',
+        at: '2026-10-21T09:01:00.000Z',
+        text: 'At work too, sometimes.',
+        status: 'done',
+        activity: [],
+        costUsd: 0.3,
+        model: 'claude-sonnet-5-5',
+      },
+    ],
+  };
+  await folder.put(ROOT, chatPath(theirs), chatFileText(added));
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+  // The rescan has read the newer file when the row shows its later date.
+  await expect(option).not.toHaveText(listed ?? '');
+  await expect(answers(page)).toHaveCount(1);
+
+  await option.click();
+  await expect(answers(page)).toHaveCount(2);
+  await expect(answers(page).nth(1)).toContainText('At work too, sometimes.');
+});
+
 test('a compacted chat is saved with its summary, reopens with the divider, and goes on from the summary', async ({
   page,
 }) => {

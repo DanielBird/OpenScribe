@@ -6,6 +6,7 @@ import { toSessionText } from '../domain/corpus/sessionText';
 import { briefHash } from '../domain/project';
 import type { SessionSummaryFile } from '../domain/summary';
 import type { TranscriptDoc } from '../domain/transcript';
+import { staleTurnIds } from '../domain/translation';
 import { ProviderError } from '../providers/errors';
 import { setLlmProviderFactoryForTests } from '../providers/index';
 import type { LlmProvider, StructuredRequest } from '../providers/llm/types';
@@ -18,10 +19,17 @@ import {
   summaryFileText,
   summaryPath,
   TEST_BRIEF,
+  transcriptFileText,
   transcriptPath,
 } from '../testing/projectSeed';
 import { summaryReplyForInput } from '../testing/summary';
-import { makeDoc, makeLargeDoc, withTranslation } from '../testing/transcriptDoc';
+import {
+  makeDoc,
+  makeLargeDoc,
+  withEditedTurn,
+  withSourceHashes,
+  withTranslation,
+} from '../testing/transcriptDoc';
 import { needsTranslation, PIPELINE_MESSAGES, usePipelineStore } from './pipeline';
 import { useProjectStore } from './project';
 import { useSettingsStore } from './settings';
@@ -150,6 +158,16 @@ describe('needsTranslation', () => {
     expect(needsTranslation(withTranslation(makeDoc()))).toBe(false);
     expect(needsTranslation(english('e'))).toBe(false);
   });
+
+  it('is true when a turn changed since it was translated (D39)', () => {
+    const translated = withSourceHashes(withTranslation(makeDoc()));
+    expect(needsTranslation(translated)).toBe(false);
+    expect(needsTranslation(withEditedTurn(translated, 't2', 'Danke.'))).toBe(true);
+    // A translation from before D39 doesn't say what it was made from: it counts as current.
+    expect(needsTranslation(withEditedTurn(withTranslation(makeDoc()), 't2', 'Danke.'))).toBe(
+      false,
+    );
+  });
 });
 
 describe('Add to project', () => {
@@ -207,6 +225,35 @@ describe('Add to project', () => {
     expect(saved.translations.en?.texts.t1).toBe('EN t1');
     expect(summaryOf(folder, doc).transcriptHash).toBe(toSessionText(saved).transcriptHash);
     expect(claude.requests[1]!.input).toContain('EN t2');
+  });
+
+  it('summarises a German transcript although a turn comes back empty twice (D42)', async () => {
+    const folder = memoryFolder('P', projectFiles([]));
+    const claude = fakeClaude(folder);
+    claude.state.respond = (req) => {
+      if (req.schemaName !== 'translation_batch') return undefined;
+      const { segments } = JSON.parse(req.input) as { segments: { id: string }[] };
+      return {
+        translations: segments.map((s) => ({ id: s.id, text: s.id === 't2' ? '' : `EN ${s.id}` })),
+      };
+    };
+    await readyProject(folder);
+    const doc = german('de-1');
+    await useTranscriptStore().setDoc(doc);
+    const pipeline = usePipelineStore();
+
+    await pipeline.addCurrentTranscript();
+
+    expect(claude.requests.map((r) => r.schemaName)).toEqual([
+      'translation_batch',
+      'translation_batch',
+      'session_summary',
+    ]);
+    const saved = docOf(folder, doc);
+    expect(saved.translations.en?.texts).toMatchObject({ t1: 'EN t1', t2: doc.turns[1]!.text });
+    expect(staleTurnIds(saved)).toEqual([]);
+    expect(summaryOf(folder, doc).transcriptHash).toBe(toSessionText(saved).transcriptHash);
+    expect(pipeline.statusOf(doc.id)).toBe('ok');
   });
 
   it('uses the project model and the Claude key', async () => {
@@ -314,7 +361,7 @@ describe('Add to project', () => {
 
     await pipeline.addCurrentTranscript();
     expect(pipeline.failureFor(doc.id)).toMatchObject({ step: 'translate' });
-    expect(Object.keys(pipeline.failureFor(doc.id)!.partial ?? {})).toHaveLength(60);
+    expect(Object.keys(pipeline.failureFor(doc.id)!.partial?.texts ?? {})).toHaveLength(60);
 
     claude.state.respond = null;
     await pipeline.resume();
@@ -322,6 +369,33 @@ describe('Add to project', () => {
     // Batch 1 once, batch 2 twice (failed, then again), batch 3 once.
     expect(batches).toHaveLength(4);
     expect(batches[2]!.input).toContain('"t61"');
+    expect(pipeline.statusOf(doc.id)).toBe('ok');
+  });
+
+  it('Resume translates again a finished turn that was edited after the failure', async () => {
+    const folder = memoryFolder('P', projectFiles([]));
+    const claude = fakeClaude(folder);
+    await readyProject(folder);
+    const doc = german('de-1', 1, makeLargeDoc(150));
+    const transcript = useTranscriptStore();
+    await transcript.setDoc(doc);
+    claude.state.respond = (_req, n) => {
+      if (n === 1) throw new ProviderError('network', 'No connection.');
+      return undefined;
+    };
+    const pipeline = usePipelineStore();
+    await pipeline.addCurrentTranscript();
+    expect(pipeline.failureFor(doc.id)).toMatchObject({ step: 'translate' });
+
+    transcript.editTurnText('t5', 'Korrigiert.');
+    claude.state.respond = null;
+    await pipeline.resume();
+
+    const batches = claude.requests.filter((r) => r.schemaName === 'translation_batch');
+    // Batch 1, batch 2 (failed), then batch 1 again for the edited turn, batch 2 and batch 3.
+    expect(batches).toHaveLength(5);
+    expect(batches[2]!.input).toContain('Korrigiert.');
+    expect(staleTurnIds(transcript.doc!)).toEqual([]);
     expect(pipeline.statusOf(doc.id)).toBe('ok');
   });
 
@@ -443,6 +517,33 @@ describe('Summarise in Project mode', () => {
     ]);
     expect(docOf(folder, doc).translations.en?.texts.t3).toBe('EN t3');
     expect(useTranscriptStore().doc).toBeNull();
+    expect(pipeline.statusOf(doc.id)).toBe('ok');
+  });
+
+  it('translates again only the batch of a turn corrected since the translation, then summarises it (D39)', async () => {
+    const base = german('de-1', 1, makeLargeDoc(150));
+    const old = Object.fromEntries(base.turns.map((t) => [t.id, `Old ${t.id}`]));
+    const doc = withEditedTurn(withSourceHashes(withTranslation(base, old)), 't140', 'Neuer Text.');
+    const folder = memoryFolder('P', projectFiles([doc]));
+    const claude = fakeClaude(folder);
+    const project = await readyProject(folder);
+    expect(project.session(doc.id)?.text.turns.find((t) => t.id === 't140')?.en).toBeNull();
+    const pipeline = usePipelineStore();
+
+    await pipeline.summarise([doc.id]);
+
+    expect(claude.requests.map((r) => r.schemaName)).toEqual([
+      'translation_batch',
+      'session_summary',
+    ]);
+    expect(claude.requests[0]!.input).toContain('Neuer Text.');
+    expect(claude.requests[0]!.input).not.toContain('"t1"');
+    const saved = docOf(folder, doc);
+    expect(saved.translations.en?.texts.t140).toBe('EN t140');
+    expect(saved.translations.en?.texts.t1).toBe('Old t1');
+    expect(staleTurnIds(saved)).toEqual([]);
+    expect(claude.requests[1]!.input).toContain('EN t140');
+    expect(claude.requests[1]!.input).not.toContain('Old t140');
     expect(pipeline.statusOf(doc.id)).toBe('ok');
   });
 
@@ -587,6 +688,68 @@ describe('Summarise in Project mode', () => {
       'P09 english.m4a',
       'P02 german.m4a',
     ]);
+  });
+
+  it('stamps a summary with the brief it was made with, when the brief changes meanwhile', async () => {
+    const doc = withTranslation(german('s1'));
+    const folder = memoryFolder('P', projectFiles([doc], { brief: TEST_BRIEF }));
+    const claude = fakeClaude(folder);
+    const project = await readyProject(folder);
+    const reply = held();
+    claude.state.respond = () => reply.promise;
+    const pipeline = usePipelineStore();
+
+    const done = pipeline.summarise([doc.id]);
+    await vi.waitFor(() => expect(claude.requests).toHaveLength(1));
+    const edited = { ...TEST_BRIEF, researchQuestions: ['A new question?'] };
+    await expect(project.saveBrief('P', edited, project.projectStat!)).resolves.toEqual({
+      ok: true,
+    });
+    reply.release();
+    await done;
+
+    expect(summaryOf(folder, doc).briefHash).toBe(briefHash(TEST_BRIEF));
+    expect(pipeline.statusOf(doc.id)).toBe('stale');
+    expect(pipeline.summariseAllIds).toEqual([doc.id]);
+  });
+
+  it("doesn't attach a translation to text a colleague changed meanwhile; Resume translates what changed", async () => {
+    const doc = german('de-1', 1, makeLargeDoc(150));
+    const folder = memoryFolder('P', projectFiles([doc]));
+    const claude = fakeClaude(folder);
+    await readyProject(folder);
+    const first = held();
+    claude.state.respond = (_req, n) => (n === 0 ? first.promise : undefined);
+    const pipeline = usePipelineStore();
+
+    const done = pipeline.summarise([doc.id]);
+    await vi.waitFor(() => expect(claude.requests).toHaveLength(1));
+    // A colleague corrects a turn in the last batch, and OneDrive syncs it.
+    const edited: TranscriptDoc = {
+      ...doc,
+      turns: doc.turns.map((t) => (t.id === 't140' ? { ...t, text: 'Neuer Text.' } : t)),
+    };
+    folder.put(transcriptPath(doc), transcriptFileText(edited));
+    first.release();
+    await done;
+
+    expect(pipeline.failureFor(doc.id)).toMatchObject({
+      step: 'translate',
+      error: { kind: 'changed' },
+    });
+    expect(docOf(folder, doc)).toEqual(edited);
+    expect(folder.text(summaryPath(doc))).toBeUndefined();
+
+    const before = claude.requests.length;
+    await pipeline.resume();
+    const again = claude.requests.slice(before).filter((r) => r.schemaName === 'translation_batch');
+    expect(again).toHaveLength(1);
+    expect(again[0]!.input).toContain('Neuer Text.');
+    const saved = docOf(folder, doc);
+    expect(saved.turns.find((t) => t.id === 't140')?.text).toBe('Neuer Text.');
+    expect(Object.keys(saved.translations.en?.texts ?? {})).toHaveLength(150);
+    expect(pipeline.statusOf(doc.id)).toBe('ok');
+    expect(summaryOf(folder, doc).transcriptHash).toBe(toSessionText(saved).transcriptHash);
   });
 
   it('cancels the work and forgets failures when another project opens', async () => {

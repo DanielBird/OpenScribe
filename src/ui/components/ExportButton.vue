@@ -45,6 +45,7 @@ function onChoose(version: TranscriptVersion): void {
       :open="choosing"
       :language="language"
       :initial="transcript.view"
+      :stale="transcript.staleTurnIds.length"
       @download="onChoose"
       @cancel="choosing = false"
     />

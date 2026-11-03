@@ -90,9 +90,11 @@ src/
     chat.ts                     the project chat: the conversation, its frozen snapshot, streaming (parsed once a
                                 frame), Stop, Try again, New chat, the notices; saving it to chats/, opening a saved
                                 one and resuming it, a copy of a colleague's (D29); /compact (D33)
+    unloadGuard.ts              the "Leave site?" confirmation while a job, translation or pipeline runs (one each)
   domain/                       PURE TS — no Vue, no DOM, no I/O
     transcript.ts               canonical types + formatTimestamp, formatDateTime, normalizeLanguage, languageName,
-                                defaultSpeakerLabel, cleanTurnText / joinLines (edited turn text)
+                                defaultSpeakerLabel, cleanTurnText / joinLines (edited turn text), isoDate
+    text.ts                     plural, oneLine
     tokens.ts                   NormalizedToken / NormalizedTranscription (provider output, re-exported by providers)
     segmentation.ts             normalized tokens → speakers + turns
     buildTranscriptDoc.ts       assembles TranscriptDoc from provider result + source + request info
@@ -116,8 +118,10 @@ src/
     llm/models.ts               selectable models + defaults (one place to update), PROJECT_MODELS (Claude and
                                 Gemini, projectProviderOf, projectModelLabel), GEMINI_THINKING, MODEL_PRICES
     llm/claude.ts, llm/gemini.ts  both stream generateStructured
-    llm/claudeAgent.ts          the project agent's streamed tool-use loop with Claude
-    llm/geminiAgent.ts          the same contract with Gemini: a streamed function-calling loop (Phase 20)
+    llm/agentLoop.ts            the project agent's loop, shared by both providers: conversation, streamed text,
+                                re-sends, tools
+    llm/claudeAgent.ts          the project agent with Claude: its streamed request and the checks of its reply
+    llm/geminiAgent.ts          the same with Gemini: a streamed function-calling request (Phase 20)
   features/
     translation/                batching.ts, prompt.ts, translate.ts
     export/                     docxModel.ts (pure), docxRender.ts, download.ts, fileName.ts
@@ -159,7 +163,7 @@ src/
     composables/useRovingListbox.ts  one Tab stop and arrow keys for a listbox (SessionList, ChatList)
     composables/useCopy.ts      Copy with "Copied" and the Ctrl+C fallback (QuoteCard)
     clipboard.ts                writeClipboard (Copy buttons)
-    providerNames.ts            each LLM provider's company and key label (the pipeline's dialogs)
+    providerNames.ts            each LLM provider's name, company and key label, in the order the UI lists them
     speakerColor.ts             speaker index → `var(--speaker-N)`, cycling after 10 (D15)
   testing/
     transcriptDoc.ts            test only: makeDoc, makeLargeDoc, withTranslation (docs built from the fixtures)
@@ -323,7 +327,7 @@ MVP = Phases 0–5. Each phase is sized for one agent session (or a few) and end
 | 15 | [Add to project and session summaries](phases/15-add-to-project.md) | 14 | 16 | ☑ Done (live checks S1–S3 and manual row 17 open) |
 | 16 | [Project agent core](phases/16-agent-core.md) | 12, 13 | 10, 11, 14, 15 | ☑ Done (live checks A1–A4 open) |
 | 17 | [Project chat](phases/17-project-chat.md) | 15, 16 | – | ☑ Done (live check A1 and manual row 18 open) |
-| 18 | [Hardening and the 2.0 release](phases/18-release-2.md) | 10–17, 19–21 | – | ☐ Not started |
+| 18 | [Hardening release 2](phases/18-release-2.md) | 10–17, 19–22 | – | ☐ Not started (release 2 is in 1.1.0, not yet given to colleagues: D40) |
 | 19 | [Gemini for the pipeline and summaries](phases/19-gemini-summaries.md) | 15 | 16, 17 | ☑ Done (live checks G1–G3 and manual row 19 open) |
 | 20 | [Gemini for the project agent](phases/20-gemini-agent.md) | 16, 17, 19 | – | ☑ Done (live checks A1–A4 with Gemini, and manual row 20, open) |
 | 21 | [Chat history in the project folder](phases/21-chat-history.md) | 14, 16, 17, 20 | – | ☑ Done (live checks H1–H3 open) |
@@ -333,8 +337,9 @@ MVP = Phases 0–5. Each phase is sized for one agent session (or a few) and end
 
 Status values: ☐ Not started · ◐ In progress · ☑ Done.
 
-Phases 0–9 are release 1. Phases 10–20 are release 2 (Projects). Their dependency
-graph is in [PROJECTS.md](PROJECTS.md) §8, and the graph below covers release 1 only.
+Phases 0–9 are release 1. Phases 10–22 are release 2 (Projects). Their dependency
+graph is in [PROJECTS.md](PROJECTS.md) §8, and the graph below covers release 1 only. Release 2 is in 1.1.0, with
+Phases 9, 24 and 26, but 1.1.0 hasn't been given to colleagues. Phase 18 hardens it for the next release (D40).
 
 ```mermaid
 graph LR
@@ -370,11 +375,11 @@ dependency is merged.
 | M2 — Translation | 6 | English output for German/French recordings |
 | M3 — Playback | 7 | Click a turn to listen |
 | M4 — Release 1.0 | 8 | Polished, documented, released on SharePoint |
-| M5 — Release 2.0 | 10–20 | Projects: a shared OneDrive folder of sessions, summaries and a project chat with checked quotes (Claude or Gemini), and keyword search |
+| M5 — Release 2 | 10–22 | Projects: a shared OneDrive folder of sessions, summaries and a project chat with checked quotes (Claude or Gemini), and keyword search. In 1.1.0; Phase 18's release is the first colleagues get (D40). |
 
 ## 8. How agents should work
 
-1. Read [AGENTS.md](../AGENTS.md), this file, your phase file, and the reference docs it lists. For Phases 10–20,
+1. Read [AGENTS.md](../AGENTS.md), this file, your phase file, and the reference docs it lists. For Phases 10–22,
    also read [PROJECTS.md](PROJECTS.md).
 2. Branch `phase-N-<slug>`. Set the phase status to ◐ in the table above.
 3. Implement the tasks. Keep to the contracts in the phase files. Do not change the canonical model without

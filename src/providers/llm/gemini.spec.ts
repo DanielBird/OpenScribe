@@ -300,6 +300,48 @@ describe('createGeminiProvider', () => {
     const err = await errorOf(provider.generateStructured(request()));
     expect(err.kind).toBe('network');
     expect(err.userMessage).toBe(GEMINI_MESSAGES.network);
+    expect(err.retryable).toBe(true);
+  });
+
+  it('maps a connection lost part-way through the stream to `network`', async () => {
+    const [first] = geminiSseEvents(reply('{"translations":'));
+    const { provider } = setup(() => {
+      const body = new ReadableStream<Uint8Array>({
+        start(stream) {
+          stream.enqueue(new TextEncoder().encode(first));
+          // What Chromium's body reader rejects with when the connection drops.
+          setTimeout(() => stream.error(new TypeError('network error')), 0);
+        },
+      });
+      return new Response(body, { headers: { 'content-type': 'text/event-stream' } });
+    });
+    const err = await errorOf(provider.generateStructured(request()));
+    expect(err.kind).toBe('network');
+    expect(err.userMessage).toBe(GEMINI_MESSAGES.network);
+  });
+
+  // Audit BUG-10: fetch's failures are TypeErrors, but so is a fault in the SDK or the adapter.
+  it("maps a TypeError fetch didn't raise to `unknown`, which isn't retried", async () => {
+    // `parts` isn't a list, so reading the chunk throws a TypeError.
+    const chunk = { candidates: [{ content: { role: 'model', parts: { text: 'Hi' } } }] };
+    const { provider } = setup(() => sse({}, {}, [`data: ${JSON.stringify(chunk)}\r\n\r\n`]));
+    const err = await errorOf(provider.generateStructured(request()));
+    expect(err.kind).toBe('unknown');
+    expect(err.userMessage).toBe(GEMINI_MESSAGES.unexpected);
+    expect(err.retryable).toBe(false);
+    expect(err.opts.detail).toMatch(/iterable|not a function/);
+  });
+
+  it('maps any TypeError to `network` while the browser is offline', async () => {
+    vi.stubGlobal('navigator', { onLine: false });
+    try {
+      const { provider } = setup(() => Promise.reject(new TypeError('Load failed')));
+      const err = await errorOf(provider.generateStructured(request()));
+      expect(err.kind).toBe('network');
+      expect(err.userMessage).toBe(GEMINI_MESSAGES.network);
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it('maps an abort to `aborted`', async () => {

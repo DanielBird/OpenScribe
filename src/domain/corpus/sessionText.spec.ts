@@ -1,10 +1,17 @@
 import { describe, expect, it } from 'vitest';
-import { makeDoc, TEST_TRANSLATION_TEXTS, withTranslation } from '../../testing/transcriptDoc';
+import {
+  makeDoc,
+  TEST_TRANSLATION_TEXTS,
+  withEditedTurn,
+  withSourceHashes,
+  withTranslation,
+} from '../../testing/transcriptDoc';
 import type { TranscriptDoc } from '../transcript';
 import {
   englishText,
   isEnglishSession,
   isTranslatedSession,
+  lacksEnglish,
   toSessionText,
   transcriptHash,
 } from './sessionText';
@@ -73,6 +80,27 @@ describe('toSessionText', () => {
         expect(turn.en).toBe(TEST_TRANSLATION_TEXTS[turn.id]);
         expect(englishText(session, turn)).toBe(TEST_TRANSLATION_TEXTS[turn.id]);
       }
+      expect(lacksEnglish(session)).toBe(false);
+    });
+
+    it('has no English text for a turn changed since it was translated (D39)', () => {
+      const doc = withEditedTurn(withSourceHashes(withTranslation(makeDoc())), 't3', 'Wie lange?');
+      const session = toSessionText(doc);
+      const changed = session.turns.find((turn) => turn.id === 't3')!;
+      expect(changed.en).toBeNull();
+      expect(englishText(session, changed)).toBeNull();
+      expect(session.turns.filter((turn) => turn.en !== null)).toHaveLength(4);
+      expect(isTranslatedSession(session)).toBe(true);
+      expect(lacksEnglish(session)).toBe(true);
+    });
+
+    it('keeps the English of a translation from before D39, which has no hashes', () => {
+      const session = toSessionText(withEditedTurn(withTranslation(makeDoc()), 't3', 'Wie lange?'));
+      expect(session.turns.every((turn) => turn.en !== null)).toBe(true);
+    });
+
+    it('without a translation lacks English', () => {
+      expect(lacksEnglish(toSessionText(makeDoc()))).toBe(true);
     });
   });
 
@@ -85,6 +113,7 @@ describe('toSessionText', () => {
         expect(turn.en).toBeNull();
         expect(englishText(session, turn)).toBe(turn.text);
       }
+      expect(lacksEnglish(session)).toBe(false);
     });
 
     it('ignores a translation', () => {
@@ -158,6 +187,19 @@ describe('transcriptHash', () => {
       },
     };
     expect(transcriptHash(changed)).toBe(base);
+  });
+
+  it("doesn't change when the translation records what it was made from (D39)", () => {
+    // Summaries made before D39 must stay current: their transcriptHash was made without the hashes.
+    expect(transcriptHash(withSourceHashes(doc))).toBe(base);
+    expect(toSessionText(withSourceHashes(doc)).transcriptHash).toBe(base);
+  });
+
+  it('leaves out English that is out of date, so a summary made from it is out of date too', () => {
+    const edited = withEditedTurn(withSourceHashes(doc), 't3', 'Wie lange?');
+    const staleKept = withEditedTurn(doc, 't3', 'Wie lange?'); // before D39: the English counts as current
+    expect(transcriptHash(edited)).not.toBe(transcriptHash(staleKept));
+    expect(toSessionText(edited).transcriptHash).toBe(transcriptHash(edited));
   });
 
   it('ignores a translation of an English session', () => {

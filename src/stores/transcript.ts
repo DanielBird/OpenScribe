@@ -8,6 +8,7 @@ import {
   type TranscriptDoc,
   type TranscriptVersion,
 } from '../domain/transcript';
+import { staleTurnIds as staleTurnIdsOf, turnSourceHashes } from '../domain/translation';
 import { FOLDER_MESSAGES, FolderError, type FileStat } from '../storage/folder';
 import {
   clearLastTranscript,
@@ -77,6 +78,16 @@ export const useTranscriptStore = defineStore('transcript', () => {
       ? { kind: 'reconnect', projectName: link.projectName }
       : { kind: 'retry', message: err.userMessage };
   });
+
+  /** Turns whose English is out of date: their text changed since they were translated (DECISIONS.md D39). */
+  const staleTurnIds = computed<readonly string[]>(() =>
+    doc.value ? staleTurnIdsOf(doc.value) : [],
+  );
+
+  /** In a project, with changes its file doesn't have: replacing or clearing the transcript loses them. */
+  const unsavedInProject = computed(
+    () => projectLink.value !== null && (folderNotice.value !== null || folderUnsaved.value),
+  );
 
   // --- The project link --------------------------------------------------------------------------
 
@@ -242,6 +253,8 @@ export const useTranscriptStore = defineStore('transcript', () => {
   /**
    * Replaces one turn's text, cleaned (DECISIONS.md D19). Ignores an unknown turn, and text that is
    * empty or unchanged once cleaned. Only that turn gets a new object. The save is debounced.
+   * A translation from before D39 doesn't say what it was made from: it takes the text before this edit, as the
+   * English counted as current until now, so this edit makes the turn's English out of date.
    */
   function editTurnText(turnId: string, text: string): void {
     const current = doc.value;
@@ -251,9 +264,14 @@ export const useTranscriptStore = defineStore('transcript', () => {
     const nextText = cleanTurnText(text);
     if (!turn || nextText === '' || nextText === turn.text) return;
 
+    const en = current.translations.en;
+    const translations =
+      en && !en.sourceHashes
+        ? { ...current.translations, en: { ...en, sourceHashes: turnSourceHashes(current.turns) } }
+        : current.translations;
     const turns = current.turns.slice();
     turns[index] = { ...turn, text: nextText };
-    doc.value = { ...current, turns };
+    doc.value = { ...current, turns, translations };
     scheduleSave();
   }
 
@@ -457,6 +475,8 @@ export const useTranscriptStore = defineStore('transcript', () => {
     folderSaveError,
     folderUnsaved,
     folderNotice,
+    unsavedInProject,
+    staleTurnIds,
     setDoc,
     setTranslation,
     renameSpeaker,

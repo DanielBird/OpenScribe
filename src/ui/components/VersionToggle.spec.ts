@@ -32,6 +32,13 @@ describe('VersionToggle', () => {
     expect(wrapper.find('[role="group"]').exists()).toBe(false);
   });
 
+  it('says only "Original" when the language is not known', async () => {
+    const doc = withTranslation(makeDoc());
+    await useTranscriptStore().setDoc({ ...doc, result: { ...doc.result, languageCode: '' } });
+    wrapper = mount(VersionToggle);
+    expect(buttons().map((b) => b.text())).toEqual(['Original', 'English']);
+  });
+
   it('switches between the original and English', async () => {
     const transcript = useTranscriptStore();
     await transcript.setDoc(withTranslation(makeDoc()));

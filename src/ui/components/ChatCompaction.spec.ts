@@ -1,5 +1,6 @@
 import { mount } from '@vue/test-utils';
-import { describe, expect, it } from 'vitest';
+import { createPinia, setActivePinia } from 'pinia';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { parseAnswer } from '../../features/agent/answer';
 import { ProviderError } from '../../providers/errors';
 import { NO_USAGE } from '../../providers/llm/types';
@@ -27,6 +28,11 @@ const message = (patch: Partial<ChatCompactionMessage> = {}): ChatCompactionMess
 const show = (m: ChatCompactionMessage) => mount(ChatCompaction, { props: { message: m, corpus } });
 
 describe('ChatCompaction', () => {
+  // The error's technical details read the saved keys, to keep them out.
+  beforeEach(() => {
+    setActivePinia(createPinia());
+  });
+
   it('is a divider whose summary, with its quotes and cost, opens under it', () => {
     const wrapper = show(message());
     const details = wrapper.get('details');
@@ -57,5 +63,22 @@ describe('ChatCompaction', () => {
     expect(wrapper.get('.error p').text()).toBe('The service is busy.');
     await wrapper.get('button').trigger('click');
     expect(wrapper.emitted('retry')).toHaveLength(1);
+  });
+
+  it('shows the technical details of an error', () => {
+    const wrapper = show(
+      message({
+        status: 'error',
+        summary: '',
+        blocks: [],
+        error: new ProviderError('server', 'The service is busy.', {
+          status: 529,
+          detail: 'overloaded_error: Overloaded',
+        }),
+      }),
+    );
+    expect(wrapper.get('.error details pre').text()).toContain(
+      'server · HTTP 529\noverloaded_error: Overloaded',
+    );
   });
 });

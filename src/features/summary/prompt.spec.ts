@@ -94,6 +94,14 @@ describe('buildInput', () => {
     );
   });
 
+  it('names a language that is not known as such', () => {
+    const doc = withTranslation(makeDoc());
+    const unknown = toSessionText({ ...doc, result: { ...doc.result, languageCode: '' } });
+    expect(buildInput(unknown, EMPTY)).toContain(
+      'Recording: interview.mp3 · 2025-10-09 · 00:00:16 · Unknown language, translated to English\n',
+    );
+  });
+
   it('keeps each turn on one line', () => {
     const doc = withTranslation(makeDoc(), {
       t1: 'Good afternoon,\nand welcome.',

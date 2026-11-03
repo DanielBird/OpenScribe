@@ -384,3 +384,24 @@ automatic caching); the cache read share is live check A2.
 - `stopped: 'limit'` needs a short notice. A follow-up question still works: it joins the trailing tool results.
 
 **Open:** live checks A1–A4 (`reference/llm-providers.md`) need the maintainer's key.
+
+### 2026-11-04 — A re-sent request takes back its text (audit BUG-5)
+- `AgentEvent` has a new `retry` event, `{ type: 'retry'; discard: number }`, which comes before each re-send of
+  tool JSON the stream couldn't parse. `discard` is the number of characters that attempt streamed, including its
+  `\n\n` break, and the break is emitted again by the retry. The chat store drops that many characters from its draft,
+  so **Stop** during a retry no longer saves the first lines twice. This replaces "A JSON re-send can repeat streamed
+  text" above.
+- The failed attempt's usage now counts, from `stream.currentMessage`. Its output tokens are only what
+  `message_start` reported, because the SDK raises the error before `message_delta`.
+- `src/testing/claudeSse.ts` streams a string `input` as it is, and `src/testing/agent.ts` has `brokenToolUseBlock`
+  and `streamedText` (a type-only import of `AgentEvent`, so Playwright still loads it).
+
+### 2026-11-04 — One loop for both agents (audit CQ-2)
+- The loop moved to `providers/llm/agentLoop.ts` (`runAgentLoop`), shared with Gemini: the conversation's `WeakMap`
+  (`createConversations`, one per provider module), the streamed text and its `\n\n` breaks, re-sends with their
+  `retry` event, running the tools (`runAgentTool`), the abort check and the result. `claudeAgent.ts` keeps the
+  request, `echoContent` and the reply's checks (refusal, cut-off tool input, `pause_turn` as `again`), and turns an
+  unparseable tool input into a re-send. The request and the events are unchanged, except that an empty text delta
+  is no longer passed on, so a break waits for real text.
+- `claudeAgent.spec.ts` didn't change and passes. `agentLoop.spec.ts` covers the shared rules with a scripted
+  adapter.

@@ -41,6 +41,12 @@ const english = computed(() =>
 const shownLanguage = computed(() =>
   english.value ? 'en' : normalizeLanguage(transcript.doc?.result.languageCode ?? ''),
 );
+// In the English view, the turns changed since they were translated (DECISIONS.md D39).
+const outdated = computed(() =>
+  english.value && transcript.staleTurnIds.length > 0
+    ? new Set(transcript.staleTurnIds)
+    : undefined,
+);
 
 // The pipeline (Add to project, a summary) is working on this transcript: as during a translation, the text
 // isn't edited and Translate isn't offered.
@@ -122,6 +128,7 @@ watch(
           :active-id="playback.activeTurnId"
           :follow="playback.followPlayback && !playback.followPaused"
           :editable="editing"
+          :outdated="outdated"
           @select="playback.seekTo($event.start)"
           @edit="(turnId, text) => transcript.editTurnText(turnId, text)"
         />

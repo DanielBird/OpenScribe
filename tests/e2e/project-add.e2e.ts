@@ -20,6 +20,7 @@ import {
   ok,
   openApp,
   openHome,
+  openSettings,
   projectAnswer,
   run,
   test,
@@ -423,4 +424,46 @@ test('after a reload the link stays: a change asks for Reconnect, then saves wit
           .speakers[0]!.label,
     )
     .toBe('Interviewer');
+});
+
+test("before Reconnect, Clear saved data and Run warn that the change isn't in the project", async ({
+  page,
+}) => {
+  const doc = translated(germanSession(7));
+  const folder = await useProjectFolder(page, { [ROOT]: projectFiles([doc]) });
+  await openProject(page);
+  await sessions(page).first().click();
+  await page.getByRole('button', { name: 'Open transcript' }).click();
+  await expect(page.getByText('In Hearing at home 2026')).toBeVisible();
+
+  await folder.setPermission('prompt');
+  await page.reload();
+  await openHome(page);
+  await page.getByRole('button', { name: 'Transcribe' }).click();
+  await page.getByRole('button', { name: 'Open', exact: true }).click();
+  await page.getByLabel('Name for Speaker 1').fill('Interviewer');
+  await expect(
+    page.getByText('DeScribe no longer has access to “Hearing at home 2026”.'),
+  ).toBeVisible();
+  const warning = "latest changes aren't saved in its project.";
+
+  await openSettings(page);
+  await page.getByRole('button', { name: 'Clear saved data…' }).click();
+  const clear = page.getByRole('dialog', { name: 'Clear saved data?' });
+  await expect(clear).toContainText(warning);
+  await clear.getByRole('button', { name: 'Cancel' }).click();
+  await page.getByRole('button', { name: 'Back' }).click();
+
+  await clickInHeader(page, 'Setup');
+  await goToGlossary(page);
+  await page.getByRole('button', { name: 'Run' }).click();
+  const confirm = page.getByRole('dialog', { name: 'Start a new transcription?' });
+  await expect(confirm).toContainText(`Its ${warning}`);
+  await expect(confirm.getByRole('button', { name: 'Cancel' })).toBeFocused();
+  await confirm.getByRole('button', { name: 'Cancel' }).click();
+  await expect(confirm).toBeHidden();
+
+  await clickInHeader(page, 'Output');
+  await expect(page.getByLabel('Name for Speaker 1')).toHaveValue('Interviewer');
+  await expect(page.getByText('DeScribe no longer has access')).toBeVisible();
 });

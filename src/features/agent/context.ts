@@ -1,9 +1,10 @@
 // The project context the agent sees in every request (PROJECTS.md §5.5): the brief and one card per session.
 // Rendered once per conversation and cached by the API, so the same input must give the same bytes.
 import type { ProjectBrief } from '../../domain/project';
+import { oneLine } from '../../domain/text';
 import { briefLines } from '../summary/prompt';
 import type { CorpusReader, CorpusSession } from './corpus';
-import { oneLine, recordingDate, sessionLanguage, sessionLength } from './format';
+import { recordingDate, sessionLanguage, sessionLength } from './format';
 
 function card(session: CorpusSession): string[] {
   const { text, summary } = session;

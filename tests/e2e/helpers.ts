@@ -66,6 +66,30 @@ export async function reloadApp(page: Page): Promise<void> {
   await enterTranscribe(page);
 }
 
+/** The text of a turn in the autosaved transcript, or null. */
+export const savedTurnText = (page: Page, turnId: string) =>
+  page.evaluate(
+    (id) =>
+      new Promise<string | null>((resolve) => {
+        const open = indexedDB.open('describe-v1');
+        open.onerror = () => resolve(null);
+        open.onsuccess = () => {
+          const db = open.result;
+          const get = db
+            .transaction('keyval')
+            .objectStore('keyval')
+            .get('describe.v1.lastTranscript');
+          get.onsuccess = () => {
+            const doc = get.result as { turns: { id: string; text: string }[] } | undefined;
+            db.close();
+            resolve(doc?.turns.find((t) => t.id === id)?.text ?? null);
+          };
+          get.onerror = () => resolve(null);
+        };
+      }),
+    turnId,
+  );
+
 /** The 5-second test recording (`node scripts/make-test-audio.mjs`). */
 export const TONE_WAV = fileURLToPath(new URL('../../fixtures/audio/tone-5s.wav', import.meta.url));
 

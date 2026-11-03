@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue';
+import { plural } from '../../domain/text';
 import type { ChatActivity } from '../../stores/chat';
 
 // What the agent did for one answer, collapsed (A10): "6 searches · 5 reads · ≈ $0.40", opening to one line per tool
@@ -7,8 +8,6 @@ import type { ChatActivity } from '../../stores/chat';
 const props = defineProps<{ activity: readonly ChatActivity[]; costUsd: number | null }>();
 
 const READS = new Set(['read_transcript', 'get_summaries']);
-
-const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
 function formatCost(usd: number): string {
   return usd < 0.01 ? '< $0.01' : `≈ $${usd.toFixed(2)}`;

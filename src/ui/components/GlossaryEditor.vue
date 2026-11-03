@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, useId, useTemplateRef } from 'vue';
 import type { TermIssue } from '../../domain/glossary';
+import { plural } from '../../domain/text';
 import { useGlossaryStore } from '../../stores/glossary';
 import { writeClipboard } from '../clipboard';
 import { useConfirm } from '../composables/useConfirm';
@@ -23,8 +24,6 @@ const root = useTemplateRef<HTMLElement>('root');
 const addInput = useTemplateRef<HTMLTextAreaElement>('addInput');
 const copyButton = useTemplateRef<HTMLButtonElement>('copyButton');
 const copyArea = useTemplateRef<HTMLTextAreaElement>('copyArea');
-
-const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
 /**
  * The status region: results of add, delete, copy and clear. Add results are for screen readers

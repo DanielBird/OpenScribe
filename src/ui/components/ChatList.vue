@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, useId, useTemplateRef } from 'vue';
+import { plural } from '../../domain/text';
 import { formatDateTime } from '../../domain/transcript';
 import { useChatStore } from '../../stores/chat';
 import { useProjectStore } from '../../stores/project';
@@ -18,8 +19,6 @@ const settings = useSettingsStore();
 const ui = useProjectUi();
 const id = useId();
 const listEl = useTemplateRef<HTMLElement>('list');
-
-const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
 const rows = computed(() =>
   project.chats.map((entry) => {
