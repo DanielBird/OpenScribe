@@ -1,21 +1,22 @@
 // Zod schemas for what Describe reads back from storage and from the project folder. A value that doesn't match is
-// ignored or reported, never repaired (DECISIONS.md D18).
+// ignored or reported, never repaired (DECISIONS.md D18). Data that Describe writes back keeps the fields this
+// build doesn't know, at every level (`z.looseObject`), so a newer build's fields survive an older one's save (D38).
 import type { SessionText } from '../domain/corpus/sessionText';
 import type { SessionSummary } from '../domain/summary';
 import { TRANSCRIPT_SCHEMA_VERSION, type TranscriptDoc } from '../domain/transcript';
 import { z } from '../lib/zod';
 import type { FileStat } from './folder';
 
-const SpeakerSchema = z.object({ id: z.string(), label: z.string() });
+const SpeakerSchema = z.looseObject({ id: z.string(), label: z.string() });
 
-const WordSchema = z.object({
+const WordSchema = z.looseObject({
   text: z.string(),
   start: z.number(),
   end: z.number(),
   logprob: z.number().nullable(),
 });
 
-const TurnSchema = z.object({
+const TurnSchema = z.looseObject({
   id: z.string(),
   speakerId: z.string(),
   start: z.number(),
@@ -24,26 +25,27 @@ const TurnSchema = z.object({
   words: z.array(WordSchema),
 });
 
-const TranslationSchema = z.object({
+const TranslationSchema = z.looseObject({
   provider: z.enum(['claude', 'gemini']),
   model: z.string(),
   createdAt: z.string(),
   texts: z.record(z.string(), z.string()),
+  sourceHashes: z.record(z.string(), z.string()).optional(), // DECISIONS.md D39
 });
 
 /** What a saved transcript must look like to be used: the last transcript, and a project's transcript files. */
-export const TranscriptDocSchema = z.object({
+export const TranscriptDocSchema = z.looseObject({
   schemaVersion: z.literal(TRANSCRIPT_SCHEMA_VERSION),
   id: z.string(),
   createdAt: z.string(),
-  source: z.object({
+  source: z.looseObject({
     fileName: z.string(),
     fileSize: z.number(),
     mimeType: z.string(),
     lastModified: z.number(),
     durationSec: z.number().nullable(),
   }),
-  request: z.object({
+  request: z.looseObject({
     provider: z.literal('elevenlabs'),
     model: z.string(),
     languageHint: z.string(), // 'auto' or a language code (DECISIONS.md D37)
@@ -51,7 +53,7 @@ export const TranscriptDocSchema = z.object({
     zeroRetention: z.boolean(),
     keyterms: z.array(z.string()),
   }),
-  result: z.object({
+  result: z.looseObject({
     providerTranscriptId: z.string().nullable(),
     languageCode: z.string(),
     languageProbability: z.number().nullable(),
@@ -59,17 +61,20 @@ export const TranscriptDocSchema = z.object({
   }),
   speakers: z.array(SpeakerSchema),
   turns: z.array(TurnSchema),
-  translations: z.object({ en: TranslationSchema.optional() }),
+  translations: z.looseObject({ en: TranslationSchema.optional() }),
 }) satisfies z.ZodType<TranscriptDoc>;
 
-/** A transcript's text without word timings, as the corpus cache keeps it (`domain/corpus/sessionText.ts`). */
+/**
+ * A transcript's text without word timings, as the corpus cache keeps it (`domain/corpus/sessionText.ts`). The cache
+ * is rebuilt from the files, never written back to them, so it keeps only the fields it knows.
+ */
 export const SessionTextSchema = z.object({
   sessionId: z.string(),
   recordingName: z.string(),
   recordedAt: z.number(),
   durationSec: z.number().nullable(),
   languageCode: z.string(),
-  speakers: z.array(SpeakerSchema),
+  speakers: z.array(z.object({ id: z.string(), label: z.string() })),
   turns: z.array(
     z.object({
       id: z.string(),

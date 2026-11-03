@@ -9,6 +9,7 @@ import {
   ok,
   openApp,
   reloadApp,
+  savedTurnText,
   run,
   test,
 } from './helpers';
@@ -33,30 +34,6 @@ async function transcribe(page: Page) {
   await run(page);
   await expect(page.locator('li.turn')).toHaveCount(5);
 }
-
-/** The text of a turn in the autosaved transcript, or null. */
-const savedText = (page: Page, turnId: string) =>
-  page.evaluate(
-    (id) =>
-      new Promise<string | null>((resolve) => {
-        const open = indexedDB.open('describe-v1');
-        open.onerror = () => resolve(null);
-        open.onsuccess = () => {
-          const db = open.result;
-          const get = db
-            .transaction('keyval')
-            .objectStore('keyval')
-            .get('describe.v1.lastTranscript');
-          get.onsuccess = () => {
-            const doc = get.result as { turns: { id: string; text: string }[] } | undefined;
-            db.close();
-            resolve(doc?.turns.find((t) => t.id === id)?.text ?? null);
-          };
-          get.onerror = () => resolve(null);
-        };
-      }),
-    turnId,
-  );
 
 /** Downloads the .docx (choosing `version` when asked) and returns its document XML. */
 async function downloadDocx(page: Page, testInfo: TestInfo, version?: string) {
@@ -119,7 +96,7 @@ test('an edit is saved and still there after a reload', async ({ page }) => {
   await doneButton(page).click();
   await expect(shownTexts(page).first()).toHaveText('Guten Tag und willkommen bei Oticon.');
   await expect(page.locator('li.turn')).toHaveCount(5);
-  await expect.poll(() => savedText(page, 't1')).toBe('Guten Tag und willkommen bei Oticon.');
+  await expect.poll(() => savedTurnText(page, 't1')).toBe('Guten Tag und willkommen bei Oticon.');
 
   await reloadApp(page);
   await page.getByRole('button', { name: 'Open' }).click();
@@ -215,10 +192,12 @@ test('with a translation, editing shows the Original and leaves the English alon
   await box(page, 'Speaker 1, 00:00:00').fill('Guten Tag.');
   await doneButton(page).click();
   await expect(versions(page)).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Re-translate…' })).toBeVisible();
+  // The English of the edited turn is now out of date (DECISIONS.md D39).
+  await expect(page.getByRole('button', { name: 'Update English…' })).toBeVisible();
   await expect(shownTexts(page).first()).toHaveText('Guten Tag.');
   await versions(page).getByRole('button', { name: 'English' }).click();
   await expect(shownTexts(page).first()).toHaveText('English t1.');
+  await expect(page.locator('li.turn').first()).toContainText('Changed since translation');
 
   const english = await downloadDocx(page, testInfo, 'English translation');
   expect(english).toContain('English t1.');

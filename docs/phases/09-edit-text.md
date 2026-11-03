@@ -248,3 +248,8 @@ These stay in [future.md](future.md) F3.
   as the neighbour, in about 5 more. The a11y spec checks stable scroll states and passes. A possible fix for both is
   `scroll-padding`/`scroll-margin`, or a 24px hit area for the timestamp. Accepted for now.
 - No live API calls were made in this phase.
+
+### 2026-11-03 — Translations of edited turns (audit DES-2)
+- D39 replaces this phase's rule that an English translation is neither updated nor flagged when the original
+  changes. A translation now records the text of each turn it was made from; a turn edited since shows **Changed
+  since translation** in the English view, and **Update English…** translates only those turns.

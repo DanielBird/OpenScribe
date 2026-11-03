@@ -7,7 +7,7 @@ import { cleanTurnText, formatTimestamp, joinLines, type Turn } from '../../doma
 // The timestamp is a button only when the recording can be played; until then it's text. Clicking the
 // text also plays (a mouse shortcut; the button is the keyboard path), unless the user is selecting text.
 // With `editable`, the text is a box instead (DECISIONS.md D19): clicking it places the caret, and the
-// timestamp still plays.
+// timestamp still plays. `outdated` marks a translation made before the turn's text was changed (D39).
 const props = defineProps<{
   turn: Turn;
   label: string;
@@ -17,6 +17,8 @@ const props = defineProps<{
   /** The turn being played. */
   active?: boolean;
   editable?: boolean;
+  /** `text` is a translation of what the turn said before it was edited. */
+  outdated?: boolean;
 }>();
 const emit = defineEmits<{ select: [turn: Turn]; edit: [turnId: string, text: string] }>();
 
@@ -100,16 +102,19 @@ function onBlur(): void {
     :data-turn-id="turn.id"
     :aria-current="active ? 'true' : undefined"
   >
-    <button
-      v-if="playable"
-      type="button"
-      class="timestamp is-button"
-      :aria-label="`Play from ${formatTimestamp(turn.start)}`"
-      @click="emit('select', turn)"
-    >
-      {{ formatTimestamp(turn.start) }}
-    </button>
-    <span v-else class="timestamp">{{ formatTimestamp(turn.start) }}</span>
+    <span class="time-row">
+      <button
+        v-if="playable"
+        type="button"
+        class="timestamp is-button"
+        :aria-label="`Play from ${formatTimestamp(turn.start)}`"
+        @click="emit('select', turn)"
+      >
+        {{ formatTimestamp(turn.start) }}
+      </button>
+      <span v-else class="timestamp">{{ formatTimestamp(turn.start) }}</span>
+      <span v-if="outdated" class="outdated">Changed since translation</span>
+    </span>
     <span class="speaker">{{ label }}</span>
     <!-- Screen readers hear "Speaker 1: …". Visually hidden is absolutely positioned: no grid cell. -->
     <span class="visually-hidden">: </span>
@@ -164,9 +169,16 @@ function onBlur(): void {
   cursor: pointer;
 }
 
-.timestamp {
+.time-row {
+  display: flex;
   grid-area: time;
+  flex-wrap: wrap;
+  align-items: baseline;
   justify-self: start;
+  gap: 0 var(--space-3);
+}
+
+.timestamp {
   color: var(--color-text-muted);
   font-size: var(--font-size-sm);
   font-variant-numeric: tabular-nums;
@@ -183,6 +195,11 @@ function onBlur(): void {
 .timestamp.is-button:hover {
   color: var(--color-accent);
   text-decoration: underline;
+}
+
+.outdated {
+  color: var(--color-warning);
+  font-size: var(--font-size-sm);
 }
 
 .speaker {

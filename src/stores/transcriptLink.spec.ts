@@ -18,7 +18,7 @@ import {
   transcriptFileText,
   transcriptPath,
 } from '../testing/projectSeed';
-import { makeDoc } from '../testing/transcriptDoc';
+import { makeDoc, withFutureFields } from '../testing/transcriptDoc';
 import { useProjectStore } from './project';
 import { SAVE_DELAY_MS, useTranscriptStore } from './transcript';
 
@@ -195,6 +195,31 @@ describe('saving to the folder', () => {
     expect(project.session(doc.id)?.text.turns[0]!.text).toBe('Changed text.');
   });
 
+  it('keeps fields a newer build added, through edits and a reload (D38)', async () => {
+    const future = withFutureFields(doc);
+    const folder = memoryFolder('P', projectFiles([future]));
+    const first = await openLinked(folder);
+    first.transcript.renameSpeaker('speaker_0', 'Interviewer');
+    first.transcript.editTurnText('t1', 'Changed text.');
+    await first.transcript.flush();
+    const edited: TranscriptDoc = {
+      ...relabelled(future, 'Interviewer'),
+      turns: future.turns.map((t) => (t.id === 't1' ? { ...t, text: 'Changed text.' } : t)),
+    };
+    expect(fileDoc(folder)).toEqual(edited);
+
+    // The next save starts from the copy in IndexedDB.
+    const { transcript } = await reload('granted');
+    transcript.renameSpeaker('speaker_1', 'Respondent');
+    await transcript.flush();
+    expect(fileDoc(folder)).toEqual({
+      ...edited,
+      speakers: edited.speakers.map((s) =>
+        s.id === 'speaker_1' ? { ...s, label: 'Respondent' } : s,
+      ),
+    });
+  });
+
   it('stops at a file someone else changed; Keep mine overwrites theirs', async () => {
     const folder = memoryFolder('P', projectFiles([doc]));
     const { transcript } = await openLinked(folder);
@@ -350,5 +375,44 @@ describe('after a reload', () => {
     const { transcript: reloaded } = await reload('prompt');
     expect(reloaded.doc?.id).toBe(doc.id);
     expect(reloaded.projectLink).toBeNull();
+  });
+});
+
+// Run and Clear saved data warn with this before they replace or delete the transcript (audit BUG-4).
+describe('unsavedInProject', () => {
+  it('is false while the file has every change', async () => {
+    const folder = memoryFolder('P', projectFiles([doc]));
+    const { transcript } = await openLinked(folder);
+    expect(transcript.unsavedInProject).toBe(false);
+
+    transcript.renameSpeaker('speaker_0', 'Interviewer');
+    await transcript.flush();
+    expect(fileDoc(folder).speakers[0]!.label).toBe('Interviewer');
+    expect(transcript.unsavedInProject).toBe(false);
+  });
+
+  it('is true for a change made after a reload until Reconnect saves it', async () => {
+    const folder = memoryFolder('P', projectFiles([doc]));
+    await openLinked(folder);
+    const { transcript } = await reload('prompt');
+    expect(transcript.unsavedInProject).toBe(false);
+
+    transcript.renameSpeaker('speaker_0', 'Interviewer');
+    expect(transcript.unsavedInProject).toBe(true);
+    await transcript.flush();
+    expect(transcript.folderNotice).toMatchObject({ kind: 'reconnect' });
+    expect(transcript.unsavedInProject).toBe(true);
+
+    await transcript.reconnectFolder();
+    expect(transcript.unsavedInProject).toBe(false);
+  });
+
+  it('is false for a transcript in no project, even with a change', async () => {
+    const transcript = useTranscriptStore();
+    await transcript.setDoc(doc);
+    transcript.renameSpeaker('speaker_0', 'Interviewer');
+    expect(transcript.unsavedInProject).toBe(false);
+    await transcript.flush();
+    expect(transcript.unsavedInProject).toBe(false);
   });
 });

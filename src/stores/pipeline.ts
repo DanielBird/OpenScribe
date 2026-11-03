@@ -1,8 +1,15 @@
 import { defineStore } from 'pinia';
 import { computed, onScopeDispose, ref, shallowRef, toRaw, watch } from 'vue';
-import { isEnglishSession, toSessionText, type SessionText } from '../domain/corpus/sessionText';
+import {
+  lacksEnglish,
+  toSessionText,
+  transcriptHash,
+  type SessionText,
+} from '../domain/corpus/sessionText';
+import { briefHash } from '../domain/project';
 import { SUMMARY_SCHEMA_VERSION, type SessionSummaryFile } from '../domain/summary';
 import { normalizeLanguage, type LlmProviderId, type TranscriptDoc } from '../domain/transcript';
+import { staleTurnIds, type TranslationTexts } from '../domain/translation';
 import { summariseSession } from '../features/summary/summarise';
 import { TranslationError, translateTranscript } from '../features/translation/translate';
 import { ProviderError } from '../providers/errors';
@@ -40,8 +47,11 @@ export interface PipelineFailure {
   error: PipelineError;
   /** Access to the project folder ended: **Reconnect** before Resume. */
   reconnect: boolean;
-  /** Turns translated before a failed translation, so Resume doesn't pay for them again. */
-  partial: Record<string, string> | null;
+  /**
+   * Turns translated before a failed translation, so Resume doesn't pay for them again: those whose text hasn't
+   * changed since (DECISIONS.md D39).
+   */
+  partial: TranslationTexts | null;
 }
 
 export const PIPELINE_MESSAGES = {
@@ -54,18 +64,16 @@ export const PIPELINE_MESSAGES = {
 } as const;
 
 interface JobRecord extends Omit<PipelineJob, 'progress'> {
-  partial: Record<string, string> | null;
+  partial: TranslationTexts | null;
 }
 
-/** True when the language isn't English and some turn has no English text. */
+/**
+ * True when the language isn't English and some turn has no current English text: never translated, or changed
+ * since (DECISIONS.md D39).
+ */
 export function needsTranslation(doc: TranscriptDoc): boolean {
   if (normalizeLanguage(doc.result.languageCode) === 'en') return false;
-  const texts = doc.translations.en?.texts;
-  return !texts || doc.turns.some((turn) => !Object.hasOwn(texts, turn.id));
-}
-
-function textNeedsTranslation(text: SessionText): boolean {
-  return !isEnglishSession(text) && text.turns.some((turn) => turn.en === null);
+  return !doc.translations.en || staleTurnIds(doc).length > 0;
 }
 
 /**
@@ -302,7 +310,8 @@ export const usePipelineStore = defineStore('pipeline', () => {
   }
 
   /**
-   * Translates the session to English with the project model, unless it has English text already. The
+   * Translates the session to English with the project model, unless all its English text is current. Only the
+   * batches with a turn that has none, or changed since it was translated, are sent (DECISIONS.md D39). The
    * translation goes into the transcript file: through the Output tab when the session is open there, otherwise
    * straight into the file. `keep` gets the texts before they are saved, so Resume doesn't pay for them again.
    */
@@ -312,34 +321,41 @@ export const usePipelineStore = defineStore('pipeline', () => {
     model: string,
     signal: AbortSignal,
     isCurrent: () => boolean,
-    keep: (partial: Record<string, string> | null) => void,
+    keep: (partial: TranslationTexts | null) => void,
   ): Promise<void> {
     const open = isOpenOnOutput(job.sessionId);
     const source = open ? toRaw(transcript.doc) : (await project.readSessionDoc(job.sessionId)).doc;
     if (!source || !needsTranslation(source)) return;
 
-    const texts = await translateTranscript(source, provider, {
+    const result = await translateTranscript(source, provider, {
       signal,
-      resumeFrom: job.partial ?? undefined,
+      // Only English whose turn still has the text it was made from is kept; the other batches are sent.
+      resumeFrom: job.partial ?? source.translations.en,
       onProgress: (p) => {
         if (isCurrent()) progress.value = p;
       },
     });
     if (!isCurrent()) return;
-    keep(texts);
+    keep(result);
     const translation = {
       provider: provider.id,
       model,
       createdAt: new Date().toISOString(),
-      texts,
+      ...result,
     };
 
     if (open && (await transcript.setTranslation(job.sessionId, translation))) {
       const problem = folderProblem();
       if (problem) throw problem;
     } else {
-      // Not open on Output, or replaced there meanwhile: write the file, if nobody changed it since it was read.
+      // Not open on Output, or replaced there meanwhile: write the file, if it still holds the text that was
+      // translated and nobody changes it before the write.
       const read = await project.readSessionDoc(job.sessionId);
+      if (transcriptHash(read.doc) !== transcriptHash(source)) {
+        // Changed during the translation: Resume translates again only the turns whose text changed, which
+        // `result.sourceHashes` tells it.
+        throw new FolderError('changed', FOLDER_MESSAGES.changed);
+      }
       const doc: TranscriptDoc = {
         ...read.doc,
         translations: { ...read.doc.translations, en: translation },
@@ -371,6 +387,8 @@ export const usePipelineStore = defineStore('pipeline', () => {
     }
     const open = project.project;
     if (!open) throw new FolderError('permission', FOLDER_MESSAGES.permission);
+    // The brief sent, not the one current when the reply comes: it may be edited meanwhile.
+    const madeWith = briefHash(open.brief);
 
     const { summary, droppedQuotes } = await summariseSession(text, provider, {
       brief: open.brief,
@@ -388,7 +406,7 @@ export const usePipelineStore = defineStore('pipeline', () => {
       model,
       provider: provider.id,
       transcriptHash: text.transcriptHash,
-      briefHash: project.briefHash,
+      briefHash: madeWith,
       droppedQuotes,
       summary,
     };
@@ -464,7 +482,7 @@ export const usePipelineStore = defineStore('pipeline', () => {
           sessionId: id,
           title: session.title,
           kind: 'summarise',
-          steps: textNeedsTranslation(session.text) ? ['translate', 'summarise'] : ['summarise'],
+          steps: lacksEnglish(session.text) ? ['translate', 'summarise'] : ['summarise'],
           current: null,
           status: 'queued',
           partial: null,

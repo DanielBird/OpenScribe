@@ -36,7 +36,13 @@ export function speakerLabel(session: SessionText, speakerId: string): string {
   return oneLine(session.speakers.find((s) => s.id === speakerId)?.label ?? speakerId);
 }
 
-/** `t412 [00:41:12] Anna: …` */
-export function turnLine(session: SessionText, turn: SessionTurn, text: string): string {
-  return `${turn.id} [${formatTimestamp(turn.start)}] ${speakerLabel(session, turn.speakerId)}: ${oneLine(text)}`;
+/** `t412 [00:41:12] Anna: …`, or `Anna (original): …` for the original text among English (`original`). */
+export function turnLine(
+  session: SessionText,
+  turn: SessionTurn,
+  text: string,
+  original = false,
+): string {
+  const speaker = speakerLabel(session, turn.speakerId) + (original ? ' (original)' : '');
+  return `${turn.id} [${formatTimestamp(turn.start)}] ${speaker}: ${oneLine(text)}`;
 }

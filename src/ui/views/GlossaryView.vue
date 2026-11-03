@@ -24,12 +24,17 @@ const canRun = computed(() => missing.value.length === 0);
 
 async function run(): Promise<void> {
   const last = transcript.autosaveInfo;
+  // Changes the project's file doesn't have yet would be lost, as on Open transcript.
+  const unsaved = transcript.unsavedInProject;
   if (
     last &&
     !(await confirm({
       title: 'Start a new transcription?',
-      message: `This replaces your last transcript ("${last.fileName}").`,
+      message:
+        `This replaces your last transcript ("${last.fileName}").` +
+        (unsaved ? " Its latest changes aren't saved in its project." : ''),
       confirmLabel: 'Run',
+      danger: unsaved,
     }))
   ) {
     return;

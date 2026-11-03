@@ -1,6 +1,7 @@
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { ProviderError } from '../../providers/errors';
 import { usePipelineStore } from '../../stores/pipeline';
 import { useProjectStore } from '../../stores/project';
 import { useSettingsStore } from '../../stores/settings';
@@ -145,6 +146,26 @@ describe('SessionList', () => {
     expect(dialog.text()).toContain('The transcript text is sent to Anthropic to summarise.');
     const confirm = dialog.findAll('button').find((b) => b.text() === 'Summarise')!;
     expect(confirm.attributes('disabled')).toBeDefined();
+  });
+
+  it('shows the error that stopped the queue, with its technical details', async () => {
+    withSessions(...plain(makeSessionText(1)));
+    usePipelineStore().stopped = new ProviderError(
+      'quota',
+      'Your Claude account is out of credit.',
+      {
+        status: 400,
+        detail: 'billing_error: Your credit balance is too low',
+      },
+    );
+    wrapper = mount(SessionList);
+    await flushPromises();
+    expect(wrapper.get('.foot [role="alert"]').text()).toBe(
+      'Your Claude account is out of credit.',
+    );
+    expect(wrapper.get('.foot details pre').text()).toContain(
+      'quota · HTTP 400\nbilling_error: Your credit balance is too low',
+    );
   });
 
   it('has no Summarise all when every summary is up to date', () => {

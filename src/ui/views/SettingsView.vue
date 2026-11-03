@@ -6,6 +6,7 @@ import notices from '../../../THIRD-PARTY-NOTICES.txt?raw';
 import { useNavStore } from '../../stores/nav';
 import { useSavedDataStore } from '../../stores/savedData';
 import { useSettingsStore } from '../../stores/settings';
+import { useTranscriptStore } from '../../stores/transcript';
 import ApiKeyField from '../components/ApiKeyField.vue';
 import ConfirmDialog from '../components/ConfirmDialog.vue';
 import StepFooter from '../components/StepFooter.vue';
@@ -14,6 +15,7 @@ import { useConfirm } from '../composables/useConfirm';
 // Opened from the footer, from any mode: the API keys, saved data, and what is sent where (D27).
 const settings = useSettingsStore();
 const savedData = useSavedDataStore();
+const transcript = useTranscriptStore();
 const nav = useNavStore();
 const { confirm, dialog: confirmDialog } = useConfirm();
 
@@ -78,7 +80,10 @@ async function clearSavedData(): Promise<void> {
     title: 'Clear saved data?',
     message:
       'This deletes your glossary, settings, last transcript and the link to your project from this ' +
-      `${desktop ? 'app' : 'browser'}. Your API keys stay, and so do the project's files.`,
+      `${desktop ? 'app' : 'browser'}. Your API keys stay, and so do the project's files.` +
+      (transcript.unsavedInProject
+        ? " Your last transcript's latest changes aren't saved in its project."
+        : ''),
     confirmLabel: 'Clear',
     danger: true,
   });

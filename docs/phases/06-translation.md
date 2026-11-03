@@ -258,3 +258,8 @@ turn ids and times don't change.
 **For Phase 8:**
 - The About panel's data-flow text should include the translation sentence from the reference doc.
 - Run L3 before release.
+
+### 2026-11-03 — A turn that comes back empty (audit BUG-8)
+- D42 relaxes the retry rule above for empty texts: if the retry still leaves turns empty and nothing else is wrong,
+  those turns keep their original text, for at most a third of the batch (and always one turn). A missing, extra or
+  duplicate id still fails after the retry and shows **Resume**.

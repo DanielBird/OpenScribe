@@ -38,3 +38,15 @@ export function withoutSecret(err: ProviderError, secret: string): ProviderError
   if (userMessage === err.userMessage && detail === err.opts.detail) return err;
   return new ProviderError(err.kind, userMessage, { ...err.opts, detail });
 }
+
+/**
+ * What a report about `err` needs beyond its message (DECISIONS.md D41): "<kind> · HTTP <status>", then the detail on
+ * a second line. `null` when it isn't a ProviderError or has neither a status nor a detail.
+ */
+export function technicalDetails(err: unknown): string | null {
+  if (!(err instanceof ProviderError)) return null;
+  const { status, detail } = err.opts;
+  if (status === undefined && !detail) return null;
+  const head = status === undefined ? err.kind : `${err.kind} · HTTP ${status}`;
+  return detail ? `${head}\n${detail}` : head;
+}

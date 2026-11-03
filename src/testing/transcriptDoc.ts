@@ -8,7 +8,9 @@ import type {
   TranscriptionRequestInfo,
   Turn,
 } from '../domain/transcript';
+import { turnSourceHashes } from '../domain/translation';
 import { toNormalized } from '../providers/transcription/elevenlabs/mapper';
+import { FUTURE_FIELD } from './projectSeed';
 
 export const TEST_SOURCE: SourceInfo = {
   fileName: 'interview.mp3',
@@ -60,6 +62,40 @@ export function withTranslation(
         texts,
       },
     },
+  };
+}
+
+/** `doc` with its translation made from the turns' current text (DECISIONS.md D39), as this build saves one. */
+export function withSourceHashes(doc: TranscriptDoc): TranscriptDoc {
+  const en = doc.translations.en;
+  if (!en) return doc;
+  return {
+    ...doc,
+    translations: { ...doc.translations, en: { ...en, sourceHashes: turnSourceHashes(doc.turns) } },
+  };
+}
+
+/** `doc` with turn `turnId`'s text replaced, as Edit text does: its English, if any, is now out of date. */
+export function withEditedTurn(doc: TranscriptDoc, turnId: string, text: string): TranscriptDoc {
+  return { ...doc, turns: doc.turns.map((t) => (t.id === turnId ? { ...t, text } : t)) };
+}
+
+/** `doc` with `FUTURE_FIELD` on it and on every object in it, as a newer build might have saved it (D38). */
+export function withFutureFields(doc: TranscriptDoc): TranscriptDoc {
+  const en = doc.translations.en;
+  return {
+    ...doc,
+    ...FUTURE_FIELD,
+    source: { ...doc.source, ...FUTURE_FIELD },
+    request: { ...doc.request, ...FUTURE_FIELD },
+    result: { ...doc.result, ...FUTURE_FIELD },
+    speakers: doc.speakers.map((s) => ({ ...s, ...FUTURE_FIELD })),
+    turns: doc.turns.map((t) => ({
+      ...t,
+      ...FUTURE_FIELD,
+      words: t.words.map((w) => ({ ...w, ...FUTURE_FIELD })),
+    })),
+    translations: { ...FUTURE_FIELD, ...(en && { en: { ...en, ...FUTURE_FIELD } }) },
   };
 }
 

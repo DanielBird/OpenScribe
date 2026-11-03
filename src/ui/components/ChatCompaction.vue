@@ -3,6 +3,7 @@ import type { CorpusReader } from '../../features/agent/corpus';
 import type { ChatCompactionMessage } from '../../stores/chat';
 import AnswerBlocks from './AnswerBlocks.vue';
 import ChatActivity from './ChatActivity.vue';
+import ErrorDetails from './ErrorDetails.vue';
 
 // A `/compact` in the project chat (Phase 22, D33): a divider, since the agent now remembers only its summary of the
 // messages above it. The summary and its cost open under it; opening moves nothing already shown.
@@ -26,6 +27,7 @@ const emit = defineEmits<{ retry: [] }>();
     <div v-else-if="message.error" class="error">
       <p>{{ message.error.userMessage }}</p>
       <button type="button" class="button" @click="emit('retry')">Try again</button>
+      <ErrorDetails :error="message.error" />
     </div>
   </div>
 </template>

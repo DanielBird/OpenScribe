@@ -13,6 +13,7 @@ import {
   openApp,
   reloadApp,
   run,
+  savedTurnText,
   test,
   type LlmAnswer,
 } from './helpers';
@@ -201,6 +202,34 @@ test('an incomplete batch is retried once, then Resume finishes without repeatin
   ]);
 });
 
+test('a turn that comes back empty twice keeps its original text, and the translation finishes', async ({
+  page,
+}) => {
+  const answer: LlmAnswer = (call, n) => {
+    const reply = englishFor(call, n) as { translations: { id: string; text: string }[] };
+    return {
+      translations: reply.translations.map((t) => (t.id === 't5' ? { ...t, text: '' } : t)),
+    };
+  };
+  const calls = await mockAnthropic(page, answer);
+  await transcribe(page);
+  const original = await turnTexts(page).nth(4).textContent();
+
+  await translate(page);
+
+  await expect(versions(page).getByRole('button', { name: 'English' })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
+  await expect(turnTexts(page)).toHaveText([
+    ...['t1', 't2', 't3', 't4'].map((id) => `English ${id}.`),
+    original!.trim(),
+  ]);
+  await expect(page.getByRole('alert')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Re-translate…' })).toBeVisible();
+  expect(calls.map((c) => c.input.segments[0]!.id)).toEqual(['t1', 't1']);
+});
+
 test('Cancel aborts the request and saves nothing', async ({ page }) => {
   let release!: () => void;
   const held = new Promise<void>((resolve) => (release = resolve));
@@ -243,6 +272,52 @@ test('the translation survives a reload', async ({ page }) => {
   await versions(page).getByRole('button', { name: 'English' }).click();
   await expect(turnTexts(page).first()).toHaveText('English t1.');
   await expect(page.getByRole('button', { name: 'Re-translate…' })).toBeVisible();
+});
+
+test('editing a turn marks its English out of date; Update English translates only its batch', async ({
+  page,
+}) => {
+  const calls = await mockAnthropic(page);
+  await transcribe(page, 'many-turns');
+  await translate(page);
+  await expect(turnTexts(page).nth(64)).toHaveText('English t65.');
+  expect(calls.map((c) => c.input.segments[0]!.id)).toEqual(['t1', 't61']);
+
+  await page.getByRole('button', { name: 'Edit text' }).click();
+  await page.locator('li.turn[data-turn-id="t65"] textarea').fill('Beitrag 65, korrigiert.');
+  await page.getByRole('button', { name: 'Done' }).click();
+  await expect.poll(() => savedTurnText(page, 't65')).toBe('Beitrag 65, korrigiert.');
+
+  // It survives a reload: the translation records what each turn said when it was translated.
+  await reloadApp(page);
+  await page.getByRole('button', { name: 'Open' }).click();
+  await versions(page).getByRole('button', { name: 'English' }).click();
+  const outdated = page.locator('li.turn .outdated');
+  await expect(outdated).toHaveCount(1);
+  await expect(page.locator('li.turn[data-turn-id="t65"] .outdated')).toHaveText(
+    'Changed since translation',
+  );
+  await expect(turnTexts(page).nth(64)).toHaveText('English t65.');
+
+  await page.getByRole('button', { name: 'Download .docx' }).click();
+  const choose = page.getByRole('dialog', { name: 'Which version?' });
+  await expect(
+    choose.getByRole('radio', { name: 'English translation (1 turn out of date)' }),
+  ).toBeVisible();
+  await choose.getByRole('button', { name: 'Cancel' }).click();
+
+  await page.getByRole('button', { name: 'Update English…' }).click();
+  const dialog = translateDialog(page);
+  await expect(dialog.getByText('Translates only the turn that changed.')).toBeVisible();
+  await dialog.getByRole('button', { name: 'Update', exact: true }).click();
+
+  await expect(outdated).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Re-translate…' })).toBeVisible();
+  expect(calls.map((c) => c.input.segments[0]!.id)).toEqual(['t1', 't61', 't61']);
+  expect(calls[2]!.input.segments.find((s) => s.id === 't65')?.text).toBe(
+    'Beitrag 65, korrigiert.',
+  );
+  await expect(turnTexts(page).first()).toHaveText('English t1.');
 });
 
 test('an English transcript has no Translate button', async ({ page }) => {

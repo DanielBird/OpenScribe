@@ -251,13 +251,18 @@ function readTool(corpus: CorpusReader, budget: AgentBudget): AgentTool {
       const english = !input.original;
       const untranslated = english && text.turns.every((turn) => englishText(text, turn) === null);
       const language = languageName(text.languageCode);
-      const version = !english
-        ? `${language} (original)`
-        : untranslated
-          ? `${language}, not translated yet: the original text, which can't be quoted`
-          : 'English';
+      // In a translated session, a turn changed since the translation has no English (DECISIONS.md D39): its line
+      // is the original, marked as in search results.
+      const isOriginal = (turn: SessionTurn) =>
+        english && !untranslated && englishText(text, turn) === null;
       const lineOf = (turn: SessionTurn) =>
-        turnLine(text, turn, (english ? englishText(text, turn) : null) ?? turn.text);
+        turnLine(
+          text,
+          turn,
+          (english ? englishText(text, turn) : null) ?? turn.text,
+          isOriginal(turn),
+        );
+      let marked = false;
 
       const lines: string[] = [];
       let spent = false;
@@ -274,6 +279,7 @@ function readTool(corpus: CorpusReader, budget: AgentBudget): AgentTool {
         budget.transcriptTokens += tokens;
         lines.push(line);
         lastShown = i;
+        if (isOriginal(turn)) marked = true;
       }
 
       if (lines.length === 0) {
@@ -282,6 +288,13 @@ function readTool(corpus: CorpusReader, budget: AgentBudget): AgentTool {
       const first = text.turns[from];
       const shownLast = text.turns[lastShown];
       const range = `${first?.id}–${shownLast?.id}`;
+      const version = !english
+        ? `${language} (original)`
+        : untranslated
+          ? `${language}, not translated yet: the original text, which can't be quoted`
+          : marked
+            ? `English, except turns marked (original): changed since the translation, so they can't be quoted`
+            : 'English';
       const header = `${session.key} · ${title} · turns ${range} of ${text.turns.length} · ${version}`;
       const times = `${formatTimestamp(first?.start ?? 0)}–${formatTimestamp(shownLast?.start ?? 0)}`;
       return {

@@ -323,7 +323,7 @@ MVP = Phases 0–5. Each phase is sized for one agent session (or a few) and end
 | 15 | [Add to project and session summaries](phases/15-add-to-project.md) | 14 | 16 | ☑ Done (live checks S1–S3 and manual row 17 open) |
 | 16 | [Project agent core](phases/16-agent-core.md) | 12, 13 | 10, 11, 14, 15 | ☑ Done (live checks A1–A4 open) |
 | 17 | [Project chat](phases/17-project-chat.md) | 15, 16 | – | ☑ Done (live check A1 and manual row 18 open) |
-| 18 | [Hardening and the 2.0 release](phases/18-release-2.md) | 10–17, 19–21 | – | ☐ Not started |
+| 18 | [Hardening release 2](phases/18-release-2.md) | 10–17, 19–22 | – | ☐ Not started (release 2 is in 1.1.0, not yet given to colleagues: D40) |
 | 19 | [Gemini for the pipeline and summaries](phases/19-gemini-summaries.md) | 15 | 16, 17 | ☑ Done (live checks G1–G3 and manual row 19 open) |
 | 20 | [Gemini for the project agent](phases/20-gemini-agent.md) | 16, 17, 19 | – | ☑ Done (live checks A1–A4 with Gemini, and manual row 20, open) |
 | 21 | [Chat history in the project folder](phases/21-chat-history.md) | 14, 16, 17, 20 | – | ☑ Done (live checks H1–H3 open) |
@@ -333,8 +333,9 @@ MVP = Phases 0–5. Each phase is sized for one agent session (or a few) and end
 
 Status values: ☐ Not started · ◐ In progress · ☑ Done.
 
-Phases 0–9 are release 1. Phases 10–20 are release 2 (Projects). Their dependency
-graph is in [PROJECTS.md](PROJECTS.md) §8, and the graph below covers release 1 only.
+Phases 0–9 are release 1. Phases 10–22 are release 2 (Projects). Their dependency
+graph is in [PROJECTS.md](PROJECTS.md) §8, and the graph below covers release 1 only. Release 2 is in 1.1.0, with
+Phases 9, 24 and 26, but 1.1.0 hasn't been given to colleagues. Phase 18 hardens it for the next release (D40).
 
 ```mermaid
 graph LR
@@ -370,11 +371,11 @@ dependency is merged.
 | M2 — Translation | 6 | English output for German/French recordings |
 | M3 — Playback | 7 | Click a turn to listen |
 | M4 — Release 1.0 | 8 | Polished, documented, released on SharePoint |
-| M5 — Release 2.0 | 10–20 | Projects: a shared OneDrive folder of sessions, summaries and a project chat with checked quotes (Claude or Gemini), and keyword search |
+| M5 — Release 2 | 10–22 | Projects: a shared OneDrive folder of sessions, summaries and a project chat with checked quotes (Claude or Gemini), and keyword search. In 1.1.0; Phase 18's release is the first colleagues get (D40). |
 
 ## 8. How agents should work
 
-1. Read [AGENTS.md](../AGENTS.md), this file, your phase file, and the reference docs it lists. For Phases 10–20,
+1. Read [AGENTS.md](../AGENTS.md), this file, your phase file, and the reference docs it lists. For Phases 10–22,
    also read [PROJECTS.md](PROJECTS.md).
 2. Branch `phase-N-<slug>`. Set the phase status to ◐ in the table above.
 3. Implement the tasks. Keep to the contracts in the phase files. Do not change the canonical model without

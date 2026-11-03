@@ -209,6 +209,8 @@ is slower, but our payloads (one transcript, a few translation batches) are smal
     back field by field, and `TranscriptDocSchema` ignores a doc that doesn't match).
   - A new optional preference with a default isn't a shape change.
   - Details: [RELEASING.md](RELEASING.md#saved-data-across-versions).
+  - Fields a reader doesn't know: D38.
+  - The project folder's files, since 1.1.0: D40.
 
 ### T10 — The `braces` npm-audit advisory is accepted
 `npm audit` reports 5 high-severity advisories for `braces` (GHSA-vfj7-8cjw-p6xm, a denial of service through
@@ -229,6 +231,7 @@ deeply nested patterns), via `micromatch`/`fast-glob` in `vite-plugin-singlefile
     Anything that later reads `words` (word highlighting, the AI audit F1) must allow for that.
   - No change to the stored shape, so D18 doesn't apply.
   - An English translation is not updated or flagged when the original changes. Users translate again if needed.
+    *Changed by D39: a turn changed since it was translated is marked, and only those turns are translated again.*
   - Splitting, merging and reassigning turns, and undo across turns, stay in future.md F3.
 
 ## Release 2: Projects (agreed with the product owner, 2026-10-15)
@@ -268,6 +271,7 @@ summarise them.
   - A quote then sits next to the claim it supports, so nobody has to match the two up.
   - The summary file's shape changed before release 2 shipped, so D18 needs no migration: `schemaVersion` stays 1.
     Summary files from before the change read as invalid; summarise those sessions again.
+    *1.1.0 shipped after this change (D40), so a further change to the summary file needs D18.*
 
 ### D22 — Project agent: Claude only, keyword search, quotes copied with their citation
 - **Decision:**
@@ -506,6 +510,7 @@ summarise them.
   - **Saved chats** gain a third message kind, `role: 'compaction'` (the summary, its focus text, cost and model).
     `CHAT_SCHEMA_VERSION` stays 1, since no release has written a chat file yet. A reopened chat resumes from its
     latest summary and the questions and answers after it.
+    *1.1.0 shipped chat files with this kind (D40), so a further change to them needs D18.*
 - **Why:** past 600k tokens, starting a new chat lost everything the agent had worked out. A summary keeps the
   conclusions, the evidence and what was searched, at a small fraction of the size.
 - **Consequences:**
@@ -612,6 +617,8 @@ summarise them.
     everything older ones wrote. An **older** release ignores a last transcript, and reports a project transcript as
     unreadable, when its hint is one of the new languages. Auto-detected transcripts and English/German/French ones
     are unaffected. Landing this before the 2.0 release (Phase 18) keeps project folders out of it.
+    *It shipped in 1.1.0, the first release with projects (D40), so no release reads project folders with the
+    narrower hint.*
   - A saved hint the provider doesn't offer falls back to Auto-detect.
   - Right-to-left display and export (Arabic, Hebrew, Persian, Urdu) are not handled: `future.md` F4.
 
@@ -632,3 +639,110 @@ summarise them.
 - **Consequences:** the en/de/fr benchmark is unchanged (the ASCII fast paths are untouched). Dictionary segmentation
   depends on the browser's ICU, so a word boundary can differ slightly between Chromium versions; queries and text are
   segmented the same way in one browser.
+
+### D38 — Readers keep the fields they don't know (2026-11-03; audit DES-1)
+- **Decision:** data that DeScribe reads and writes back keeps every field this build doesn't know, at every level.
+  Its zod schemas are `z.looseObject`, and its writers start from the object that was read:
+  - the project file and its brief (`saveBrief` spreads both);
+  - the transcript doc, in the project folder and in IndexedDB (Output's edits spread);
+  - chat files, their author and their messages (a saved message is written back exactly as it was read).
+- **Why:** colleagues on different builds share one project folder: the HTML file is downloaded by hand, and the Store
+  app updates itself. Plain `z.object` strips unknown keys, so the first older build to edit the brief, a transcript
+  or a chat deleted every field a newer build had added, for everyone. D18 promises that an older release may open
+  data a newer one wrote, and D26 that older builds ignore a new optional field; both need this.
+- **Consequences:**
+  - A new optional field isn't a shape change (D18), and builds from this one on keep it.
+  - 1.0.0 and 1.1.0 still strip unknown fields. While colleagues may run them, a field whose loss would matter needs
+    a `schemaVersion` bump instead, which those builds refuse to read or write.
+  - Still shape changes, because older builds report the file as unreadable: a new enum value, a new chat message
+    `role`, a field that becomes required.
+  - Not covered, because they are replaced rather than rewritten:
+    - summary files: an older build that regenerates one writes it without the newer fields;
+    - the transcript file's wrapper (`kind`, `schemaVersion`, `savedAt`, `doc`), made anew on every save, so new
+      fields go in `doc`;
+    - a copy of a colleague's chat, a new file that keeps its messages' fields but not the file's own;
+    - the corpus cache and the transcript link, which are rebuilt from the files.
+
+### D39 — English that is out of date is marked, and only its turns are translated again (2026-11-03; audit DES-2)
+- **Decision:** a translation records what it was made from: `Translation.sourceHashes`, the hash of each turn's text
+  when it was translated (`domain/translation.ts`). A turn whose text has changed since has **out-of-date** English.
+  - Project features treat it as untranslated: search's English, summaries, the agent and the quote checks never use
+    it (`SessionTurn.en` is `null`). A session with such turns needs translating, so **Summarise**, **Regenerate** and
+    **Add to project** translate first, sending only the batches that hold a changed turn.
+  - On Output, the English view marks each changed turn, **Translate** becomes **Update English…**, which translates
+    only those turns, and the export dialog says how many turns of the English are out of date. The export itself
+    still writes the stored English.
+  - The translation's `provider` and `model` name the last run.
+- **Why:** D19 accepted stale English when it was only a view and an export. In release 2 the English is the research
+  object: summaries are written from it, and the agent reads and quotes it. After a German transcript was corrected,
+  **Regenerate** summarised the uncorrected English, and nothing said so.
+- **Consequences:**
+  - A new optional field (D18, D38). A translation without it, made before this change, counts as current, as it did
+    before. The first edit with this build records the turns as they were before it, so that edit and later ones
+    are noticed.
+  - 1.0.0 and 1.1.0 drop the field when they save a transcript (D38). Its translation then counts as current until
+    the next edit with a newer build: no worse than before, so no `schemaVersion` bump.
+  - The corpus cache isn't cleared. Its entries were made from files without the field, which read the same as before.
+    The one gap is a file this build wrote that an older build on the same computer cached first: until the file
+    next changes, that computer counts its English as current, and Output may ask to **Reload** or **Keep mine**.
+  - `transcriptHash` covers only English that is current, so a summary made from stale English is out of date, and
+    the hash of a transcript with no changed turns stays as it was.
+  - D19's bullet on translations is replaced.
+
+### D40 — Release 2 is in 1.1.0; the next release is the first colleagues get with projects (2026-11-03; audit DOC-1)
+- **Decision** (maintainer): 1.1.0 (2026-11-01) holds release 2, Phases 10–22, with Edit text (Phase 9), the desktop
+  app (24) and more languages (26). It counts as released: its version and CHANGELOG entry stay as they are, and its
+  source is on GitHub. It hasn't been given to colleagues: no HTML file on SharePoint, no Store upload.
+  - Phase 18 hardens release 2. Its release takes the next version by RELEASING.md's rules (1.2.0 unless it drops
+    support for something), so 2.0.0 is no longer kept for it. "Release 2" stays the name of the Projects work.
+  - That release is the first that colleagues get with projects.
+- **Why:** from Phase 11 on, `main` held release-2 work that was to wait for Phase 18 (Phase 10), and 1.1.0 was cut
+  from it first. Its commit didn't pass the e2e gate (audit BUG-1), and it lacks the audit's fixes, D38 and D39 among
+  them. Several decisions relied on no release having written a project file.
+- **Consequences:**
+  - "No release has written it yet" no longer excuses a shape change. 1.1.0 writes every project file:
+    `describe-project.json`, `sessions/*.transcript.json` and `*.summary.json`, and `chats/*.chat.json`. D18 covers
+    them as it covers browser storage, with each file's `schemaVersion` in place of a namespace: a new optional field
+    (D38), or a `schemaVersion` bump with a reader for the old shape in `src/storage/`.
+  - D21, D33 and D37 changed shapes before or in 1.1.0, so each held when it was made. Each now points here.
+  - Phase 18 starts with robustness and the live checks. Its CHANGELOG entry covers what 1.1.0 added too, since
+    colleagues never had 1.1.0.
+  - D38 and D39 still name 1.1.0: anyone can build it from GitHub.
+  - Not covered: Phase 24's Store listing that only a direct link reaches. Only the maintainer uses it, and any build
+    can go there.
+
+### D41 — Errors keep their technical details behind Technical details (2026-11-03; audit DES-3)
+- **Decision:** under each provider error the app shows, a closed **Technical details** (`ErrorDetails.vue`) holds
+  what a report needs: the build (`DeScribe v…`), the error's kind and HTTP status, and its `detail`, such as the
+  service's own reason, an ElevenLabs request id or a Claude refusal category (`technicalDetails` in
+  `providers/errors.ts`).
+  - It is shown under transcription, translation, pipeline (Output, a summary, the queue's stop) and chat errors,
+    and only when the error has a status or a detail.
+  - It sits outside the error's alert, so screen readers hear only the message. The text selects in one click.
+  - Every saved key is redacted from it as well. Providers already redact the key they used, but stores wrap
+    unexpected errors with their raw message, which was never shown before.
+- **Why:** providers filled `detail` carefully and nothing read it. A colleague's "Claude declined to process this
+  text" arrived with no category, reason or request id, and with Phase 18's live checks open, field reports are the
+  main evidence. D13 allows detail behind a `<details>`.
+- **Consequences:**
+  - Not covered: key tests in Settings (providers return only a message), folder errors (they have no detail), and
+    Claude's request id, which `claude.ts` doesn't record yet.
+  - `detail` is now user-visible text. It stays technical and short, and never holds a key (AGENTS.md rule 3).
+
+### D42 — A turn that comes back empty twice keeps its original text (2026-11-03; audit BUG-8)
+- **Decision:** when a translation batch's reply leaves turns empty, the batch is retried once, as before. If the
+  retry still leaves turns empty, and nothing else is wrong with it, those turns keep their original text as their
+  English (`checkReply`'s `keepOriginal` in `features/translation/translate.ts`).
+  - It applies to at most a third of the batch's turns, and always to one, so a batch of one turn can't get stuck.
+    A reply that leaves more empty still fails, as does one with a missing, extra or duplicate id.
+  - Nothing records which turns were kept (maintainer). The English view shows their original text.
+- **Why:** a turn the model keeps returning empty, such as one that is only "(lacht)" or a name, stopped the run,
+  and **Resume** sent the same batch again. A session in another language could then never be translated, so its
+  **Add to project**, **Summarise** and **Regenerate** couldn't finish either.
+- **Consequences:**
+  - No new field, so no D18 or D40 question.
+  - The kept text counts as current English (D39) until the turn is edited. **Update English…** doesn't offer it,
+    and an edit makes it out of date, so it is sent again.
+  - The English view, the export, search, summaries, the agent and the quote checks see the original text as that
+    turn's English, as they do for a turn the model returns unchanged.
+  - A third matches the summaries' retry threshold.

@@ -11,8 +11,13 @@ import ConfirmDialog from './ConfirmDialog.vue';
 // runs after the dialog closes; TranslateButton shows its progress (DECISIONS.md D14).
 const props = defineProps<{
   open: boolean;
-  /** A translation exists already, so this one replaces it. */
-  replaces: boolean;
+  /**
+   * `replace`: a translation exists already, and this one replaces it. `update`: some turns changed since it was
+   * made, and only those are translated (DECISIONS.md D39).
+   */
+  mode: 'new' | 'update' | 'replace';
+  /** How many turns changed, for `update`. */
+  changed?: number;
 }>();
 const emit = defineEmits<{ translate: [provider: LlmProviderId, model: string]; cancel: [] }>();
 
@@ -38,6 +43,13 @@ const keyNeeded = ref(false);
 const dontShowAgain = ref(false);
 
 const info = computed(() => PROVIDERS.find((p) => p.id === provider.value) ?? PROVIDERS[0]!);
+const message = computed(() => {
+  if (props.mode === 'replace') return 'This replaces the English translation.';
+  if (props.mode === 'new') return '';
+  const n = props.changed ?? 0;
+  return `Translates only the ${n === 1 ? 'turn' : `${n} turns`} that changed.`;
+});
+const CONFIRM_LABELS = { new: 'Translate', update: 'Update', replace: 'Re-translate' } as const;
 const keyMissing = computed(() => settings.keyFor(provider.value).trim() === '');
 const showNotice = computed(() => !settings.hideTranslationNotice);
 
@@ -80,8 +92,8 @@ function onConfirm(): void {
   <ConfirmDialog
     :open="open"
     title="Translate to English"
-    :message="replaces ? 'This replaces the English translation.' : ''"
-    :confirm-label="replaces ? 'Re-translate' : 'Translate'"
+    :message="message"
+    :confirm-label="CONFIRM_LABELS[mode]"
     :confirm-disabled="keyMissing"
     @confirm="onConfirm"
     @cancel="emit('cancel')"

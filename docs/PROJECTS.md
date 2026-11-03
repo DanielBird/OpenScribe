@@ -171,8 +171,9 @@ interface SessionSummaryFile {
 }
 ```
 
-The new files have their own `kind` and `schemaVersion`, so D18 applies to them from the start. The handle to the
-folder is kept in IndexedDB under `describe.v1.projectFolder`. That is a new key, not a change of shape.
+The new files have their own `kind` and `schemaVersion`, so D18 applies to them from the start. A build keeps the
+fields it doesn't know when it writes a file back (D38). The handle to the folder is kept in IndexedDB under
+`describe.v1.projectFolder`. That is a new key, not a change of shape.
 
 **Permissions.**
 - The first time, **Open project…** or **New project…** opens the folder picker.
@@ -540,11 +541,12 @@ file in [phases/](phases/).
 | 15 | [Add to project and session summaries](phases/15-add-to-project.md) | 14 | 16 |
 | 16 | [Project agent core](phases/16-agent-core.md) | 12, 13 | 10, 11, 14, 15 |
 | 17 | [Project chat](phases/17-project-chat.md) | 15, 16 | – |
-| 18 | [Hardening and the 2.0 release](phases/18-release-2.md) | 10–17, 19, 20 | – |
+| 18 | [Hardening release 2](phases/18-release-2.md) | 10–17, 19–22 | – |
 | 19 | [Gemini for the pipeline and summaries](phases/19-gemini-summaries.md) | 15 | 16, 17 |
 | 20 | [Gemini for the project agent](phases/20-gemini-agent.md) | 16, 17, 19 | – |
 
 Phases 19 and 20 were added on 2026-10-21 (D26). Both ship in 2.0 (maintainer, 2026-10-21), so 18 depends on both.
+*Both shipped in 1.1.0, with Phases 21 and 22 ([ROADMAP.md](ROADMAP.md) §7), and Phase 18 hardens them all (D40).*
 
 ```mermaid
 graph LR
@@ -558,7 +560,7 @@ graph LR
   P13 --> P16
   P15 --> P17[17 Project chat]
   P16 --> P17
-  P17 --> P18[18 Hardening + 2.0]
+  P17 --> P18[18 Hardening]
   P15 --> P19[19 Gemini: pipeline + summaries]
   P19 --> P18
   P16 --> P20[20 Gemini agent]
@@ -620,10 +622,10 @@ It produces `docs/reference/file-system-access.md` and a go/no-go decision.
   - the new-sessions, model and long-chat notices.
 - `AnswerBlocks`, with no `v-html`.
 
-**18 — Hardening and 2.0.**
+**18 — Hardening release 2.**
 - Perf at 300 hours, robustness, axe, keyboard, and the D13 review.
 - The live checks, and a manual checklist for two people on one OneDrive project.
-- The docs, the CHANGELOG, and the release of `DeScribe-v2.0.0.html`.
+- The docs, the CHANGELOG, and the next release, the first colleagues get with projects (D40).
 
 **19 — Gemini for the pipeline and summaries** (D26).
 - `PROJECT_MODELS` lists Gemini models, each with its provider. The model select groups them by provider.

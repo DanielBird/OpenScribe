@@ -275,7 +275,10 @@ describe('SessionSummary', () => {
       kind: 'summarise',
       steps: ['summarise'],
       step: 'summarise',
-      error: new ProviderError('server', 'Claude is busy. Try again.'),
+      error: new ProviderError('server', 'Claude is busy. Try again.', {
+        status: 500,
+        detail: 'api_error: Internal server error',
+      }),
       reconnect: false,
       partial: null,
     };
@@ -284,6 +287,9 @@ describe('SessionSummary', () => {
     const summarise = vi.spyOn(pipeline, 'summarise').mockResolvedValue(undefined);
     show({ summary: false });
     expect(wrapper!.get('[role="alert"]').text()).toBe('Claude is busy. Try again.');
+    expect(wrapper!.get('.status-failed details pre').text()).toContain(
+      'server · HTTP 500\napi_error: Internal server error',
+    );
     await button('Try again')!.trigger('click');
     expect(summarise).toHaveBeenCalledWith(['session-7']);
   });
@@ -319,6 +325,19 @@ describe('SessionSummary', () => {
       .find((b) => b.text() === 'Summarise')!
       .trigger('click');
     expect(summarise).toHaveBeenCalledWith(['session-7']);
+  });
+
+  it('says it translates first when a turn changed since the translation (D39)', async () => {
+    const text = sessionText();
+    const stale = {
+      ...text,
+      turns: text.turns.map((t) => (t.id === 't3' ? { ...t, en: null } : t)),
+    };
+    show({ summary: false, text: stale });
+    await button('Summarise')!.trigger('click');
+    await flushPromises();
+    const dialog = wrapper!.findAll('dialog').find((d) => (d.element as HTMLDialogElement).open)!;
+    expect(dialog.text()).toContain('to translate and summarise');
   });
 
   describe('Open transcript', () => {

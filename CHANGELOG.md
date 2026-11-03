@@ -6,6 +6,29 @@ All notable changes to DeScribe are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **English that is out of date:** after a turn is edited, the English view marks it "Changed since translation",
+  **Translate** becomes **Update English…**, which translates only the changed turns, and the export dialog says how
+  many turns of the English are out of date. Summaries, the project chat and search use only English that is up to
+  date, so **Summarise**, **Regenerate** and **Add to project** translate the changed turns first.
+- **Technical details** under an error from ElevenLabs, Claude or Gemini: the version, the HTTP status and the
+  service's own reason or request id, to paste into a problem report.
+
+### Changed
+
+- **Run** and **Clear saved data** warn when the last transcript's latest changes aren't saved in its project yet,
+  for example before **Reconnect**.
+- Saving a project's brief, a transcript or a chat keeps what a newer version of DeScribe added to the file.
+
+### Fixed
+
+- A summary made while the brief changed is shown as out of date, with **Regenerate**. It counted as up to date.
+- A translation that ran while a colleague changed the transcript was saved onto their version. The step now stops,
+  and **Resume** translates the turns that changed.
+- A translation no longer stops for good when the model returns nothing for a turn. That turn keeps its original
+  text.
+
 ## [1.1.0] - 2026-11-01
 
 ### Added

@@ -58,6 +58,11 @@ export interface Translation {
   model: string;
   createdAt: string; // ISO
   texts: Record<string, string>; // turnId → translated text (complete for all turns)
+  /**
+   * turnId → the hash of the turn's text when it was translated (DECISIONS.md D39). Missing in translations made
+   * before D39, or saved by 1.0.0 or 1.1.0, which count as current.
+   */
+  sourceHashes?: Record<string, string>;
 }
 
 export interface TranscriptDoc {

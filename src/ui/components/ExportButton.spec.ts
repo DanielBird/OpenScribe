@@ -3,7 +3,7 @@ import { createPinia, setActivePinia } from 'pinia';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { EXPORT_ERROR, useExportStore } from '../../stores/export';
 import { useTranscriptStore } from '../../stores/transcript';
-import { makeDoc, withTranslation } from '../../testing/transcriptDoc';
+import { makeDoc, withSourceHashes, withTranslation } from '../../testing/transcriptDoc';
 import ExportButton from './ExportButton.vue';
 import ExportDialog from './ExportDialog.vue';
 
@@ -43,6 +43,14 @@ describe('ExportButton', () => {
     expect(dialogOpen()).toBe(false);
   });
 
+  it('tells the dialog how many turns of the English are out of date (D39)', async () => {
+    const { button } = await setup(withSourceHashes(withTranslation(makeDoc())));
+    useTranscriptStore().editTurnText('t3', 'Wie lange?');
+    await button.trigger('click');
+    await flushPromises();
+    expect(wrapper!.getComponent(ExportDialog).props('stale')).toBe(1);
+  });
+
   it('asks which version when a translation exists, defaulting to the view', async () => {
     const { download, button } = await setup(withTranslation(makeDoc()));
     useTranscriptStore().view = 'en';
@@ -50,7 +58,7 @@ describe('ExportButton', () => {
     await flushPromises();
     expect(dialogOpen()).toBe(true);
     const dialog = wrapper!.getComponent(ExportDialog);
-    expect(dialog.props()).toMatchObject({ language: 'German', initial: 'en' });
+    expect(dialog.props()).toMatchObject({ language: 'German', initial: 'en', stale: 0 });
 
     dialog.vm.$emit('download', 'en');
     await flushPromises();

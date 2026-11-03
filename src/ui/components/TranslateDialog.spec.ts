@@ -26,9 +26,9 @@ describe('TranslateDialog', () => {
     wrapper = null;
   });
 
-  async function open(replaces = false) {
+  async function open(mode: 'new' | 'update' | 'replace' = 'new', changed = 0) {
     wrapper = mount(TranslateDialog, {
-      props: { open: false, replaces },
+      props: { open: false, mode, changed },
       attachTo: document.body,
     });
     await wrapper.setProps({ open: true });
@@ -44,7 +44,9 @@ describe('TranslateDialog', () => {
       .get<HTMLInputElement>('input');
   const modelSelect = () => wrapper!.get<HTMLSelectElement>('select');
   const confirm = () =>
-    wrapper!.findAll('button').find((b) => ['Translate', 'Re-translate'].includes(b.text()))!;
+    wrapper!
+      .findAll('button')
+      .find((b) => ['Translate', 'Re-translate', 'Update'].includes(b.text()))!;
   const keyField = () => wrapper!.findComponent(ApiKeyField);
 
   it('opens with the last provider and model, Claude by default', async () => {
@@ -138,9 +140,19 @@ describe('TranslateDialog', () => {
 
   it('says that it replaces an existing translation', async () => {
     useSettingsStore().claudeKey = 'test-key';
-    await open(true);
+    await open('replace');
     expect(dialog().text()).toContain('This replaces the English translation.');
     expect(confirm().text()).toBe('Re-translate');
+  });
+
+  it('says how many turns an update translates (D39)', async () => {
+    useSettingsStore().claudeKey = 'test-key';
+    await open('update', 3);
+    expect(dialog().text()).toContain('Translates only the 3 turns that changed.');
+    expect(dialog().text()).not.toContain('replaces');
+    expect(confirm().text()).toBe('Update');
+    await wrapper!.setProps({ changed: 1 });
+    expect(dialog().text()).toContain('Translates only the turn that changed.');
   });
 
   it('emits cancel', async () => {

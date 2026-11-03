@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ProviderError } from '../../providers/errors';
 import { useTranscriptStore } from '../../stores/transcript';
 import { useTranslationStore } from '../../stores/translation';
-import { makeDoc, withTranslation } from '../../testing/transcriptDoc';
+import { makeDoc, withSourceHashes, withTranslation } from '../../testing/transcriptDoc';
 import TranslateButton from './TranslateButton.vue';
 import TranslateDialog from './TranslateDialog.vue';
 
@@ -66,7 +66,19 @@ describe('TranslateButton', () => {
   it('reads Re-translate… when a translation exists', async () => {
     await setup(withTranslation(makeDoc()));
     expect(button('Re-translate…')).toBeDefined();
-    expect(wrapper!.getComponent(TranslateDialog).props('replaces')).toBe(true);
+    expect(wrapper!.getComponent(TranslateDialog).props('mode')).toBe('replace');
+  });
+
+  it('reads Update English… once a turn changed since the translation (D39)', async () => {
+    await setup(withSourceHashes(withTranslation(makeDoc())));
+    useTranscriptStore().editTurnText('t2', 'Danke.');
+    useTranscriptStore().editTurnText('t4', 'Zwei Jahre.');
+    await flushPromises();
+    expect(button('Update English…')).toBeDefined();
+    expect(button('Re-translate…')).toBeUndefined();
+    const dialog = wrapper!.getComponent(TranslateDialog);
+    expect(dialog.props('mode')).toBe('update');
+    expect(dialog.props('changed')).toBe(2);
   });
 
   it.each([
@@ -110,6 +122,18 @@ describe('TranslateButton', () => {
     expect(button('Translate to English')).toBeDefined(); // or start over
     await button('Resume')!.trigger('click');
     expect(resume).toHaveBeenCalledOnce();
+  });
+
+  it('shows the technical details of an error', async () => {
+    const { store } = await setup();
+    store.error = new ProviderError('bad_output', 'Claude sent a reply DeScribe could not read.', {
+      detail: 'batch 2: missing id t61',
+    });
+    store.status = 'error';
+    await flushPromises();
+    expect(wrapper!.get('.failed details pre').text()).toContain(
+      'bad_output\nbatch 2: missing id t61',
+    );
   });
 
   it('announces a finished translation', async () => {

@@ -216,6 +216,27 @@ describe('createAgentTools', () => {
       expect(result.content).toContain('t2 [00:00:30] Anna: La nuit, sur le chargeur.');
     });
 
+    it('marks the turns changed since the translation, which have no English (D39)', async () => {
+      const session = makeSessionText(1, {
+        languageCode: 'deu',
+        turns: [
+          { id: 't1', speakerId: 'speaker_0', start: 5, text: 'Wann?', en: 'When?' },
+          { id: 't2', speakerId: 'speaker_1', start: 40, text: 'Abends, korrigiert.', en: null },
+        ],
+      });
+      const { call } = tools(createCorpusReader([session], new Map()));
+      const result = await call('read_transcript', { session: 's1' });
+      const [header, ...lines] = result.content.split('\n');
+      expect(header).toMatch(
+        /· English, except turns marked \(original\): changed since the translation, so they can't be quoted$/,
+      );
+      expect(lines[0]).toMatch(/^t1 \[00:00:05\] [^(]+: When\?$/);
+      expect(lines[1]).toMatch(/^t2 \[00:00:40\] .+ \(original\): Abends, korrigiert\.$/);
+
+      const first = await call('read_transcript', { session: 's1', from: 't1', to: 't1' });
+      expect(first.content.split('\n')[0]).toMatch(/· English$/);
+    });
+
     it('reports unknown sessions and turns', async () => {
       const { call } = tools();
       await expect(call('read_transcript', { session: 's9' })).rejects.toThrow(

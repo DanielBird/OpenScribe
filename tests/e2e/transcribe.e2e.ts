@@ -146,6 +146,12 @@ test('a rejected key offers Back to setup, not Try again', async ({ page, consol
   await expect(jobStatus(page).getByRole('status')).toHaveText(
     'ElevenLabs rejected the API key. Check the key in Settings.',
   );
+  // What a report needs, from the response, under the message.
+  const details = jobStatus(page).locator('details pre');
+  await expect(details).toBeHidden();
+  await jobStatus(page).getByText('Technical details').click();
+  await expect(details).toContainText('auth · HTTP 401');
+  await expect(details).toContainText('(request fixture-request-0003)');
   await expect(page.getByRole('button', { name: 'Try again' })).toHaveCount(0);
   await page.getByRole('button', { name: 'Back to setup' }).click();
   await expect(page.getByRole('heading', { level: 1, name: 'Setup' })).toBeFocused();

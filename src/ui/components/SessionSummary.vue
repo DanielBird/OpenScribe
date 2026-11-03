@@ -6,6 +6,7 @@ import {
   englishText,
   isEnglishSession,
   isTranslatedSession,
+  lacksEnglish,
 } from '../../domain/corpus/sessionText';
 import { NOT_DISCUSSED, type SummaryQuote } from '../../domain/summary';
 import { formatDate, formatTimestamp, languageName } from '../../domain/transcript';
@@ -16,6 +17,7 @@ import { useProjectStore } from '../../stores/project';
 import { useTranscriptStore } from '../../stores/transcript';
 import { useConfirm } from '../composables/useConfirm';
 import ConfirmDialog from './ConfirmDialog.vue';
+import ErrorDetails from './ErrorDetails.vue';
 import PipelineStatus from './PipelineStatus.vue';
 import QuoteCard from './QuoteCard.vue';
 import SummariseDialog from './SummariseDialog.vue';
@@ -209,6 +211,7 @@ watch(
     <div v-else-if="status === 'failed' && failure" class="status status-failed">
       <p role="alert">{{ failure.error.userMessage }}</p>
       <button type="button" class="button" @click="summarise">Try again</button>
+      <ErrorDetails :error="failure.error" />
     </div>
     <div v-else-if="status === 'stale'" class="status">
       <p>Out of date: the transcript or the brief has changed.</p>
@@ -311,9 +314,7 @@ watch(
       title="Summarise"
       message=""
       confirm-label="Summarise"
-      :translates="
-        status !== 'ok' && !!text && !isEnglishSession(text) && !isTranslatedSession(text)
-      "
+      :translates="status !== 'ok' && !!text && lacksEnglish(text)"
       @confirm="onKeyConfirmed"
       @cancel="keyDialog = false"
     />

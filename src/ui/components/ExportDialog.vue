@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue';
+import { computed, ref, watch } from 'vue';
 import type { TranscriptVersion } from '../../domain/transcript';
 import ConfirmDialog from './ConfirmDialog.vue';
 
@@ -10,10 +10,18 @@ const props = defineProps<{
   language: string;
   /** Selected when the dialog opens: the version the view shows. */
   initial: TranscriptVersion;
+  /** Turns whose English is out of date: changed since they were translated (DECISIONS.md D39). */
+  stale?: number;
 }>();
 const emit = defineEmits<{ download: [version: TranscriptVersion]; cancel: [] }>();
 
 const choice = ref<TranscriptVersion>(props.initial);
+const englishLabel = computed(() => {
+  const n = props.stale ?? 0;
+  return n > 0
+    ? `English translation (${n === 1 ? '1 turn' : `${n} turns`} out of date)`
+    : 'English translation';
+});
 watch(
   () => props.open,
   (open) => {
@@ -38,7 +46,7 @@ watch(
       </label>
       <label class="choice">
         <input v-model="choice" type="radio" name="export-version" value="en" />
-        English translation
+        {{ englishLabel }}
       </label>
     </fieldset>
   </ConfirmDialog>

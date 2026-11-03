@@ -89,8 +89,9 @@ To fix misheard words and names, click **Edit text** above the transcript. The t
 Speakers, timestamps and turns stay as they are. While you edit, clicking the text places the cursor; click the
 timestamp to listen.
 
-The Word file uses the corrected text. An English translation is not updated: translate again if you need the
-corrections in English.
+The Word file uses the corrected text. If there is an English translation, each turn you change is marked
+**Changed since translation** in the English view, and **Translate** becomes **Update English…**, which translates
+only those turns.
 
 ## 5. Glossary tips
 
@@ -119,7 +120,8 @@ The button doesn't appear for English recordings.
 **What is sent:** the transcript text, the speaker names and your glossary go to the provider you pick. The audio is
 never sent.
 
-If something fails part-way, **Resume** continues where it stopped.
+If something fails part-way, **Resume** continues where it stopped. A turn that can't be translated keeps its
+original text.
 
 ## 7. Listen along
 
@@ -185,7 +187,8 @@ one, shows the project's **Model** (change it there if you like), and asks for t
 it's missing. Click **Add**. DeScribe then,
 in the actions row:
 1. saves the transcript in the project folder (the recording itself stays on your computer);
-2. translates it to English with the project's model, if it's in another language and has no English yet;
+2. translates it to English with the project's model, if it's in another language and has no English yet, or only
+   the turns changed since it was translated;
 3. writes its summary.
 
 You can keep reading and renaming speakers meanwhile. If a step fails, the session stays in the project and
@@ -214,7 +217,8 @@ Each finding and theme has up to two quotes that support it.
 ### When a summary is out of date
 
 A summary is out of date (⟳) when its transcript or the project's brief has changed since it was made. It's still
-shown, with **Regenerate**. **Summarise all (N)** at the foot of the list makes every missing, out-of-date or failed
+shown, with **Regenerate**. If you corrected a translated transcript, Regenerate first translates the turns you
+changed, so the summary and its quotes use the corrected English. **Summarise all (N)** at the foot of the list makes every missing, out-of-date or failed
 summary, one session at a time; it asks first, with the number of sessions and hours. A missing or wrong key, or
 an exhausted quota, stops it, and so does a rate limit with a Gemini model; any other failure is marked on that
 session and the rest carry on.
@@ -268,6 +272,7 @@ what it finds, and uses the summaries for an overview. Then it answers in Englis
 
 | Problem | What to do |
 |---|---|
+| You want to report an error | Open **Technical details** under the message, and paste its text into your report. It never contains your keys. |
 | "Couldn't reach ElevenLabs / Claude / Gemini" | Check your internet connection. On a company network, a proxy may block the APIs: ask IT to allow `api.elevenlabs.io`, `api.anthropic.com` and `generativelanguage.googleapis.com`. |
 | The file is too large or too long | Export only the audio (for example, download the audio of a Teams recording), or convert it to MP3. Split recordings longer than 10 hours. |
 | "This file format can't be played in the browser" | The transcript is fine. To listen, convert the recording to MP3 and attach the copy. WMA, WMV, AVI and AIFF files can't be played. |

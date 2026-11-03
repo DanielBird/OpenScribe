@@ -18,7 +18,12 @@ import type {
 } from '../providers/llm/types';
 import { chatTitle, type ChatFile, type ChatFileAnswer } from '../domain/chat';
 import { FolderError, type FileStat } from '../storage/folder';
-import { COLLEAGUE, makeChatFile } from '../testing/projectSeed';
+import {
+  COLLEAGUE,
+  FUTURE_FIELD,
+  makeChatFile,
+  withFutureChatFields,
+} from '../testing/projectSeed';
 import { makeProjectSession, makeSessionText } from '../testing/projectSessions';
 import { makeSummaryReply } from '../testing/summary';
 import {
@@ -670,6 +675,41 @@ describe('saved chats (D29)', () => {
     expect(copy.file.messages).toHaveLength(6);
     expect(chat.chatId).toBe(copy.file.id);
     expect(chat.ownerName).toBeNull();
+  });
+
+  it('keeps fields a newer build added when it saves your chat again (D38)', async () => {
+    seedProject();
+    const saves = folderSaves();
+    fakeAgent([answers('Yes.')]);
+    const opened = savedChat({ author: { ...useSettingsStore().chatAuthor } });
+    const future = { ...opened, file: withFutureChatFields(opened.file) };
+    const chat = useChatStore();
+
+    chat.open(future);
+    await chat.ask('Even on trips?');
+    await vi.waitFor(() => expect(saves).toHaveLength(1));
+    const saved = saves[0]!.file;
+    expect(saved).toMatchObject({ ...FUTURE_FIELD, author: FUTURE_FIELD });
+    expect(saved.messages.slice(0, 4)).toEqual(future.file.messages);
+    expect(saved.messages[5]).not.toHaveProperty('addedLater');
+  });
+
+  it("a copy of a colleague's chat keeps what a newer build added to its messages only (D38)", async () => {
+    seedProject();
+    const saves = folderSaves();
+    fakeAgent([answers('Yes.')]);
+    const opened = savedChat();
+    const future = { ...opened, file: withFutureChatFields(opened.file) };
+    const chat = useChatStore();
+
+    chat.open(future);
+    await chat.ask('Even on trips?');
+    await vi.waitFor(() => expect(saves).toHaveLength(1));
+    const copy = saves[0]!.file;
+    expect(copy.forkedFrom).toBe(opened.file.id);
+    expect(copy).not.toHaveProperty('addedLater');
+    expect(copy.author).not.toHaveProperty('addedLater');
+    expect(copy.messages.slice(0, 4)).toEqual(future.file.messages);
   });
 
   it('saves as a copy when the file changed elsewhere since it was read', async () => {

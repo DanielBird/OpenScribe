@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PROJECT_FILE } from '../domain/sessionFiles';
 import { memoryFolder } from '../testing/memoryFolder';
 import {
+  FUTURE_FIELD,
   makeProjectFile,
   makeSummaryFile,
   projectFileText,
@@ -10,7 +11,7 @@ import {
   transcriptFileText,
   transcriptPath,
 } from '../testing/projectSeed';
-import { makeDoc, withTranslation } from '../testing/transcriptDoc';
+import { makeDoc, withFutureFields, withTranslation } from '../testing/transcriptDoc';
 import {
   createProject,
   listSessionFiles,
@@ -85,6 +86,18 @@ describe('the project file', () => {
     const newStat = await writeProject(folder, next, stat);
     expect(sameStat(newStat, stat)).toBe(false);
     await expect(readProject(folder)).resolves.toEqual({ project: next, stat: newStat });
+  });
+
+  it('keeps fields a newer build added, in the file and its brief, and writes them back (D38)', async () => {
+    const future = {
+      ...makeProjectFile({ brief: { ...TEST_BRIEF, ...FUTURE_FIELD } }),
+      ...FUTURE_FIELD,
+    };
+    const folder = memoryFolder('P', { [PROJECT_FILE]: JSON.stringify(future) });
+    const { project, stat } = await readProject(folder);
+    expect(project).toEqual(future);
+    await writeProject(folder, { ...project, name: 'Renamed' }, stat);
+    expect(JSON.parse(folder.text(PROJECT_FILE)!)).toEqual({ ...future, name: 'Renamed' });
   });
 
   it('refuses to overwrite a project file someone else changed', async () => {
@@ -188,6 +201,17 @@ describe('session files', () => {
     );
     expect(file.savedAt).toBe('2026-10-02T00:00:00Z');
     expect(file.doc).toEqual(doc);
+  });
+
+  it('keeps fields a newer build added to the doc, and writes them back (D38)', async () => {
+    const doc = withFutureFields(withTranslation(makeDoc()));
+    const path = transcriptPath(doc);
+    const name = path.slice('sessions/'.length);
+    const folder = memoryFolder('P', { [path]: transcriptFileText(doc) });
+    const read = await readTranscriptFile(folder, name);
+    expect(read.file.doc).toEqual(doc);
+    await writeTranscriptFile(folder, read.file.doc, { name, expected: read.stat });
+    expect((JSON.parse(folder.text(path)!) as { doc: unknown }).doc).toEqual(doc);
   });
 
   it.each([

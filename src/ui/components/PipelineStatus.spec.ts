@@ -96,6 +96,24 @@ describe('PipelineStatus', () => {
     expect(resume).toHaveBeenCalledWith('doc-1');
   });
 
+  it('shows the technical details of a failure, and none for a folder error', () => {
+    withState(
+      null,
+      failure({
+        error: new ProviderError('refused', 'Claude declined to process this text.', {
+          detail: 'refusal: cyber',
+        }),
+      }),
+    );
+    wrapper = mountFor();
+    expect(wrapper.get('.failed details pre').text()).toContain('refused\nrefusal: cyber');
+    wrapper.unmount();
+
+    withState(null, failure({ error: new FolderError('permission', FOLDER_MESSAGES.permission) }));
+    wrapper = mountFor();
+    expect(wrapper.find('details').exists()).toBe(false);
+  });
+
   it('asks for the key before Resume when it is missing', async () => {
     useSettingsStore().claudeKey = '';
     const pipeline = withState(null, failure());

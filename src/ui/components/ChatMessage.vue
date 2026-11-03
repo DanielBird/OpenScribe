@@ -3,6 +3,7 @@ import type { CorpusReader } from '../../features/agent/corpus';
 import type { ChatAssistantMessage, ChatUserMessage } from '../../stores/chat';
 import AnswerBlocks from './AnswerBlocks.vue';
 import ChatActivity from './ChatActivity.vue';
+import ErrorDetails from './ErrorDetails.vue';
 
 // One message of the project chat: a question as plain text, or an answer with its quotes and what the agent did.
 // A compaction is a ChatCompaction.
@@ -27,6 +28,7 @@ const emit = defineEmits<{ retry: [] }>();
     <div v-else-if="message.status === 'error' && message.error" class="error">
       <p>{{ message.error.userMessage }}</p>
       <button type="button" class="button" @click="emit('retry')">Try again</button>
+      <ErrorDetails :error="message.error" />
     </div>
     <ChatActivity :activity="message.activity" :cost-usd="message.costUsd" />
   </div>

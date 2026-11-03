@@ -1,19 +1,44 @@
-# Phase 18 — Hardening and the 2.0 release
+# Phase 18 — Hardening release 2
 
-**Goal:** Release 2 is solid at full scale and on real OneDrive projects, its live checks are done, the docs
-describe it, and `Describe-v2.0.0.html` is released.
+**Goal:** Release 2, in 1.1.0 but not yet given to colleagues (D40), is solid at full scale and on real OneDrive
+projects, its live checks are done, the docs describe it, and the next release, `DeScribe-v<version>.html`, is out:
+the first that colleagues get with projects.
 
-**Depends on:** Phases 10–17, 19 and 20 (both in 2.0: D26, maintainer 2026-10-21).
+**Depends on:** Phases 10–17 and 19–22, all in 1.1.0 (D40).
 
 **Read first:**
-- [PROJECTS.md](../PROJECTS.md) (all of it), [DECISIONS.md](../DECISIONS.md) D20–D23 and T11–T13;
+- [PROJECTS.md](../PROJECTS.md) (all of it), [DECISIONS.md](../DECISIONS.md) D20–D23, T11–T13 and D38–D40;
 - [RELEASING.md](../RELEASING.md), [TESTING.md](../TESTING.md);
 - [Phase 8](08-hardening-release.md), the 1.0 version of this phase: follow its pattern;
-- every release-2 Handoff.
+- every release-2 Handoff, and the open findings in [AUDIT-2026-11-03.md](../AUDIT-2026-11-03.md).
 
 ## Tasks
 
-1. **Performance at 300 hours** (`test:perf`, with the generated project). Record the results in TESTING.md, at 1×
+1. **Robustness** (extend `robustness.e2e.ts`):
+   - permission to the folder revoked mid-session;
+   - a transcript deleted while it's open;
+   - a file offline (simulated with the harness's failure mode);
+   - IndexedDB blocked (the project still loads, without the cache);
+   - Claude offline during Add to project and during a chat;
+   - a 10-hour session summarised (a large fixture through the pipeline, with Claude mocked);
+   - a project with a corrupt summary, and with a conflict copy.
+2. **Live checks**, run with the maintainer's keys and only when the maintainer asks during this phase. Record the
+   results in `reference/llm-providers.md`, and V4 and V7 in `reference/elevenlabs-stt.md`.
+   - **S1–S3 (summaries):** quality on a real German session and a real English one, with both models; tokens and
+     cost per hour; the dropped-quote rate.
+   - **A1–A4 (agent),** with both Claude models and, as Phase 20 asks, both Gemini models:
+     - quote recall on 10 questions with known answers (the maintainer prepares them);
+     - cost per question, and the cache read share;
+     - effort `medium` against `high`;
+     - CORS with the agent's headers.
+   - **G1–G3 (Gemini summaries, Phase 19).**
+   - **H1–H2 (a resumed chat, Phase 21),** with Claude and with Gemini. H3 is in task 6.
+   - **C1 (`/compact`, Phase 22).**
+   - **L3 (translation)** and **V4 (a recording of 60 minutes or more),** open since 1.0.
+   - **V7 (more languages, Phase 26),** through manual row 21 in TESTING.md.
+   - Tune what the results call for: the prompts, `AGENT_LIMITS`, and the effort. Record any change of default in
+     DECISIONS.md.
+3. **Performance at 300 hours** (`test:perf`, with the generated project). Record the results in TESTING.md, at 1×
    and at 4× CPU:
    - **Project load:** first load and from the cache.
    - **Search:** a query, which must stay under 200 ms.
@@ -22,37 +47,17 @@ describe it, and `Describe-v2.0.0.html` is released.
      target is the p95 frame time under 50 ms at 1×.
 
    If a target is missed, fix it, or ask the maintainer before changing a design.
-2. **Robustness** (extend `robustness.e2e.ts`):
-   - permission to the folder revoked mid-session;
-   - a transcript deleted while it's open;
-   - a file offline (simulated with the harness's failure mode);
-   - IndexedDB blocked (the project still loads, without the cache);
-   - Claude offline during Add to project and during a chat;
-   - a 10-hour session summarised (a large fixture through the pipeline, with Claude mocked);
-   - a project with a corrupt summary, and with a conflict copy.
-3. **Accessibility and keyboard:** axe on every new state. A keyboard-only pass from Home through a project:
+4. **Accessibility and keyboard:** axe on every new state. A keyboard-only pass from Home through a project:
    reconnect, search, select a session, copy a quote, ask, stop, and go back to Home. Check visible focus
    everywhere. Fix what fails.
-4. **D13 review** of all release-2 UI, with the maintainer:
+5. **D13 review** of all release-2 UI, with the maintainer:
    - Remove repeated wording. Keep detail behind `<details>`, and show messages only when they apply.
    - Record what changed in this file's Handoff.
-5. **Live checks**, run with the maintainer's keys and only when the maintainer asks during this phase. Record the
-   results in `reference/llm-providers.md`.
-   - **S1–S3 (summaries):** quality on a real German session and a real English one, with both models; tokens and
-     cost per hour; the dropped-quote rate.
-   - **A1–A4 (agent):**
-     - quote recall on 10 questions with known answers (the maintainer prepares them), with both models;
-     - cost per question, and the cache read share;
-     - effort `medium` against `high`;
-     - CORS with the agent's headers.
-   - **L3 (translation),** if it's still open.
-   - **G1–G3 (Gemini summaries, Phase 19),** if they're still open.
-   - Tune what the results call for: the prompts, `AGENT_LIMITS`, and the effort. Record any change of default in
-     DECISIONS.md.
 6. **The manual OneDrive checklist** (TESTING.md), with two people on two computers, in Edge and Chrome:
    - both open one project;
    - A adds a session; B sees it after focusing the window;
    - B regenerates its summary; A sees the new summary;
+   - A saves a chat; B sees it after sync and a focus (H3, Phase 21);
    - both edit the same transcript, and the change check catches it;
    - files kept online only, then offline.
 7. **Docs:**
@@ -65,20 +70,21 @@ describe it, and `Describe-v2.0.0.html` is released.
    - the About panel;
    - future.md (move PROJECTS.md §10's items there).
 8. **Release:**
-   - Set the version to 2.0.0 and complete the CHANGELOG.
-   - Run `npm run release` (RELEASING.md), including the saved-data check: 1.x data opens in 2.0, and 2.0 doesn't
-     break 1.x (D18).
+   - Set the version by RELEASING.md's rules (D40: 1.2.0 unless it drops support for something), and complete the
+     CHANGELOG. Colleagues never had 1.1.0, so the entry also tells them what 1.1.0 added.
+   - Run `npm run release` (RELEASING.md), including the saved-data check: 1.0.0's saved data and the maintainer's
+     project folders from 1.1.0 open in the new build, and the new build doesn't break 1.0.0 (D18, D40).
    - The release adds no network hosts: confirm that `verify:single-file` still allows only the three.
 
 ## Acceptance criteria
 
-- [ ] Every perf target is met at 300 hours, and the numbers are in TESTING.md.
 - [ ] The robustness, axe and keyboard specs pass, with the cases above.
-- [ ] The D13 review is done, with the maintainer, and recorded.
 - [ ] The live checks the maintainer chose to run are recorded, and any that weren't run are marked pending, with
       the reason.
+- [ ] Every perf target is met at 300 hours, and the numbers are in TESTING.md.
+- [ ] The D13 review is done, with the maintainer, and recorded.
 - [ ] The manual OneDrive checklist has been run in Edge and Chrome, and its results are in TESTING.md.
-- [ ] Every doc above is updated. `release/Describe-v2.0.0.html` and its `.sha256` exist.
+- [ ] Every doc above is updated. `release/DeScribe-v<version>.html` and its `.sha256` exist.
 - [ ] Definition of Done in AGENTS.md.
 
 ## Out of scope
@@ -88,3 +94,12 @@ describe it, and `Describe-v2.0.0.html` is released.
 ## Handoff
 
 *(Perf numbers, live-check results and the tuning they led to, D13 changes, known limitations for the CHANGELOG.)*
+
+**2026-11-03, before the phase started (audit DOC-1, D40).** 1.1.0 already holds release 2 but hasn't been given to
+colleagues, so this phase hardens release 2 rather than bringing it in. Changes to this file:
+- It was "Hardening and the 2.0 release". Robustness and the live checks now come first.
+- The live checks list everything open in 1.1.0: H1–H2, C1, V4 and V7 were added, and H3 joined the OneDrive
+  checklist.
+- The release is numbered by RELEASING.md's rules instead of 2.0.0, and its CHANGELOG entry covers 1.1.0's features.
+
+The other tasks are unchanged.

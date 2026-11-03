@@ -32,6 +32,11 @@ Adapters map SDK errors to `ProviderError` (`src/providers/errors.ts`) with thes
 `quota`, `validation`, `server`, `network`, `aborted`, `refused` (the model declined), `bad_output` (output didn't
 match the schema).
 
+**Translation batches** (`features/translation/translate.ts`, with either provider) are retried once on
+`bad_output`, which includes a reply whose turn ids don't match the request or that leaves a turn's text empty. If
+only empty texts remain on the retry, for at most a third of the batch (and always one turn), those turns keep their
+original text (DECISIONS.md D42).
+
 **Key check (Verify key in Settings).** `verifyClaudeKey` and `verifyGeminiKey` (reached through `verifyLlmKey` in
 `src/providers/index.ts`) list one model: `GET api.anthropic.com/v1/models?limit=1` with `client.models.list`, and
 `GET generativelanguage.googleapis.com/v1beta/models?pageSize=1` with `ai.models.list`. Neither sends text, spends

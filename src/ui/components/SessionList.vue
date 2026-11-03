@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, useId, useTemplateRef, watch } from 'vue';
+import { lacksEnglish } from '../../domain/corpus/sessionText';
 import {
   formatDate,
   formatTimestamp,
@@ -12,6 +13,7 @@ import { useProjectStore } from '../../stores/project';
 import { useSettingsStore } from '../../stores/settings';
 import { useProjectUi } from '../composables/useProjectUi';
 import { useRovingListbox } from '../composables/useRovingListbox';
+import ErrorDetails from './ErrorDetails.vue';
 import PipelineStatus from './PipelineStatus.vue';
 import SummariseDialog from './SummariseDialog.vue';
 
@@ -112,12 +114,7 @@ const confirmMessage = computed(() => {
 
 const translates = computed(() => {
   const ids = new Set(pending.value);
-  return project.sessions.some(
-    (s) =>
-      ids.has(s.sessionId) &&
-      normalizeLanguage(s.text.languageCode) !== 'en' &&
-      s.text.turns.some((t) => t.en === null),
-  );
+  return project.sessions.some((s) => ids.has(s.sessionId) && lacksEnglish(s.text));
 });
 
 function summariseAll(): void {
@@ -184,6 +181,7 @@ watch(
     </div>
     <div v-else-if="!busy && pending.length > 0" class="foot">
       <p v-if="pipeline.stopped" class="error" role="alert">{{ pipeline.stopped.userMessage }}</p>
+      <ErrorDetails v-if="pipeline.stopped" :error="pipeline.stopped" />
       <button type="button" class="button" @click="confirming = true">
         Summarise all ({{ pending.length }})
       </button>
@@ -288,7 +286,8 @@ watch(
   justify-content: center;
 }
 
-.foot .error {
+.foot .error,
+.foot .error-details {
   padding-inline: var(--space-2);
 }
 

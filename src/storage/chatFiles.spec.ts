@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { memoryFolder } from '../testing/memoryFolder';
-import { chatFileText, chatPath, makeChatFile } from '../testing/projectSeed';
+import { chatFileText, chatPath, makeChatFile, withFutureChatFields } from '../testing/projectSeed';
 import { chatFileNameOf, listChatFiles, readChatFile, writeChatFile } from './chatFiles';
 
 describe('chat files', () => {
@@ -33,6 +33,23 @@ describe('chat files', () => {
     delete broken.messages[2]!.summary;
     folder.put(`chats/${name}`, JSON.stringify(broken));
     await expect(readChatFile(folder, name)).rejects.toMatchObject({ kind: 'invalid' });
+  });
+
+  it('keeps fields a newer build added, at every level (D38)', async () => {
+    const base = makeChatFile();
+    base.messages.push({
+      role: 'compaction',
+      id: 'c1',
+      at: '2026-10-20T14:04:00.000Z',
+      summary: 'They charge overnight.',
+      focus: '',
+      costUsd: null,
+      model: 'claude-sonnet-5-5',
+    });
+    const file = withFutureChatFields(base);
+    const folder = memoryFolder('P', { [chatPath(file)]: chatFileText(file) });
+    const { file: read } = await readChatFile(folder, chatFileNameOf(file));
+    expect(read).toEqual(file);
   });
 
   it('keeps the name when the chat goes on', async () => {

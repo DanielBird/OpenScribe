@@ -2,6 +2,7 @@
 import { computed, nextTick, ref, useTemplateRef, watch } from 'vue';
 import { usePipelineStore, type PipelineJob } from '../../stores/pipeline';
 import { useProjectStore } from '../../stores/project';
+import ErrorDetails from './ErrorDetails.vue';
 
 // The pipeline's progress, Cancel, and an error with Resume (PROJECTS.md §5.3), as translation shows its own
 // (DECISIONS.md D14). For one session (Output's actions row, a summary's notice), or for the whole queue (the foot of
@@ -134,6 +135,7 @@ defineExpose({ focus });
       <button ref="resumeButton" type="button" class="button" @click="resume">
         {{ failure.reconnect ? 'Reconnect' : 'Resume' }}
       </button>
+      <ErrorDetails :error="failure.error" />
     </div>
   </div>
   <span class="visually-hidden" role="status" aria-live="polite">{{ announcement }}</span>
