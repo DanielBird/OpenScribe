@@ -1,5 +1,6 @@
 // Test only: a scripted fake `fetch` for the project agent. Request n gets reply n, and every request is kept for
 // assertions. Replies are Messages API responses, streamed as server-sent events by `claudeSse`.
+import type { AgentEvent } from '../providers/llm/types';
 import { claudeSse, type ClaudeSseOptions } from './claudeSse';
 
 export interface SeenRequest {
@@ -109,6 +110,24 @@ export const toolUseBlock = (id: string, name: string, input: Json): Json => ({
   name,
   input,
 });
+
+/** A tool call whose input JSON the SDK's stream can't parse, so the agent sends the request again. */
+export const brokenToolUseBlock = (id: string, name: string): Json => ({
+  type: 'tool_use',
+  id,
+  name,
+  input: '{"query": charg*}',
+});
+
+/** The text as the chat shows it: the streamed deltas, less what each `retry` takes back. */
+export function streamedText(events: readonly AgentEvent[]): string {
+  let text = '';
+  for (const event of events) {
+    if (event.type === 'text') text += event.delta;
+    else if (event.type === 'retry') text = text.slice(0, Math.max(0, text.length - event.discard));
+  }
+  return text;
+}
 
 export const fallbackBlock = (from: string, to: string): Json => ({
   type: 'fallback',

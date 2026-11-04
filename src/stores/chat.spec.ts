@@ -106,6 +106,18 @@ const hangs =
     );
   };
 
+/** A run that streams `text`, sends its request again (taking the text back), streams it again, then waits. */
+const resends =
+  (text: string): Run =>
+  (req) => {
+    req.onEvent({ type: 'text', delta: text });
+    req.onEvent({ type: 'retry', discard: text.length });
+    req.onEvent({ type: 'text', delta: text });
+    return new Promise((_, reject) =>
+      req.signal.addEventListener('abort', () => reject(new ProviderError('aborted', 'Stopped.'))),
+    );
+  };
+
 const fails =
   (error: ProviderError, text = ''): Run =>
   async (req) => {
@@ -539,6 +551,29 @@ function savedChat(overrides: Partial<ChatFile> = {}) {
   return { file, name: 'saved.chat.json', stat: { size: 100, lastModified: 100 } };
 }
 
+/** `chat` as another computer saved it later: one more question and answer, and a new stat. */
+function newerVersion(chat: ReturnType<typeof savedChat>) {
+  const file: ChatFile = {
+    ...chat.file,
+    updatedAt: '2026-10-21T09:01:00.000Z',
+    messages: [
+      ...chat.file.messages,
+      { role: 'user', id: 'q3', at: '2026-10-21T09:00:00.000Z', text: 'At night?' },
+      {
+        role: 'assistant',
+        id: 'a3',
+        at: '2026-10-21T09:01:00.000Z',
+        text: 'Mostly.',
+        status: 'done',
+        activity: [],
+        costUsd: 0.1,
+        model: 'claude-sonnet-5-5',
+      },
+    ],
+  };
+  return { ...chat, file, stat: { size: 200, lastModified: 200 } };
+}
+
 describe('saved chats (D29)', () => {
   it('saves the chat after each answer that ends, under one id, with the stat it was last saved with', async () => {
     seedProject();
@@ -606,6 +641,26 @@ describe('saved chats (D29)', () => {
       ['assistant', 'First.'],
       ['user', 'Three'],
       ['assistant', 'Half'],
+    ]);
+  });
+
+  it('shows and saves the text of a request sent again once, when Stop ends it', async () => {
+    seedProject();
+    const saves = folderSaves();
+    fakeAgent([resends('Let me look.')]);
+    const chat = useChatStore();
+    const asking = chat.ask('One');
+    await Promise.resolve();
+    runFrames();
+    expect(answer(chat)).toMatchObject({ status: 'streaming', text: 'Let me look.' });
+
+    chat.stop();
+    await asking;
+    expect(answer(chat)).toMatchObject({ status: 'stopped', text: 'Let me look.' });
+    await vi.waitFor(() => expect(saves).toHaveLength(1));
+    expect(saves[0]!.file.messages.map((m) => [m.role, 'text' in m ? m.text : m.summary])).toEqual([
+      ['user', 'One'],
+      ['assistant', 'Let me look.'],
     ]);
   });
 
@@ -769,6 +824,69 @@ describe('saved chats (D29)', () => {
     expect(chat.chatId).toBeNull();
     expect(chat.ownerName).toBeNull();
     expect(chat.messages).toEqual([]);
+  });
+
+  it('opening the open chat again reads it again when its file changed meanwhile (audit BUG-9)', async () => {
+    seedProject();
+    const saves = folderSaves();
+    const { resumed } = fakeAgent([answers('Yes.')]);
+    const opened = savedChat({ author: { ...useSettingsStore().chatAuthor } });
+    const newer = newerVersion(opened);
+    const chat = useChatStore();
+
+    chat.open(opened);
+    chat.open(newer);
+    expect(chat.chatId).toBe(opened.file.id);
+    expect(chat.messages.map((m) => m.id)).toEqual(['q1', 'a1', 'q2', 'a2', 'q3', 'a3']);
+
+    await chat.ask('Even on trips?');
+    expect(resumed).toEqual([
+      [
+        {
+          question: 'Where do they charge?',
+          answer: 'By the bed.\n<quote ref="s7/t2">I put them on the charger by the bed.</quote>',
+        },
+        { question: 'At night?', answer: 'Mostly.' },
+      ],
+    ]);
+    await vi.waitFor(() => expect(saves).toHaveLength(1));
+    expect(saves[0]!.file.id).toBe(opened.file.id);
+    expect(saves[0]!.expected).toEqual(newer.stat);
+    expect(saves[0]!.file.messages).toHaveLength(8);
+  });
+
+  it('opening a newer version of the open chat leaves a running answer running', async () => {
+    seedProject();
+    folderSaves();
+    fakeAgent([hangs('Half')]);
+    const opened = savedChat({ author: { ...useSettingsStore().chatAuthor } });
+    const chat = useChatStore();
+    chat.open(opened);
+    const asking = chat.ask('Even on trips?');
+    await Promise.resolve();
+    const before = chat.messages;
+
+    chat.open(newerVersion(opened));
+    expect(chat.running).toBe(true);
+    expect(chat.messages).toBe(before);
+    chat.stop();
+    await asking;
+  });
+
+  it('opening a newer version of the open chat keeps an answer that failed to save', async () => {
+    seedProject();
+    folderSaves([new FolderError('io', 'Failed.')]);
+    fakeAgent([answers('Yes.')]);
+    const opened = savedChat({ author: { ...useSettingsStore().chatAuthor } });
+    const chat = useChatStore();
+    chat.open(opened);
+    await chat.ask('Even on trips?');
+    await vi.waitFor(() => expect(chat.saveError).not.toBeNull());
+    const before = chat.messages;
+
+    chat.open(newerVersion(opened));
+    expect(chat.messages).toBe(before);
+    expect(answer(chat).text).toBe('Yes.');
   });
 
   it('saves nothing when no answer has ended', async () => {

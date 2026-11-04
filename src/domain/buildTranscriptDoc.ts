@@ -7,7 +7,10 @@ import {
   type TranscriptionRequestInfo,
 } from './transcript';
 
-/** Assembles the canonical TranscriptDoc from a provider result plus what was sent. */
+/**
+ * Assembles the canonical TranscriptDoc from a provider result plus what was sent. A result without a language code
+ * takes the language chosen on Setup, if one was.
+ */
 export function buildTranscriptDoc(
   norm: NormalizedTranscription,
   source: SourceInfo,
@@ -26,7 +29,8 @@ export function buildTranscriptDoc(
     request,
     result: {
       providerTranscriptId: norm.providerTranscriptId,
-      languageCode: norm.languageCode,
+      languageCode:
+        norm.languageCode || (request.languageHint === 'auto' ? '' : request.languageHint),
       languageProbability: norm.languageProbability,
       audioDurationSec: norm.audioDurationSec,
     },

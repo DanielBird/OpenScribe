@@ -1,6 +1,7 @@
 import type { Page } from '@playwright/test';
 import {
   clickInHeader,
+  enterKey,
   expect,
   fixture,
   goToGlossary,
@@ -176,6 +177,26 @@ test('a busy service offers Try again, which repeats the request', async ({
   await expect(turns(page)).toHaveCount(5);
   expect(requests).toHaveLength(2);
   // The same request again; only the multipart boundary differs.
+  const unbounded = (body = '') => body.replace(/WebKitFormBoundary\w+/g, 'boundary');
+  expect(unbounded(requests[1]?.body)).toBe(unbounded(requests[0]?.body));
+  dropFailedLoads(consoleErrors);
+});
+
+test('Try again uses a key changed in Settings meanwhile', async ({ page, consoleErrors }) => {
+  const requests = await mockElevenLabs(page, (n) =>
+    n === 0 ? Promise.resolve({ status: 429, body: fixture('error-429') }) : ok(),
+  );
+  await openApp(page);
+  await goToGlossary(page);
+  await run(page);
+  await expect(jobStatus(page).getByRole('status')).toHaveText(
+    "ElevenLabs is busy or your plan's limit was reached. Try again in a minute.",
+  );
+
+  await enterKey(page, 'ElevenLabs API key', 'test-key-2');
+  await page.getByRole('button', { name: 'Try again' }).click();
+  await expect(turns(page)).toHaveCount(5);
+  expect(requests.map((r) => r.key)).toEqual(['test-key', 'test-key-2']);
   const unbounded = (body = '') => body.replace(/WebKitFormBoundary\w+/g, 'boundary');
   expect(unbounded(requests[1]?.body)).toBe(unbounded(requests[0]?.body));
   dropFailedLoads(consoleErrors);

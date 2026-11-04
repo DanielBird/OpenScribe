@@ -28,6 +28,18 @@ All notable changes to DeScribe are recorded here. The format follows
   and **Resume** translates the turns that changed.
 - A translation no longer stops for good when the model returns nothing for a turn. That turn keeps its original
   text.
+- **Try again** and **Start again** after a transcription fails or is cancelled use the ElevenLabs key now in
+  Settings. They sent the key the run started with.
+- When a summary is sent again because many of its quotes weren't found, the reply with the smaller share of them is
+  kept. It kept the one with fewer, even when that reply had far fewer quotes.
+- **Stop** in the project chat, while Claude or Gemini was being asked again after a reply it couldn't use, saved the
+  start of the answer twice. The cost now also counts Claude's first attempt.
+- Selecting the open chat in the **Chats** tab again shows what a colleague added to it since. It did nothing.
+- A fault in DeScribe or Google's library while talking to Gemini says "Something went wrong while talking to
+  Gemini". It said "Couldn't reach Gemini" and blamed the internet connection.
+- A transcript that ElevenLabs returns without a language takes the one chosen on Setup. With Auto-detect, the
+  language is left out: the Word file is named `… - transcript.docx` and has no Language line, and Output says
+  **Original** rather than **Original ()**. The file was named `… - transcript ().docx`.
 
 ## [1.1.0] - 2026-11-01
 

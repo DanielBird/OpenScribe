@@ -1,5 +1,11 @@
 import type { Page } from '@playwright/test';
-import { agentMessage, apiError, textBlock, toolUseBlock } from '../../src/testing/agent';
+import {
+  agentMessage,
+  apiError,
+  brokenToolUseBlock,
+  textBlock,
+  toolUseBlock,
+} from '../../src/testing/agent';
 import { functionCallPart, geminiTurn, geminiUsage, textPart } from '../../src/testing/geminiAgent';
 import {
   projectFiles,
@@ -263,6 +269,50 @@ test('Stop ends the answer at once, keeps what was written, and the next questio
   await expect(answers(page).nth(1)).toContainText('A fresh answer.');
   // The stopped question isn't part of the conversation.
   expect(calls[2]!.body.messages.map((m) => m.role)).toEqual(['user']);
+  hold.resolve();
+});
+
+test('Stop after a request was sent again keeps its text once, on screen and in the chat file', async ({
+  page,
+}) => {
+  const folder = await useProjectFolder(page, SEEDED);
+  const LOOK = 'Let me look through the sessions.';
+  const hold = deferred();
+  const calls = await mockAgent(page, (n) => {
+    // Tool JSON the SDK can't parse: the same request goes again.
+    if (n === 0)
+      return {
+        message: agentMessage([textBlock(LOOK), brokenToolUseBlock('tu_1', 'search_transcripts')]),
+      };
+    if (n === 1)
+      return {
+        message: agentMessage([
+          textBlock(LOOK),
+          toolUseBlock('tu_2', 'search_transcripts', { query: 'charg*' }),
+        ]),
+      };
+    return { after: hold.promise, then: says('Too late.') };
+  });
+  await openChat(page);
+
+  await ask(page, 'Where do people charge?');
+  await expect.poll(() => calls.length).toBe(3);
+  expect(calls[1]!.body.messages).toEqual(calls[0]!.body.messages);
+  const answer = answers(page).first();
+  await expect(answer).toContainText(LOOK);
+  await page.getByRole('button', { name: 'Stop' }).click();
+
+  await expect(answer.locator('.status')).toHaveText('Stopped');
+  expect((await answer.innerText()).split(LOOK)).toHaveLength(2);
+  const savedAnswers = () =>
+    Object.entries(folder.files(ROOT))
+      .filter(([path]) => path.startsWith('chats/'))
+      .flatMap(([, text]) =>
+        (JSON.parse(text) as { messages: { role: string; text?: string }[] }).messages
+          .filter((m) => m.role === 'assistant')
+          .map((m) => m.text),
+      );
+  await expect.poll(savedAnswers).toEqual([LOOK]);
   hold.resolve();
 });
 

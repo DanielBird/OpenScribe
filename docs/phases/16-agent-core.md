@@ -384,3 +384,14 @@ automatic caching); the cache read share is live check A2.
 - `stopped: 'limit'` needs a short notice. A follow-up question still works: it joins the trailing tool results.
 
 **Open:** live checks A1–A4 (`reference/llm-providers.md`) need the maintainer's key.
+
+### 2026-11-04 — A re-sent request takes back its text (audit BUG-5)
+- `AgentEvent` has a new `retry` event, `{ type: 'retry'; discard: number }`, which comes before each re-send of
+  tool JSON the stream couldn't parse. `discard` is the number of characters that attempt streamed, including its
+  `\n\n` break, and the break is emitted again by the retry. The chat store drops that many characters from its draft,
+  so **Stop** during a retry no longer saves the first lines twice. This replaces "A JSON re-send can repeat streamed
+  text" above.
+- The failed attempt's usage now counts, from `stream.currentMessage`. Its output tokens are only what
+  `message_start` reported, because the SDK raises the error before `message_delta`.
+- `src/testing/claudeSse.ts` streams a string `input` as it is, and `src/testing/agent.ts` has `brokenToolUseBlock`
+  and `streamedText` (a type-only import of `AgentEvent`, so Playwright still loads it).

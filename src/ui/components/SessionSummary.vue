@@ -52,11 +52,17 @@ const droppedText = (n: number) =>
     ? "1 quote wasn't found in the transcript and was left out."
     : `${n} quotes weren't found in the transcript and were left out.`;
 
-/** "14 Sept 2026 · 01:32:10 · German, translated" */
+/** "14 Sept 2026 · 01:32:10 · German, translated". A language that is not known is left out ("Translated"). */
 const meta = computed(() => {
   const t = text.value;
   if (!t) return '';
-  const language = languageName(t.languageCode) + (isTranslatedSession(t) ? ', translated' : '');
+  const name = languageName(t.languageCode);
+  const translated = isTranslatedSession(t);
+  const language = name
+    ? name + (translated ? ', translated' : '')
+    : translated
+      ? 'Translated'
+      : null;
   return [
     formatDate(t.recordedAt),
     t.durationSec === null ? null : formatTimestamp(t.durationSec),

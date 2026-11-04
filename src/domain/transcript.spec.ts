@@ -7,6 +7,7 @@ import {
   formatTimestamp,
   joinLines,
   languageName,
+  languageOrUnknown,
   normalizeLanguage,
 } from './transcript';
 
@@ -106,6 +107,15 @@ describe('languageName', () => {
     expect(languageName('zzz')).toBe('ZZZ');
     expect(languageName(' x ')).toBe('X');
     expect(languageName('')).toBe('');
+  });
+});
+
+describe('languageOrUnknown', () => {
+  it('names a language, or says it is not known', () => {
+    expect(languageOrUnknown('deu')).toBe('German');
+    expect(languageOrUnknown('zzz')).toBe('ZZZ');
+    expect(languageOrUnknown('')).toBe('Unknown language');
+    expect(languageOrUnknown('  ')).toBe('Unknown language');
   });
 });
 

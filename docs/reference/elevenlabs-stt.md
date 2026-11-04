@@ -119,6 +119,9 @@ still fail a run with 400 `invalid_keyword`. A live check would send a 49-charac
 ```
 
 Field notes:
+- `language_code` is nullable in the schema, though no response has left it out so far. Without it, the transcript
+  takes the language chosen on Setup. With Auto it has none: the screen and the Word file leave it out, and the
+  prompts call it "Unknown language" ([llm-providers.md](llm-providers.md), session summaries).
 - `words[].type`: `word` | `spacing` | `audio_event`. We never request audio events, but the mapper should accept
   them.
 - `start`, `end` and `speaker_id` are nullable.

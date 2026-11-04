@@ -7,7 +7,7 @@ import {
 } from '../../domain/corpus/sessionText';
 import type { ProjectBrief } from '../../domain/project';
 import { NOT_DISCUSSED } from '../../domain/summary';
-import { formatTimestamp, joinLines, languageName } from '../../domain/transcript';
+import { formatTimestamp, joinLines, languageOrUnknown } from '../../domain/transcript';
 import type { ThemeCount } from './themes';
 
 /** What a summary is made with, besides the session. */
@@ -58,7 +58,7 @@ function recordingDate(ms: number): string | null {
 
 function recordingLine(session: SessionText): string {
   const language =
-    languageName(session.languageCode) +
+    languageOrUnknown(session.languageCode) +
     (isTranslatedSession(session) ? ', translated to English' : '');
   const parts = [
     session.recordingName,

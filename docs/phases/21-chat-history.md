@@ -165,3 +165,14 @@ all from the About text edit in 1ad83c9. Fixed first, in two `fix:` commits (tes
 
 **Possible follow-ups:** delete your own chats (needs a `remove` on `ProjectFolder`), an IndexedDB cache of chat
 files for large projects, and search across chats.
+
+### 2026-11-04 — Selecting the open chat again reads it again (audit BUG-9)
+
+- `open()` in the chat store no longer returns at once for the open chat. When the listed file's stat differs from
+  the one the chat was opened or last saved with (a rescan read a colleague's addition, or the same person's on
+  another computer), it opens the chat again from that file, so its next save expects the new stat rather than
+  forking a copy on `changed`.
+- It still does nothing while an answer or `/compact` runs (opening the same chat must not stop it) and after a save
+  failed (the file doesn't have those answers; the next save forks, as before).
+- A failed answer on screen goes when the chat is opened again: failed answers are never saved (D29).
+- No UI change: `ChatList` already calls `open()` on every selection. Live updating stays out of scope (D29).

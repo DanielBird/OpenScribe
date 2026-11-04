@@ -208,6 +208,22 @@ describe('createAgentTools', () => {
       expect(original.activity).toBe('Read P02 – home visit, Hamburg 00:00:40–00:00:40 (original)');
     });
 
+    it('names a language that is not known as such, here and in the summaries', async () => {
+      const session = makeSessionText(1, {
+        languageCode: '',
+        turns: [{ id: 't1', speakerId: 'speaker_0', start: 5, text: 'Wann?', en: 'When?' }],
+      });
+      const { call } = tools(createCorpusReader([session], new Map()));
+      const original = await call('read_transcript', { session: 's1', original: true });
+      expect(original.content.split('\n')[0]).toBe(
+        's1 · P01 interview.m4a · turns t1–t1 of 1 · Unknown language (original)',
+      );
+      const summaries = await call('get_summaries', { sessions: ['s1'] });
+      expect(summaries.content.split('\n')[0]).toBe(
+        's1 · P01 interview.m4a · Unknown language, translated',
+      );
+    });
+
     it("says when a session isn't translated yet", async () => {
       const result = await tools().call('read_transcript', { session: 's3' });
       expect(result.content.split('\n')[0]).toBe(

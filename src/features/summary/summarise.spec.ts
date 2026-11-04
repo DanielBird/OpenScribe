@@ -54,14 +54,14 @@ const badOutput = () =>
   new ProviderError('bad_output', "Claude sent a reply that DeScribe couldn't read.");
 
 /**
- * `makeSummaryReply` with 5 themes of 2 quotes each, from the first 10 turns of the respondent, `bad` of them changed
- * so they can't be found.
+ * `makeSummaryReply` with up to 5 themes of 2 quotes each, from the first `total` turns of the respondent (at most 10),
+ * `bad` of them changed so they can't be found.
  */
-function withBadQuotes(session: SessionText, bad: number): SessionSummary {
+function withBadQuotes(session: SessionText, bad: number, total = 10): SessionSummary {
   const researcher = session.speakers[0]?.id;
   const quotes: SummaryQuote[] = session.turns
     .filter((turn) => turn.speakerId !== researcher)
-    .slice(0, 10)
+    .slice(0, total)
     .map((turn, i) =>
       i < bad ? { turnId: turn.id, text: `invented words ${i}` } : quoteOf(session, turn),
     );
@@ -175,6 +175,38 @@ describe('summariseSession', () => {
 
     const unreadable = scripted(withBadQuotes(session, 5), badOutput());
     expect((await summariseSession(session, unreadable.provider, OPTIONS)).droppedQuotes).toBe(5);
+  });
+
+  it('keeps the reply with the smaller share of quotes not found, not the one with fewer', async () => {
+    const session = englishSession(40);
+    // 4 of 9 not found, then 1 of 2.
+    const { provider } = scripted(withBadQuotes(session, 4, 9), withBadQuotes(session, 1, 2));
+    const { summary, droppedQuotes } = await summariseSession(session, provider, OPTIONS);
+    expect(droppedQuotes).toBe(4);
+    expect(allQuotes(summary)).toHaveLength(5);
+  });
+
+  it('keeps the reply with more verified quotes when the share not found is the same', async () => {
+    const session = englishSession(40);
+    const half = (total: number) => withBadQuotes(session, total / 2, total);
+
+    const first = scripted(half(6), half(2));
+    expect(
+      allQuotes((await summariseSession(session, first.provider, OPTIONS)).summary),
+    ).toHaveLength(3);
+
+    const second = scripted(half(2), half(6));
+    const { summary, droppedQuotes } = await summariseSession(session, second.provider, OPTIONS);
+    expect(droppedQuotes).toBe(3);
+    expect(allQuotes(summary)).toHaveLength(3);
+  });
+
+  it('counts a reply without quotes as having none not found', async () => {
+    const session = englishSession(40);
+    const { provider } = scripted(withBadQuotes(session, 4, 9), withBadQuotes(session, 0, 0));
+    const { summary, droppedQuotes } = await summariseSession(session, provider, OPTIONS);
+    expect(droppedQuotes).toBe(0);
+    expect(allQuotes(summary)).toHaveLength(0);
   });
 
   it('does not retry when a third of the quotes or fewer are not found', async () => {

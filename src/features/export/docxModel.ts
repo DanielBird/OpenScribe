@@ -44,14 +44,19 @@ export function buildDocModel(doc: TranscriptDoc, opts: DocModelOptions): DocMod
   if (duration !== null) meta.push({ label: 'Duration', value: formatTimestamp(duration) });
 
   meta.push({ label: 'Transcribed', value: formatDate(doc.createdAt) });
-  meta.push({
-    label: 'Language',
-    value: translation
-      ? `English (translated from ${original} with ${PROVIDER_NAMES[translation.provider]}, ${translation.model})`
-      : request.languageHint === 'auto'
-        ? `${original} (detected)`
-        : original,
-  });
+  // An original whose language isn't known has no Language line, and its translation doesn't say what from.
+  const from = original ? ` from ${original}` : '';
+  if (translation) {
+    meta.push({
+      label: 'Language',
+      value: `English (translated${from} with ${PROVIDER_NAMES[translation.provider]}, ${translation.model})`,
+    });
+  } else if (original) {
+    meta.push({
+      label: 'Language',
+      value: request.languageHint === 'auto' ? `${original} (detected)` : original,
+    });
+  }
   meta.push({ label: 'Speakers', value: doc.speakers.map((s) => s.label).join(', ') });
 
   const terms = request.keyterms.length;

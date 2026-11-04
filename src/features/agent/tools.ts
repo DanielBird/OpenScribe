@@ -5,7 +5,7 @@ import { parseQuery } from '../../domain/corpus/query';
 import type { SearchField, SessionHits } from '../../domain/corpus/search';
 import { englishText, type SessionTurn } from '../../domain/corpus/sessionText';
 import type { SummaryQuote } from '../../domain/summary';
-import { formatTimestamp, languageName } from '../../domain/transcript';
+import { formatTimestamp, languageOrUnknown } from '../../domain/transcript';
 import { z } from '../../lib/zod';
 import type { AgentTool } from '../../providers/llm/types';
 import { themeKey, themeVocabulary } from '../summary/themes';
@@ -250,7 +250,7 @@ function readTool(corpus: CorpusReader, budget: AgentBudget): AgentTool {
 
       const english = !input.original;
       const untranslated = english && text.turns.every((turn) => englishText(text, turn) === null);
-      const language = languageName(text.languageCode);
+      const language = languageOrUnknown(text.languageCode);
       // In a translated session, a turn changed since the translation has no English (DECISIONS.md D39): its line
       // is the original, marked as in search results.
       const isOriginal = (turn: SessionTurn) =>

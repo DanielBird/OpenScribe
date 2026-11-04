@@ -12,7 +12,7 @@ import { useTranscriptStore } from './transcript';
 
 export type JobStatus = 'idle' | 'uploading' | 'processing' | 'done' | 'error' | 'cancelled';
 
-/** Everything a run needs, captured when it starts, so Try again repeats exactly the same request. */
+/** Everything a run needs, captured when it starts, so Try again repeats the same request (with the current key). */
 interface RunSnapshot {
   provider: TranscriptionProvider;
   input: TranscriptionInput;
@@ -22,6 +22,7 @@ interface RunSnapshot {
 
 const MESSAGES = {
   noFile: 'Choose a recording on the Setup tab first.',
+  noKey: 'Add your ElevenLabs API key in Settings.',
   unexpected: 'Something went wrong while transcribing. Try again.',
 } as const;
 
@@ -174,10 +175,18 @@ export const useJobStore = defineStore('job', () => {
     endRun();
   }
 
-  /** Repeats the last run with the same file, key, options and terms. */
+  /** Repeats the last run with the same file, options and terms, and the key as it is now. */
   function retry(): Promise<void> {
     if (isActive.value) return Promise.resolve();
-    return lastSnapshot ? run(lastSnapshot) : start();
+    if (!lastSnapshot) return start();
+    // Read the key now, not at start: after a quota or rate-limit error, a key changed in Settings is used.
+    const apiKey = useSettingsStore().elevenLabsKey;
+    if (apiKey.trim() === '') {
+      error.value = new ProviderError('validation', MESSAGES.noKey);
+      status.value = 'error';
+      return Promise.resolve();
+    }
+    return run({ ...lastSnapshot, input: { ...lastSnapshot.input, apiKey } });
   }
 
   /**

@@ -1,6 +1,7 @@
 // Summarises one session in one structured-output request (PROJECTS.md §5.3, DECISIONS.md D21). The reply is
 // checked; an unreadable reply, or one with more than a third of its quotes not found, is sent once more, and
-// the better of the two is kept. Nothing is hashed or written here: the pipeline builds the file (Phase 15).
+// the better of the two is kept: the smaller share of quotes not found, then more verified quotes. Nothing is
+// hashed or written here: the pipeline builds the file (Phase 15).
 import { englishText, type SessionText } from '../../domain/corpus/sessionText';
 import type { SessionSummary } from '../../domain/summary';
 import { ProviderError } from '../../providers/errors';
@@ -57,7 +58,7 @@ export async function summariseSession(
         signal,
       });
       const checked = checkSummary(output, session, opts.brief);
-      if (!best || checked.droppedQuotes < best.droppedQuotes) best = checked;
+      if (!best || isBetter(checked, best)) best = checked;
       if (checked.quoteFailureRate <= MAX_QUOTE_FAILURE_RATE) break;
     } catch (err) {
       const error = asProviderError(err, signal);
@@ -68,6 +69,15 @@ export async function summariseSession(
 
   if (best) return { summary: best.summary, droppedQuotes: best.droppedQuotes };
   throw lastError ?? new ProviderError('unknown', SUMMARY_MESSAGES.unexpected);
+}
+
+/**
+ * Whether `a` is better than `b`: a smaller share of its quotes not found, or the same share and more verified
+ * quotes. A reply without quotes has none not found, as in the retry check.
+ */
+function isBetter(a: CheckedSummary, b: CheckedSummary): boolean {
+  if (a.quoteFailureRate !== b.quoteFailureRate) return a.quoteFailureRate < b.quoteFailureRate;
+  return a.verifiedQuotes > b.verifiedQuotes;
 }
 
 const cancelled = () => new ProviderError('aborted', SUMMARY_MESSAGES.cancelled);

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { z } from '../../lib/zod';
-import { agentMessage, scriptedFetch, textBlock } from '../../testing/agent';
+import { agentMessage, scriptedFetch, streamedText, textBlock } from '../../testing/agent';
 import {
   functionCallPart,
   geminiTurn,
@@ -14,6 +14,7 @@ import {
 } from '../../testing/geminiAgent';
 import { ProviderError } from '../errors';
 import { createClaudeAgent } from './claudeAgent';
+import { GEMINI_MESSAGES } from './gemini';
 import { createGeminiAgent } from './geminiAgent';
 import {
   AGENT_MAX_OUTPUT_TOKENS,
@@ -497,17 +498,44 @@ describe('createGeminiAgent', () => {
   });
 
   it.each(['MALFORMED_FUNCTION_CALL', 'UNEXPECTED_TOOL_CALL'])(
-    'sends a request again once after %s, without keeping the bad turn',
+    'sends a request again once after %s, without keeping the bad turn or its text',
     async (finishReason) => {
       const { agent, requests } = setup([
-        { response: geminiTurn([textPart('')], { finishReason }) },
+        { response: geminiTurn([textPart('Let me look.')], { finishReason }) },
         { response: geminiTurn([textPart('By the bed.')]) },
       ]);
-      const result = await agent.run(request());
+      const req = request();
+      const result = await agent.run(req);
       expect(result.text).toBe('By the bed.');
       expect(requests[1]!.body.contents).toEqual(requests[0]!.body.contents);
+      expect(req.events.filter((e) => e.type === 'retry')).toEqual([
+        { type: 'retry', discard: 'Let me look.'.length },
+      ]);
+      expect(streamedText(req.events)).toBe(result.text);
     },
   );
+
+  it('a request sent again after a function turn puts its line break back', async () => {
+    const { agent } = setup([
+      {
+        response: geminiTurn([
+          textPart('Let me look.'),
+          functionCallPart('search_transcripts', { query: 'x' }),
+        ]),
+      },
+      {
+        response: geminiTurn([textPart('Found it.')], { finishReason: 'MALFORMED_FUNCTION_CALL' }),
+      },
+      { response: geminiTurn([textPart('Found it.')]) },
+    ]);
+    const req = request();
+    const result = await agent.run(req);
+    expect(req.events.filter((e) => e.type === 'retry')).toEqual([
+      { type: 'retry', discard: '\n\nFound it.'.length },
+    ]);
+    expect(result.text).toBe('Let me look.\n\nFound it.');
+    expect(streamedText(req.events)).toBe(result.text);
+  });
 
   it('gives `bad_output` after a second malformed function call in a row', async () => {
     const malformed = { response: geminiTurn([], { finishReason: 'MALFORMED_FUNCTION_CALL' }) };
@@ -628,5 +656,14 @@ describe('createGeminiAgent', () => {
       },
     ]).agent;
     expect((await errorOf(broken.run(request()))).kind).toBe('server');
+  });
+
+  it("maps a TypeError fetch didn't raise to `unknown`, not `network` (audit BUG-10)", async () => {
+    const fault = new TypeError("Cannot read properties of undefined (reading 'parts')");
+    const { agent } = setup([() => Promise.reject(fault)]);
+    const err = await errorOf(agent.run(request()));
+    expect(err.kind).toBe('unknown');
+    expect(err.userMessage).toBe(GEMINI_MESSAGES.unexpected);
+    expect(err.retryable).toBe(false);
   });
 });

@@ -288,6 +288,23 @@ function parseErrorBody(err: ApiError) {
   }
 }
 
+/**
+ * What Chromium's fetch rejects with when the network fails: "Failed to fetch" before a response (offline, DNS, a
+ * blocked host), "network error" when the body stops part-way. The SDK passes these through as they are (its retry,
+ * p-retry, matches on the first). Unlike the Anthropic SDK it has no connection error class, so the message is all
+ * there is to go on.
+ */
+const FETCH_FAILURES: ReadonlySet<string> = new Set(['Failed to fetch', 'network error']);
+
+/**
+ * A TypeError is a network failure only when fetch raised it, or the browser is offline. Any other TypeError is a
+ * fault in the SDK or this adapter (a property of `undefined` in a chunk it didn't expect), which retrying won't fix.
+ */
+function isNetworkFailure(err: unknown): err is TypeError {
+  if (!(err instanceof TypeError)) return false;
+  return FETCH_FAILURES.has(err.message) || navigator.onLine === false;
+}
+
 /** Maps what the SDK throws to a ProviderError, using the status and the structured reason. */
 export function toProviderError(err: unknown, model: string): ProviderError {
   if (err instanceof ProviderError) return err;
@@ -324,8 +341,7 @@ export function toProviderError(err: unknown, model: string): ProviderError {
     }
     return new ProviderError('unknown', GEMINI_MESSAGES.unexpected, opts);
   }
-  // fetch rejects with a TypeError when the network fails or the host is blocked.
-  if (err instanceof TypeError) {
+  if (isNetworkFailure(err)) {
     return new ProviderError('network', GEMINI_MESSAGES.network, { detail: err.message });
   }
   // A stream event the SDK can't read: its JSON parse throws a SyntaxError, or the SDK wraps it in a plain Error.

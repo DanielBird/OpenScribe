@@ -1,10 +1,11 @@
 import { z } from '../../lib/zod';
 import type { Batch } from './batching';
 
-/** The instructions for every batch. Only the source language changes. */
+/** The instructions for every batch. Only the source language changes; '' (not known) leaves it out. */
 export function systemPrompt(sourceLanguage: string): string {
+  const from = sourceLanguage ? ` from ${sourceLanguage}` : '';
   return [
-    `You are a professional translator. Translate the transcript segments from ${sourceLanguage} into natural, faithful English.`,
+    `You are a professional translator. Translate the transcript segments${from} into natural, faithful English.`,
     '- Translate every segment in `segments`. Return exactly one item per input `id`, using the same `id`.',
     "- Do not merge, split, summarise, shorten, explain or omit anything. Keep the speaker's tone, hedges and informal style.",
     '- Keep names, product names and the glossary terms exactly as written, unless a standard English form exists.',

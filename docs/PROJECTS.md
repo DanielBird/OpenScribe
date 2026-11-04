@@ -303,6 +303,7 @@ interface AgentTool<I> {
 }
 type AgentEvent =
   | { type: 'text'; delta: string }
+  | { type: 'retry'; discard: number }  // a request sent again: the last `discard` characters of text go
   | { type: 'tool'; name: string; activity: string; isError: boolean }
   | { type: 'usage'; inputTokens: number; cacheReadTokens: number; cacheWriteTokens: number; outputTokens: number };
 interface AgentProvider {

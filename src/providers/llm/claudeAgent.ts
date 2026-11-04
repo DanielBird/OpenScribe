@@ -241,9 +241,14 @@ export function createClaudeAgent(opts: ClaudeAgentOptions): AgentProvider {
       };
     }
 
-    /** One request, streamed; re-sent if a tool input couldn't be parsed. */
+    /**
+     * One request, streamed; re-sent if a tool input couldn't be parsed. The re-send takes back the text the failed
+     * attempt streamed (a `retry` event) and counts its usage so far.
+     */
     async function streamReply(): Promise<BetaMessage> {
       for (let attempt = 0; ; attempt++) {
+        const breakAtStart = breakBeforeText;
+        let streamed = 0;
         const stream = client.beta.messages.stream(
           {
             model: opts.model,
@@ -260,12 +265,16 @@ export function createClaudeAgent(opts: ClaudeAgentOptions): AgentProvider {
           },
           { signal: req.signal },
         );
+        const emit = (delta: string) => {
+          streamed += delta.length;
+          req.onEvent({ type: 'text', delta });
+        };
         stream.on('text', (delta) => {
           if (breakBeforeText) {
-            req.onEvent({ type: 'text', delta: '\n\n' });
+            emit('\n\n');
             breakBeforeText = false;
           }
-          req.onEvent({ type: 'text', delta });
+          emit(delta);
         });
         try {
           const message = await stream.finalMessage();
@@ -276,11 +285,20 @@ export function createClaudeAgent(opts: ClaudeAgentOptions): AgentProvider {
           // The stream's own error for tool JSON it can't parse; API errors and aborts are APIErrors.
           const badJson = err instanceof AnthropicError && !(err instanceof APIError);
           if (!badJson) throw err;
+          // The error comes at the end of the tool block, before `message_delta`: the snapshot has the input and
+          // cache tokens, and only the output tokens `message_start` reported.
+          const partial = stream.currentMessage;
+          if (partial) {
+            usage = addUsage(usage, usageOf(partial));
+            req.onEvent({ type: 'usage', usage: usageOf(partial) });
+          }
           if (attempt >= JSON_RETRIES) {
             throw new ProviderError('bad_output', CLAUDE_MESSAGES.badOutput, {
               detail: shortMessage(err),
             });
           }
+          req.onEvent({ type: 'retry', discard: streamed });
+          breakBeforeText = breakAtStart;
         }
       }
     }

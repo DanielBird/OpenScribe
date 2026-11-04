@@ -292,3 +292,9 @@ export function claudeSse(message: unknown): string;  // the SSE body for one Me
   needed). Add `tool_use` blocks with `input_json_delta` there. Unknown block types throw.
 - A mid-stream `error` event maps by `err.type` in `toProviderError`. The agent loop gets this for free if it
   uses the same function.
+
+### 2026-11-04 — The better reply is the one with fewer quotes not found (audit BUG-7)
+- On a retry, `summariseSession` keeps the reply with the lower `quoteFailureRate`, then the one with more
+  `verifiedQuotes` (new in `CheckedSummary`: quotes found in their turn, before the cap). It kept the one with fewer
+  `droppedQuotes`, so 2 quotes with 1 not found beat 9 with 4. A reply without quotes still counts as none not
+  found, as in the retry check. `summariseSession` still returns `{ summary, droppedQuotes }`.

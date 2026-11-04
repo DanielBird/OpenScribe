@@ -30,6 +30,7 @@ import {
   type AgentUsage,
 } from '../providers/llm/types';
 import { FolderError, type FileStat } from '../storage/folder';
+import { sameStat } from '../storage/projectFiles';
 import { useProjectStore, type ProjectChat } from './project';
 import { useSettingsStore } from './settings';
 
@@ -453,6 +454,9 @@ export const useChatStore = defineStore('chat', () => {
     const onEvent = (event: AgentEvent) => {
       if (!isCurrent()) return;
       if (event.type === 'text') draft += event.delta;
+      // A request sent again: what its failed reply streamed goes, so Stop never saves it twice (audit BUG-5).
+      else if (event.type === 'retry')
+        draft = draft.slice(0, Math.max(0, draft.length - event.discard));
       else if (event.type === 'tool')
         activity = [
           ...activity,
@@ -663,9 +667,15 @@ export const useChatStore = defineStore('chat', () => {
    * Opens a saved chat (D29): its messages, with the quotes checked again against the sessions as they are now, and
    * its session keys kept. Its next question sends the earlier ones back as text: from its latest summary, if it was
    * compacted (D33).
+   *
+   * Opening the open chat again reads it again when its file changed meanwhile (a colleague's rescan, audit BUG-9),
+   * unless an answer is running or a save failed: then what's on screen stays, since its file doesn't have it all.
    */
   function open(chat: ProjectChat): void {
-    if (chatId.value === chat.file.id) return;
+    if (chatId.value === chat.file.id) {
+      if (running.value || target === null || target.dirty) return;
+      if (target.stat !== null && sameStat(target.stat, chat.stat)) return;
+    }
     newChat();
     const { file } = chat;
     target = {

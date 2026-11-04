@@ -11,6 +11,12 @@ describe('systemPrompt', () => {
     expect(prompt).toContain('`context` segments are earlier turns');
     expect(prompt).toContain("Keep the speaker's tone");
   });
+
+  it('leaves out a source language that is not known', () => {
+    expect(systemPrompt('').split('\n')[0]).toBe(
+      'You are a professional translator. Translate the transcript segments into natural, faithful English.',
+    );
+  });
 });
 
 describe('buildInput', () => {

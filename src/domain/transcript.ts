@@ -27,7 +27,8 @@ export interface TranscriptionRequestInfo {
 
 export interface TranscriptionResultInfo {
   providerTranscriptId: string | null;
-  languageCode: string; // as returned by the provider, e.g. 'deu'
+  /** As returned by the provider, e.g. 'deu'. If it returns none: the request's hint, or '' for 'auto'. */
+  languageCode: string;
   languageProbability: number | null;
   audioDurationSec: number | null;
 }
@@ -137,6 +138,11 @@ export function languageName(code: string): string {
     name = undefined; // not a language code at all, e.g. ''
   }
   return name ?? code.trim().toUpperCase();
+}
+
+/** `languageName()`, or 'Unknown language' for a code that names none (''). For text sent to a model. */
+export function languageOrUnknown(code: string): string {
+  return languageName(code) || 'Unknown language';
 }
 
 /** Default label for the speaker at `index` (0-based, in order of first appearance). */

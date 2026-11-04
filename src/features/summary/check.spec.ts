@@ -41,9 +41,14 @@ const BRIEF: ProjectBrief = {
 describe('checkSummary', () => {
   it('keeps a valid reply as it is', () => {
     const output = reply();
-    const { summary, droppedQuotes, quoteFailureRate } = checkSummary(output, SESSION, EMPTY_BRIEF);
+    const { summary, droppedQuotes, verifiedQuotes, quoteFailureRate } = checkSummary(
+      output,
+      SESSION,
+      EMPTY_BRIEF,
+    );
     expect(summary).toEqual(output);
     expect(droppedQuotes).toBe(0);
+    expect(verifiedQuotes).toBe(output.themes.flatMap((t) => t.quotes).length);
     expect(quoteFailureRate).toBe(0);
   });
 
@@ -84,10 +89,15 @@ describe('checkSummary', () => {
       themes: [theme('teamwork', quotes)],
     });
     const brief = { ...BRIEF, researchQuestions: ['Who helps?'] };
-    const { summary, droppedQuotes, quoteFailureRate } = checkSummary(output, SESSION, brief);
+    const { summary, droppedQuotes, verifiedQuotes, quoteFailureRate } = checkSummary(
+      output,
+      SESSION,
+      brief,
+    );
     expect(summary.researchQuestions[0]!.quotes.map((q) => q.turnId)).toEqual(['t4']);
     expect(summary.themes[0]!.quotes.map((q) => q.turnId)).toEqual(['t4']);
     expect(droppedQuotes).toBe(2);
+    expect(verifiedQuotes).toBe(2);
     expect(quoteFailureRate).toBe(0.5);
   });
 
@@ -193,12 +203,17 @@ describe('checkSummary', () => {
         ]),
       ],
     });
-    const { summary, droppedQuotes, quoteFailureRate } = checkSummary(output, SESSION, EMPTY_BRIEF);
+    const { summary, droppedQuotes, verifiedQuotes, quoteFailureRate } = checkSummary(
+      output,
+      SESSION,
+      EMPTY_BRIEF,
+    );
     expect(summary.themes[0]!.quotes).toEqual([
       { turnId: 't2', text: "Thank you, I'm very pleased to be here." },
       { turnId: 't4', text: 'For about two years … a small team.' },
     ]);
     expect(droppedQuotes).toBe(2);
+    expect(verifiedQuotes).toBe(2);
     expect(quoteFailureRate).toBe(0.5);
   });
 
@@ -211,7 +226,11 @@ describe('checkSummary', () => {
         ]),
       ),
     });
-    const { summary, droppedQuotes, quoteFailureRate } = checkSummary(output, SESSION, EMPTY_BRIEF);
+    const { summary, droppedQuotes, verifiedQuotes, quoteFailureRate } = checkSummary(
+      output,
+      SESSION,
+      EMPTY_BRIEF,
+    );
     expect(summary.themes).toHaveLength(SUMMARY_LIMITS.themes);
     expect(summary.themes.at(-1)!.name).toBe('theme 11');
     expect(summary.themes.map((t) => t.quotes.length)).toEqual(
@@ -219,6 +238,8 @@ describe('checkSummary', () => {
     );
     // One invented quote per kept theme: capped quotes aren't dropped ones.
     expect(droppedQuotes).toBe(SUMMARY_LIMITS.themes);
+    // Capped quotes still count as verified.
+    expect(verifiedQuotes).toBe(5 * SUMMARY_LIMITS.themes);
     expect(quoteFailureRate).toBe(1 / 6);
   });
 

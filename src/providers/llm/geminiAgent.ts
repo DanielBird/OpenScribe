@@ -186,6 +186,8 @@ export function createGeminiAgent(opts: GeminiAgentOptions): AgentProvider {
     const texts: string[] = [];
     let usage = NO_USAGE;
     let breakBeforeText = false;
+    /** Characters of text the current request has streamed, which a re-send takes back. */
+    let streamed = 0;
 
     try {
       for (let iteration = 0; iteration < req.maxIterations; iteration++) {
@@ -241,10 +243,13 @@ export function createGeminiAgent(opts: GeminiAgentOptions): AgentProvider {
 
     /**
      * One request, streamed, then the checks that end the run: a blocked prompt or a refusal (the partial reply
-     * isn't kept). A malformed function call is sent again, once.
+     * isn't kept). A malformed function call is sent again, once, and the re-send takes back the text it streamed
+     * (a `retry` event).
      */
     async function streamReply(): Promise<StreamedTurn> {
       for (let attempt = 0; ; attempt++) {
+        const breakAtStart = breakBeforeText;
+        streamed = 0;
         const stream = await ai.models.generateContentStream({
           model: opts.model,
           contents,
@@ -282,6 +287,8 @@ export function createGeminiAgent(opts: GeminiAgentOptions): AgentProvider {
               detail: `finish reason: ${finish}`,
             });
           }
+          req.onEvent({ type: 'retry', discard: streamed });
+          breakBeforeText = breakAtStart;
           continue;
         }
         return turn;
@@ -298,16 +305,20 @@ export function createGeminiAgent(opts: GeminiAgentOptions): AgentProvider {
         promptFeedback: undefined,
         usage: undefined,
       };
+      const emit = (delta: string) => {
+        streamed += delta.length;
+        req.onEvent({ type: 'text', delta });
+      };
       for await (const chunk of stream) {
         const candidate = chunk.candidates?.[0];
         for (const part of candidate?.content?.parts ?? []) {
           turn.parts.push(part);
           if (typeof part.text !== 'string' || part.thought || part.text === '') continue;
           if (breakBeforeText) {
-            req.onEvent({ type: 'text', delta: '\n\n' });
+            emit('\n\n');
             breakBeforeText = false;
           }
-          req.onEvent({ type: 'text', delta: part.text });
+          emit(part.text);
         }
         if (candidate?.finishReason) turn.finishReason = candidate.finishReason;
         if (chunk.promptFeedback) turn.promptFeedback = chunk.promptFeedback;

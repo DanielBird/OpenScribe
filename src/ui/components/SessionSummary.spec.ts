@@ -169,6 +169,24 @@ describe('SessionSummary', () => {
     expect(document.activeElement).not.toBe(wrapper!.get('h2').element);
   });
 
+  it('leaves a language that is not known out of the line under the name', async () => {
+    show({ text: { ...sessionText(), languageCode: '' } });
+    await flushPromises();
+    expect(wrapper!.get('.meta').text()).toBe('7 Sept 2026 · 01:02:05 · Translated');
+
+    wrapper!.unmount();
+    const untranslated = sessionText();
+    show({
+      text: {
+        ...untranslated,
+        languageCode: '',
+        turns: untranslated.turns.map((t) => ({ ...t, en: null })),
+      },
+    });
+    await flushPromises();
+    expect(wrapper!.get('.meta').text()).toBe('7 Sept 2026 · 01:02:05');
+  });
+
   it('shows every section', async () => {
     show({ copies: ['P07--x.summary-LAPTOP.json'] });
     await flushPromises();

@@ -23,12 +23,14 @@ const items = computed(() => {
   const duration = result.audioDurationSec ?? source.durationSec;
   if (duration !== null) list.push({ label: 'Duration', value: formatTimestamp(duration) });
 
-  // The confidence only means something when the language was detected, not chosen.
+  // The confidence only means something when the language was detected, not chosen. A language that is not known
+  // (Auto, and none detected) is left out.
   const confidence =
     request.languageHint === 'auto' && result.languageProbability !== null
       ? ` (${Math.round(result.languageProbability * 100)}%)`
       : '';
-  list.push({ label: 'Language', value: languageName(result.languageCode) + confidence });
+  const language = languageName(result.languageCode);
+  if (language) list.push({ label: 'Language', value: language + confidence });
   list.push({ label: 'Speakers', value: plural(speakers.length, 'speaker', 'speakers') });
   list.push({ label: 'Transcribed', value: formatDateTime(props.doc.createdAt) });
   if (request.keyterms.length > 0) {

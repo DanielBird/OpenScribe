@@ -240,7 +240,8 @@ what it finds, and uses the summaries for an overview. Then it answers in Englis
 - **Follow-up questions** carry on the conversation. Selecting a session shows its summary; **Esc** returns.
 - **Chats are saved in the project folder,** after each answer. The **Chats** tab, next to **Sessions**, lists them,
   the last one added to first, with "You" or the colleague who asked. Select one to read it and go on asking; it
-  carries on from its earlier questions and answers. In a colleague's chat, your question saves a copy as yours, and
+  carries on from its earlier questions and answers. An open chat doesn't change while you read it: select it again
+  to see what was added since. In a colleague's chat, your question saves a copy as yours, and
   theirs stays as it was. **New chat**, at the top of the Chats tab, starts afresh. Your name on your chats is set in **Settings → Chats**; until
   you set one, DeScribe uses a made-up name such as "Amber Heron".
 - A chat uses the sessions, the brief and the model as they were when it started or was opened: DeScribe says when
@@ -282,7 +283,7 @@ what it finds, and uses the summaries for an overview. Then it answers in Englis
 | DeScribe is open in two tabs | Both tabs use the same saved data, and the last one to save wins. Use one tab. |
 | "ElevenLabs rejected the API key" | Check the key on Setup, or create a new one. |
 | "Zero retention is only available on ElevenLabs Enterprise plans" | Switch off **Zero retention** on Setup and run again. |
-| "Your ElevenLabs account has no remaining credits" | Top up your ElevenLabs account, or raise the key's credit limit. |
+| "Your ElevenLabs account has no remaining credits" | Top up your ElevenLabs account, raise the key's credit limit, or enter another key in Settings. Then click **Try again**. |
 | "This browser can't open project folders" | Open DeScribe in Edge or Chrome. |
 | "This folder isn't a DeScribe project" | Choose the folder that has `describe-project.json` in it, or use **New project…**. |
 | "This file is only in OneDrive and the computer is offline" | Connect to the internet, or set the project folder to **Always keep on this device**. |

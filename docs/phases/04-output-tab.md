@@ -210,3 +210,8 @@ will show it with a real upload.
   `SetupView.vue` was committed with only the banner lines added.
 
 **Bundle:** 226 KB (76 KB gzip), up from 202 KB.
+
+### 2026-11-04 — Try again uses the current key (audit BUG-6)
+- `retry()` still sends the same request (file, language, speakers, zero retention, keyterms), but reads the
+  ElevenLabs key when it starts, so a key changed in Settings after a `quota` or `rate_limit` error is used. With no
+  key it fails with a `validation` error ("Add your ElevenLabs API key in Settings.") and sends nothing.

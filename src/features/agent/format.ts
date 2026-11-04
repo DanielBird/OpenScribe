@@ -5,7 +5,7 @@ import {
   type SessionText,
   type SessionTurn,
 } from '../../domain/corpus/sessionText';
-import { formatTimestamp, languageName } from '../../domain/transcript';
+import { formatTimestamp, languageOrUnknown } from '../../domain/transcript';
 
 /** Text on one line: model-facing lines must not be broken by a newline in a title or a turn. */
 export function oneLine(text: string): string {
@@ -25,9 +25,9 @@ export function sessionLength(sec: number | null): string {
   return `${Math.floor(minutes / 60)}:${String(minutes % 60).padStart(2, '0')}`;
 }
 
-/** `English`, `German, translated` or `French, not translated yet`. */
+/** `English`, `German, translated`, `French, not translated yet` or `Unknown language, translated`. */
 export function sessionLanguage(session: SessionText): string {
-  const name = languageName(session.languageCode);
+  const name = languageOrUnknown(session.languageCode);
   if (isEnglishSession(session)) return name;
   return `${name}, ${isTranslatedSession(session) ? 'translated' : 'not translated yet'}`;
 }
