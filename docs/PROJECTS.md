@@ -274,7 +274,9 @@ This is the agent's search tool. The same engine drives the researchers' search 
 ### 5.5 The project agent
 
 **Loop.** A Claude tool-use loop runs in the browser, in `providers/llm/claudeAgent.ts`:
-- It uses the SDK's beta tool runner, with streaming.
+- It is a manual streamed loop, not the SDK's tool runner: after a mid-output refusal fallback, the API wants some
+  blocks left out when the turn is sent back, and the runner would send them (reference/llm-providers.md). The loop
+  is shared with Gemini, in `providers/llm/agentLoop.ts`.
 - The model is the project model: Sonnet 5.5 by default, or Opus 5.5 (A17). The effort is set explicitly to
   `medium`, because the two models have different API defaults.
 - A conversation keeps the model it started with. Thinking blocks belong to one model, and switching would also
@@ -432,8 +434,9 @@ src/
     chat.ts        a saved chat's file (Phase 21, D29); storage/chatFiles.ts reads and writes chats/
   providers/llm/
     types.ts       + AgentProvider, AgentTool, AgentEvent, AgentConversation
-    claudeAgent.ts the tool loop (load the claude-api skill first)
-    geminiAgent.ts the same contract for Gemini (Phase 20)
+    agentLoop.ts   the tool loop both agents share: conversation, streamed text, re-sends, tools
+    claudeAgent.ts Claude's request and reply checks for it (load the claude-api skill first)
+    geminiAgent.ts the same for Gemini (Phase 20)
     claude.ts      generateStructured streams internally
     gemini.ts      generateStructured streams internally too (Phase 19)
     models.ts      + PROJECT_MODELS (Sonnet 5.5 default, Opus 5.5; Gemini from Phase 19), project effort and

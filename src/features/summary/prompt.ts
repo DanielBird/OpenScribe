@@ -7,7 +7,7 @@ import {
 } from '../../domain/corpus/sessionText';
 import type { ProjectBrief } from '../../domain/project';
 import { NOT_DISCUSSED } from '../../domain/summary';
-import { formatTimestamp, joinLines, languageOrUnknown } from '../../domain/transcript';
+import { formatTimestamp, isoDate, joinLines, languageOrUnknown } from '../../domain/transcript';
 import type { ThemeCount } from './themes';
 
 /** What a summary is made with, besides the session. */
@@ -50,19 +50,13 @@ export function briefLines(brief: ProjectBrief): string[] {
   return lines;
 }
 
-/** `YYYY-MM-DD` of the recording's file date, or null if it isn't a valid date. */
-function recordingDate(ms: number): string | null {
-  const date = new Date(ms);
-  return Number.isNaN(date.getTime()) ? null : date.toISOString().slice(0, 10);
-}
-
 function recordingLine(session: SessionText): string {
   const language =
     languageOrUnknown(session.languageCode) +
     (isTranslatedSession(session) ? ', translated to English' : '');
   const parts = [
     session.recordingName,
-    recordingDate(session.recordedAt),
+    isoDate(session.recordedAt),
     session.durationSec === null ? null : formatTimestamp(session.durationSec),
     language,
   ];

@@ -19,6 +19,7 @@ import { FOLDER_MESSAGES, FolderError } from '../storage/folder';
 import { useProjectStore, type FileSummaryStatus } from './project';
 import { useSettingsStore } from './settings';
 import { useTranscriptStore } from './transcript';
+import { createUnloadGuard } from './unloadGuard';
 
 export type PipelineStep = 'save' | 'translate' | 'summarise';
 export type PipelineError = ProviderError | FolderError;
@@ -97,10 +98,8 @@ function asPipelineError(err: unknown): PipelineError {
   });
 }
 
-/** Keeps the browser's "Leave site?" confirmation up while work would be lost. */
-function onBeforeUnload(event: BeforeUnloadEvent): void {
-  event.preventDefault();
-}
+/** Asks before the page is left or reloaded while work would be lost. */
+const unloadGuard = createUnloadGuard();
 
 // Add to project and session summaries (PROJECTS.md §5.3, Phase 15): one job at a time, from a queue.
 //   queued ──▶ running ──done──▶ (removed; the summary file is in the folder)
@@ -201,7 +200,7 @@ export const usePipelineStore = defineStore('pipeline', () => {
   }
 
   function settleIdle(): void {
-    window.removeEventListener('beforeunload', onBeforeUnload);
+    unloadGuard.release();
     queueProgress.value = { done: 0, total: 0 };
     const waiters = idleWaiters;
     idleWaiters = [];
@@ -216,7 +215,7 @@ export const usePipelineStore = defineStore('pipeline', () => {
       settleIdle();
       return;
     }
-    window.addEventListener('beforeunload', onBeforeUnload);
+    unloadGuard.hold();
     void run(next);
   }
 
@@ -528,7 +527,7 @@ export const usePipelineStore = defineStore('pipeline', () => {
 
   onScopeDispose(() => {
     controller?.abort();
-    window.removeEventListener('beforeunload', onBeforeUnload);
+    unloadGuard.release();
   });
 
   return {

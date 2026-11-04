@@ -395,3 +395,13 @@ automatic caching); the cache read share is live check A2.
   `message_start` reported, because the SDK raises the error before `message_delta`.
 - `src/testing/claudeSse.ts` streams a string `input` as it is, and `src/testing/agent.ts` has `brokenToolUseBlock`
   and `streamedText` (a type-only import of `AgentEvent`, so Playwright still loads it).
+
+### 2026-11-04 — One loop for both agents (audit CQ-2)
+- The loop moved to `providers/llm/agentLoop.ts` (`runAgentLoop`), shared with Gemini: the conversation's `WeakMap`
+  (`createConversations`, one per provider module), the streamed text and its `\n\n` breaks, re-sends with their
+  `retry` event, running the tools (`runAgentTool`), the abort check and the result. `claudeAgent.ts` keeps the
+  request, `echoContent` and the reply's checks (refusal, cut-off tool input, `pause_turn` as `again`), and turns an
+  unparseable tool input into a re-send. The request and the events are unchanged, except that an empty text delta
+  is no longer passed on, so a break waits for real text.
+- `claudeAgent.spec.ts` didn't change and passes. `agentLoop.spec.ts` covers the shared rules with a scripted
+  adapter.

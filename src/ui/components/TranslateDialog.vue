@@ -4,6 +4,7 @@ import type { LlmProviderId } from '../../domain/transcript';
 import { isKnownModel, LLM_MODELS } from '../../providers/llm/models';
 import { useSettingsStore } from '../../stores/settings';
 import { useTranslationStore } from '../../stores/translation';
+import { PROVIDER_LIST, PROVIDER_NAMES } from '../providerNames';
 import ApiKeyField from './ApiKeyField.vue';
 import ConfirmDialog from './ConfirmDialog.vue';
 
@@ -26,23 +27,13 @@ const translation = useTranslationStore();
 const id = useId();
 const ids = { model: `${id}-model` };
 
-const PROVIDERS: readonly {
-  id: LlmProviderId;
-  label: string;
-  keyLabel: string;
-  company: string;
-}[] = [
-  { id: 'claude', label: 'Claude', keyLabel: 'Claude (Anthropic) API key', company: 'Anthropic' },
-  { id: 'gemini', label: 'Gemini', keyLabel: 'Gemini (Google) API key', company: 'Google' },
-];
-
 const provider = ref<LlmProviderId>(settings.translationProvider);
 const model = ref<string>(settings.translationModel);
 /** Decided when the dialog opens or the provider changes, so the field stays while the key is typed. */
 const keyNeeded = ref(false);
 const dontShowAgain = ref(false);
 
-const info = computed(() => PROVIDERS.find((p) => p.id === provider.value) ?? PROVIDERS[0]!);
+const info = computed(() => PROVIDER_NAMES[provider.value]);
 const message = computed(() => {
   if (props.mode === 'replace') return 'This replaces the English translation.';
   if (props.mode === 'new') return '';
@@ -101,7 +92,7 @@ function onConfirm(): void {
     <div class="body">
       <fieldset class="providers">
         <legend class="visually-hidden">Provider</legend>
-        <label v-for="p in PROVIDERS" :key="p.id" class="provider">
+        <label v-for="p in PROVIDER_LIST" :key="p.id" class="provider">
           <input
             v-model="provider"
             type="radio"

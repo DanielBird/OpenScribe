@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, useId, useTemplateRef, watch } from 'vue';
 import { lacksEnglish } from '../../domain/corpus/sessionText';
+import { plural } from '../../domain/text';
 import {
   formatDate,
   formatTimestamp,
@@ -27,8 +28,6 @@ const settings = useSettingsStore();
 const ui = useProjectUi();
 const id = useId();
 const listEl = useTemplateRef<HTMLElement>('list');
-
-const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
 /** Each session's summary status, read out by screen readers. */
 const STATUS_TEXT: Record<SummaryStatus, string> = {

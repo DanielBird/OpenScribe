@@ -5,6 +5,7 @@ import {
   formatDate,
   formatDateTime,
   formatTimestamp,
+  isoDate,
   joinLines,
   languageName,
   languageOrUnknown,
@@ -33,6 +34,19 @@ describe('formatDate', () => {
 
   it('gives an empty string for an invalid date', () => {
     expect(formatDate(Number.NaN)).toBe('');
+  });
+});
+
+describe('isoDate', () => {
+  it('gives the UTC date as YYYY-MM-DD, whatever the time zone', () => {
+    expect(isoDate(Date.UTC(2026, 8, 14, 23, 30))).toBe('2026-09-14');
+    expect(isoDate(0)).toBe('1970-01-01');
+  });
+
+  it('gives null for an invalid date', () => {
+    expect(isoDate(Number.NaN)).toBeNull();
+    expect(isoDate(Number.POSITIVE_INFINITY)).toBeNull();
+    expect(isoDate(9e15)).toBeNull(); // past the largest date a Date can hold
   });
 });
 

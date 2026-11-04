@@ -1,6 +1,6 @@
 // The project agent's function-calling loop with Gemini, in the browser (PROJECTS.md §5.5, Phase 20). The same
-// contract as `claudeAgent.ts`: a manual streamed loop, with the SDK's automatic function calling off. No SDK type
-// leaves this file (DECISIONS.md D26).
+// contract and the same loop as `claudeAgent.ts` (`agentLoop.ts`), with the SDK's automatic function calling off;
+// this file makes one request and reads its reply. No SDK type leaves this file (DECISIONS.md D26).
 import {
   BlockedReason,
   FinishReason,
@@ -14,16 +14,13 @@ import {
   type GenerateContentResponseUsageMetadata,
   type Part,
 } from '@google/genai/web';
-import { z } from '../../lib/zod';
 import { ProviderError, withoutSecret } from '../errors';
+import { createConversations, runAgentLoop, type AgentOutput } from './agentLoop';
 import { GEMINI_MESSAGES, REFUSAL_FINISH, toGeminiSchema, toProviderError } from './gemini';
 import { GEMINI_THINKING } from './models';
 import {
-  addUsage,
   AGENT_MAX_OUTPUT_TOKENS,
-  NO_USAGE,
   type AgentConversation,
-  type AgentEvent,
   type AgentExchange,
   type AgentProvider,
   type AgentRunRequest,
@@ -44,8 +41,6 @@ const MALFORMED_FINISH: ReadonlySet<string> = new Set([
   FinishReason.UNEXPECTED_TOOL_CALL,
 ]);
 
-const MAX_ERROR_CHARS = 300;
-
 export interface GeminiAgentOptions {
   apiKey: string;
   model: string;
@@ -55,22 +50,8 @@ export interface GeminiAgentOptions {
   maxRetries?: number;
 }
 
-interface ConversationState {
-  model: string;
-  contents: readonly Content[];
-}
-
 /** The contents behind each conversation this module made. Anything else passed in is a programming error. */
-const conversations = new WeakMap<AgentConversation, ConversationState>();
-
-function makeConversation(state: ConversationState): AgentConversation {
-  const conversation = Object.freeze({ model: state.model }) as unknown as AgentConversation;
-  conversations.set(conversation, {
-    model: state.model,
-    contents: Object.freeze([...state.contents]),
-  });
-  return conversation;
-}
+const conversations = createConversations<Content>('geminiAgent');
 
 /** `promptTokenCount` includes the cached tokens; thinking is counted apart from the answer. */
 function usageOf(meta: GenerateContentResponseUsageMetadata | undefined): AgentUsage {
@@ -116,8 +97,29 @@ const textOf = (parts: readonly Part[]) =>
     .flatMap((part) => (typeof part.text === 'string' && !part.thought ? [part.text] : []))
     .join('');
 
-const shortMessage = (err: unknown) =>
-  (err instanceof Error ? err.message : String(err)).slice(0, MAX_ERROR_CHARS);
+/** Collects the turn's parts, and streams the answer's text (never thought parts) as it comes. */
+async function readStream(
+  stream: AsyncGenerator<GenerateContentResponse>,
+  output: AgentOutput,
+): Promise<StreamedTurn> {
+  const turn: StreamedTurn = {
+    parts: [],
+    finishReason: undefined,
+    promptFeedback: undefined,
+    usage: undefined,
+  };
+  for await (const chunk of stream) {
+    const candidate = chunk.candidates?.[0];
+    for (const part of candidate?.content?.parts ?? []) {
+      turn.parts.push(part);
+      if (typeof part.text === 'string' && !part.thought) output.text(part.text);
+    }
+    if (candidate?.finishReason) turn.finishReason = candidate.finishReason;
+    if (chunk.promptFeedback) turn.promptFeedback = chunk.promptFeedback;
+    if (chunk.usageMetadata) turn.usage = chunk.usageMetadata;
+  }
+  return turn;
+}
 
 export function createGeminiAgent(opts: GeminiAgentOptions): AgentProvider {
   const apiKey = opts.apiKey.trim();
@@ -129,130 +131,26 @@ export function createGeminiAgent(opts: GeminiAgentOptions): AgentProvider {
     },
   });
 
-  /** Runs one function call; every failure becomes an error response the model can read. */
-  async function runTool(
-    tools: readonly AgentTool[],
-    call: FunctionCall,
-    signal: AbortSignal,
-    onEvent: (event: AgentEvent) => void,
-  ): Promise<Part> {
-    const name = call.name ?? '';
-    const result = (content: string, isError: boolean, activity: string): Part => {
-      onEvent({ type: 'tool', name, activity, isError });
-      return {
-        functionResponse: {
-          ...(call.id ? { id: call.id } : {}),
-          name,
-          // The documented keys: "output" for a result, "error" for what went wrong.
-          response: isError ? { error: content } : { output: content },
-        },
-      };
-    };
-    const tool = tools.find((t) => t.name === name);
-    if (!tool) {
-      const message = `There is no tool "${name}".`;
-      return result(message, true, message);
-    }
-    const input = tool.input.safeParse(call.args ?? {});
-    if (!input.success) {
-      const message = `Invalid input: ${z.prettifyError(input.error)}`.slice(0, MAX_ERROR_CHARS);
-      return result(message, true, `${tool.name}: invalid input`);
-    }
-    try {
-      const { content, activity } = await tool.run(input.data, signal);
-      return result(content, false, activity);
-    } catch (err) {
-      const message = shortMessage(err);
-      return result(message, true, message);
-    }
-  }
-
   async function run(req: AgentRunRequest): Promise<AgentRunResult> {
-    const previous = req.conversation ? conversations.get(req.conversation) : undefined;
-    if (req.conversation && !previous) throw new Error('geminiAgent: unknown conversation');
-    if (previous && previous.model !== opts.model) {
-      throw new Error(
-        `geminiAgent: a conversation started on ${previous.model} can't continue on ${opts.model}`,
-      );
-    }
-
-    const contents: Content[] = [
-      ...(previous?.contents ?? []),
-      { role: 'user', parts: [{ text: req.userMessage }] },
-    ];
     // Built once, so every request of the run starts with the same bytes.
     const tools = [{ functionDeclarations: functionDeclarations(req.tools) }];
     const system = systemInstruction(req);
-    const texts: string[] = [];
-    let usage = NO_USAGE;
-    let breakBeforeText = false;
-    /** Characters of text the current request has streamed, which a re-send takes back. */
-    let streamed = 0;
 
-    try {
-      for (let iteration = 0; iteration < req.maxIterations; iteration++) {
-        const turn = await streamReply();
-        const calls = callsOf(turn.parts);
-        const finish = turn.finishReason;
+    return runAgentLoop<Content, FunctionCall, Part>(req, {
+      model: opts.model,
+      conversations,
+      resends: MALFORMED_RETRIES,
+      messages: GEMINI_MESSAGES,
+      userTurn: (text) => ({ role: 'user', parts: [{ text }] }),
 
-        if (finish === FinishReason.MAX_TOKENS && calls.length) {
-          throw new ProviderError('bad_output', GEMINI_MESSAGES.badOutput, {
-            detail: 'function call cut off (MAX_TOKENS)',
-          });
-        }
-        if (finish === FinishReason.TOO_MANY_TOOL_CALLS) {
-          throw new ProviderError('bad_output', GEMINI_MESSAGES.badOutput, {
-            detail: `finish reason: ${finish}`,
-          });
-        }
-
-        contents.push({ role: 'model', parts: turn.parts });
-        const text = textOf(turn.parts);
-        if (text) {
-          texts.push(text);
-          breakBeforeText = true;
-        }
-
-        if (calls.length === 0)
-          return finish === FinishReason.MAX_TOKENS ? done('limit') : done('done');
-
-        // Parallel calls run together; their responses go back in one turn, in the order of the calls.
-        const responses = await Promise.all(
-          calls.map((call) => runTool(req.tools, call, req.signal, req.onEvent)),
-        );
-        contents.push({ role: 'user', parts: responses });
-        if (req.signal.aborted) throw new ProviderError('aborted', GEMINI_MESSAGES.aborted);
-      }
-      // The backstop: the conversation ends with function responses, which a follow-up question follows.
-      return done('limit');
-    } catch (err) {
-      const mapped = req.signal.aborted
-        ? new ProviderError('aborted', GEMINI_MESSAGES.aborted)
-        : toProviderError(err, opts.model);
-      throw withoutSecret(mapped, apiKey);
-    }
-
-    function done(stopped: AgentRunResult['stopped']): AgentRunResult {
-      return {
-        text: texts.join('\n\n'),
-        conversation: makeConversation({ model: opts.model, contents }),
-        usage,
-        stopped,
-      };
-    }
-
-    /**
-     * One request, streamed, then the checks that end the run: a blocked prompt or a refusal (the partial reply
-     * isn't kept). A malformed function call is sent again, once, and the re-send takes back the text it streamed
-     * (a `retry` event).
-     */
-    async function streamReply(): Promise<StreamedTurn> {
-      for (let attempt = 0; ; attempt++) {
-        const breakAtStart = breakBeforeText;
-        streamed = 0;
+      /**
+       * One request, streamed, then the checks that end the run: a blocked prompt or a refusal (the partial reply
+       * isn't kept). A malformed function call sends it again.
+       */
+      async send(contents, output) {
         const stream = await ai.models.generateContentStream({
           model: opts.model,
-          contents,
+          contents: [...contents],
           config: {
             systemInstruction: system,
             tools,
@@ -262,10 +160,8 @@ export function createGeminiAgent(opts: GeminiAgentOptions): AgentProvider {
             abortSignal: req.signal,
           },
         });
-        const turn = await readStream(stream);
-        const meta = usageOf(turn.usage);
-        usage = addUsage(usage, meta);
-        req.onEvent({ type: 'usage', usage: meta });
+        const turn = await readStream(stream, output);
+        output.usage(usageOf(turn.usage));
 
         const blocked = turn.promptFeedback?.blockReason;
         if (blocked && blocked !== BlockedReason.BLOCKED_REASON_UNSPECIFIED) {
@@ -281,51 +177,47 @@ export function createGeminiAgent(opts: GeminiAgentOptions): AgentProvider {
             detail: `finish reason: ${finish}`,
           });
         }
-        if (finish && MALFORMED_FINISH.has(finish)) {
-          if (attempt >= MALFORMED_RETRIES) {
-            throw new ProviderError('bad_output', GEMINI_MESSAGES.badOutput, {
-              detail: `finish reason: ${finish}`,
-            });
-          }
-          req.onEvent({ type: 'retry', discard: streamed });
-          breakBeforeText = breakAtStart;
-          continue;
-        }
-        return turn;
-      }
-    }
+        if (finish && MALFORMED_FINISH.has(finish)) return { resend: `finish reason: ${finish}` };
 
-    /** Collects the turn's parts, and streams the answer's text (never thought parts) as it comes. */
-    async function readStream(
-      stream: AsyncGenerator<GenerateContentResponse>,
-    ): Promise<StreamedTurn> {
-      const turn: StreamedTurn = {
-        parts: [],
-        finishReason: undefined,
-        promptFeedback: undefined,
-        usage: undefined,
-      };
-      const emit = (delta: string) => {
-        streamed += delta.length;
-        req.onEvent({ type: 'text', delta });
-      };
-      for await (const chunk of stream) {
-        const candidate = chunk.candidates?.[0];
-        for (const part of candidate?.content?.parts ?? []) {
-          turn.parts.push(part);
-          if (typeof part.text !== 'string' || part.thought || part.text === '') continue;
-          if (breakBeforeText) {
-            emit('\n\n');
-            breakBeforeText = false;
-          }
-          emit(part.text);
+        const calls = callsOf(turn.parts);
+        if (finish === FinishReason.MAX_TOKENS && calls.length) {
+          throw new ProviderError('bad_output', GEMINI_MESSAGES.badOutput, {
+            detail: 'function call cut off (MAX_TOKENS)',
+          });
         }
-        if (candidate?.finishReason) turn.finishReason = candidate.finishReason;
-        if (chunk.promptFeedback) turn.promptFeedback = chunk.promptFeedback;
-        if (chunk.usageMetadata) turn.usage = chunk.usageMetadata;
-      }
-      return turn;
-    }
+        if (finish === FinishReason.TOO_MANY_TOOL_CALLS) {
+          throw new ProviderError('bad_output', GEMINI_MESSAGES.badOutput, {
+            detail: `finish reason: ${finish}`,
+          });
+        }
+        const next =
+          calls.length > 0 ? 'tools' : finish === FinishReason.MAX_TOKENS ? 'limit' : 'done';
+        return {
+          turn: { role: 'model', parts: turn.parts },
+          text: textOf(turn.parts),
+          calls,
+          next,
+        };
+      },
+
+      callOf: (call) => ({ name: call.name ?? '', input: call.args ?? {} }),
+      result: (call, { content, isError }) => ({
+        functionResponse: {
+          ...(call.id ? { id: call.id } : {}),
+          name: call.name ?? '',
+          // The documented keys: "output" for a result, "error" for what went wrong.
+          response: isError ? { error: content } : { output: content },
+        },
+      }),
+      // Their responses go back in one turn, in the order of the calls.
+      resultsTurn: (responses) => ({ role: 'user', parts: responses }),
+      toError(err) {
+        const mapped = req.signal.aborted
+          ? new ProviderError('aborted', GEMINI_MESSAGES.aborted)
+          : toProviderError(err, opts.model);
+        return withoutSecret(mapped, apiKey);
+      },
+    });
   }
 
   /**
@@ -337,7 +229,7 @@ export function createGeminiAgent(opts: GeminiAgentOptions): AgentProvider {
       { role: 'user', parts: [{ text: question }] },
       { role: 'model', parts: [{ text: answer }] },
     ]);
-    return makeConversation({ model: opts.model, contents });
+    return conversations.make(opts.model, contents);
   }
 
   return { model: opts.model, run, resume };

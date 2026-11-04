@@ -11,6 +11,7 @@ import { ProviderError } from '../providers/errors';
 import { getLlmProvider } from '../providers/index';
 import { useSettingsStore } from './settings';
 import { useTranscriptStore } from './transcript';
+import { createUnloadGuard } from './unloadGuard';
 
 export type TranslationStatus = 'idle' | 'running' | 'error' | 'cancelled';
 
@@ -26,10 +27,8 @@ const KEY_MISSING: Record<LlmProviderId, string> = {
   gemini: 'Enter your Gemini API key first.',
 };
 
-/** Keeps the browser's "Leave site?" confirmation up while a translation would be lost. */
-function onBeforeUnload(event: BeforeUnloadEvent): void {
-  event.preventDefault();
-}
+/** Asks before the page is left or reloaded while a translation would be lost. */
+const unloadGuard = createUnloadGuard();
 
 //   idle ──start──▶ running ──done──▶ idle (doc.translations.en saved, view 'en')
 //                     │ cancel    │ error
@@ -54,7 +53,7 @@ export const useTranslationStore = defineStore('translation', () => {
 
   function endRun(): void {
     controller = null;
-    window.removeEventListener('beforeunload', onBeforeUnload);
+    unloadGuard.release();
   }
 
   async function run(next: RunTarget, resumeFrom: TranslationTexts | undefined) {
@@ -75,7 +74,7 @@ export const useTranslationStore = defineStore('translation', () => {
     const ctrl = new AbortController();
     controller = ctrl;
     status.value = 'running';
-    window.addEventListener('beforeunload', onBeforeUnload);
+    unloadGuard.hold();
     // Cancel, a newer run or another transcript makes this run stale: its results are ignored.
     const isCurrent = () => controller === ctrl && !ctrl.signal.aborted;
 

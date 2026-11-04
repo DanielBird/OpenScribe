@@ -221,3 +221,10 @@ Gemini"):
   the retry emits the break again. The chat store takes the text back. That replaces "Text streamed by a discarded
   malformed attempt stays in the chat's draft until the run ends" above: **Stop** during the retry saved it twice.
   The attempt's usage was already counted.
+
+### 2026-11-04 — One loop for both agents (audit CQ-2)
+- `geminiAgent.ts` no longer follows `claudeAgent.ts` step for step: both run on `providers/llm/agentLoop.ts`
+  (`runAgentLoop`). `geminiAgent.ts` keeps the request, reading the stream into parts, and the finish-reason checks
+  in the table in `reference/llm-providers.md`. A malformed call returns `{ resend }`, and the loop sends it again.
+  A change to the loop now reaches both providers; the rule above still applies to the contract.
+- `geminiAgent.spec.ts` didn't change and passes.

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue';
+import { plural } from '../../domain/text';
 import {
   formatDateTime,
   formatTimestamp,
@@ -13,8 +14,6 @@ const props = defineProps<{
   /** The project the transcript is saved in (Phase 15). */
   project?: string | null;
 }>();
-
-const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
 const items = computed(() => {
   const { source, request, result, speakers } = props.doc;

@@ -6,8 +6,9 @@ import type { QuoteCheck } from '../../domain/corpus/quoteCheck';
 import { checkQuote } from '../../domain/corpus/quoteCheck';
 import { parseRef } from '../../domain/corpus/sessionKeys';
 import { englishText, isTranslatedSession } from '../../domain/corpus/sessionText';
+import { oneLine } from '../../domain/text';
 import type { CorpusReader } from './corpus';
-import { oneLine, speakerLabel } from './format';
+import { speakerLabel } from './format';
 
 export type Inline = { kind: 'text' | 'bold' | 'italic'; text: string };
 

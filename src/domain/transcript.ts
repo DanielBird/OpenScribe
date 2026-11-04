@@ -113,6 +113,12 @@ export function formatDate(ms: number, opts: { timeZone?: string } = {}): string
   );
 }
 
+/** A date as ms since the epoch → `2026-09-14` (UTC), as text sent to a model shows it. An invalid date gives null. */
+export function isoDate(ms: number): string | null {
+  const date = new Date(ms);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString().slice(0, 10);
+}
+
 /**
  * A language code (ISO 639-1/-2/-3, optionally with a region such as `en-GB`) in one form: ISO 639-1 where the
  * language has one (`deu`, `ger` and `de_AT` are all `de`), otherwise ISO 639-3 (`yue`). `Intl.Locale` does the

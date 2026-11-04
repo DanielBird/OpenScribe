@@ -5,12 +5,13 @@ import { parseQuery } from '../../domain/corpus/query';
 import type { SearchField, SessionHits } from '../../domain/corpus/search';
 import { englishText, type SessionTurn } from '../../domain/corpus/sessionText';
 import type { SummaryQuote } from '../../domain/summary';
+import { oneLine, plural } from '../../domain/text';
 import { formatTimestamp, languageOrUnknown } from '../../domain/transcript';
 import { z } from '../../lib/zod';
 import type { AgentTool } from '../../providers/llm/types';
 import { themeKey, themeVocabulary } from '../summary/themes';
 import type { CorpusReader, CorpusSession } from './corpus';
-import { oneLine, sessionLanguage, speakerLabel, turnLine } from './format';
+import { sessionLanguage, speakerLabel, turnLine } from './format';
 import { AGENT_LIMITS, estimateTokens } from './limits';
 
 export const TOOL_BUDGET_REACHED = 'Tool budget reached. Answer now.';
@@ -38,8 +39,6 @@ type ToolResult = Awaited<ReturnType<AgentTool['run']>>;
 
 /** Sessions per page of search results: as many as fit the per-call hit cap at the per-session cap. */
 const SESSIONS_PER_PAGE = AGENT_LIMITS.hitsPerCall / AGENT_LIMITS.hitsPerSession;
-
-const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
 /** A tool whose input type is checked here; the provider validates the input against `input` before `run`. */
 function defineTool<I>(tool: AgentTool<I>): AgentTool {

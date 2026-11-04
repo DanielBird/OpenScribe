@@ -1,7 +1,8 @@
 // The project agent's tool-use loop with Claude, in the browser (PROJECTS.md §5.5). A manual streaming loop
 // rather than the SDK's tool runner, because after a mid-output refusal fallback the API's rule for echoing the
-// turn back drops blocks that the runner would echo (and would run): see `echoContent`. No SDK type leaves this
-// file (DECISIONS.md D26).
+// turn back drops blocks that the runner would echo (and would run): see `echoContent`. The loop itself is shared
+// with Gemini (`agentLoop.ts`); this file makes one request and reads its reply. No SDK type leaves this file
+// (DECISIONS.md D26).
 import Anthropic, { AnthropicError, APIError } from '@anthropic-ai/sdk';
 import type {
   BetaContentBlock,
@@ -15,14 +16,12 @@ import type {
 } from '@anthropic-ai/sdk/resources/beta/messages/messages';
 import { z } from '../../lib/zod';
 import { ProviderError, withoutSecret } from '../errors';
+import { createConversations, runAgentLoop, shortMessage, type AgentAttempt } from './agentLoop';
 import { CLAUDE_FALLBACK_BETA, CLAUDE_MESSAGES, toProviderError } from './claude';
 import { CLAUDE_EFFORT } from './models';
 import {
-  addUsage,
   AGENT_MAX_OUTPUT_TOKENS,
-  NO_USAGE,
   type AgentConversation,
-  type AgentEvent,
   type AgentExchange,
   type AgentProvider,
   type AgentRunRequest,
@@ -34,8 +33,6 @@ import {
 /** Re-sends of a request whose tool input wasn't valid JSON (possible with eager input streaming), in a row. */
 const JSON_RETRIES = 2;
 
-const MAX_ERROR_CHARS = 300;
-
 export interface ClaudeAgentOptions {
   apiKey: string;
   model: string;
@@ -45,22 +42,8 @@ export interface ClaudeAgentOptions {
   maxRetries?: number;
 }
 
-interface ConversationState {
-  model: string;
-  messages: readonly BetaMessageParam[];
-}
-
 /** The messages behind each conversation this module made. Anything else passed in is a programming error. */
-const conversations = new WeakMap<AgentConversation, ConversationState>();
-
-function makeConversation(state: ConversationState): AgentConversation {
-  const conversation = Object.freeze({ model: state.model }) as unknown as AgentConversation;
-  conversations.set(conversation, {
-    model: state.model,
-    messages: Object.freeze([...state.messages]),
-  });
-  return conversation;
-}
+const conversations = createConversations<BetaMessageParam>('claudeAgent');
 
 function usageOf(message: BetaMessage): AgentUsage {
   return {
@@ -82,7 +65,7 @@ function toolDefinitions(tools: readonly AgentTool[]): BetaTool[] {
       name: tool.name,
       description: tool.description,
       input_schema: schema as BetaTool.InputSchema,
-      // Inputs stream as they are written; the loop validates them itself (`runTool`).
+      // Inputs stream as they are written; the loop validates them itself (`runAgentTool`).
       eager_input_streaming: true,
     };
   });
@@ -119,8 +102,37 @@ function echoContent(content: readonly BetaContentBlock[]): BetaContentBlockPara
 const textOf = (content: readonly BetaContentBlockParam[]) =>
   content.flatMap((block) => (block.type === 'text' ? [block.text] : [])).join('');
 
-const shortMessage = (err: unknown) =>
-  (err instanceof Error ? err.message : String(err)).slice(0, MAX_ERROR_CHARS);
+/** What a reply means for the run. Its checks come before anything in it is used. */
+function readReply(message: BetaMessage): AgentAttempt<BetaMessageParam, BetaToolUseBlockParam> {
+  const content = echoContent(message.content);
+  const calls = content.filter((block) => block.type === 'tool_use');
+  const stop = message.stop_reason;
+
+  // A refusal can stop part-way, even inside a tool call: its partial reply is not kept.
+  if (stop === 'refusal') {
+    const category = message.stop_details?.category;
+    throw new ProviderError('refused', CLAUDE_MESSAGES.refused, {
+      retryable: false,
+      detail: category ? `refusal: ${category}` : 'refusal',
+    });
+  }
+  const cutOff = stop === 'max_tokens' || stop === 'model_context_window_exceeded';
+  if (cutOff && calls.length) {
+    throw new ProviderError('bad_output', CLAUDE_MESSAGES.badOutput, {
+      detail: `tool input cut off (${stop})`,
+    });
+  }
+
+  const next =
+    stop === 'pause_turn'
+      ? 'again'
+      : stop === 'tool_use' && calls.length > 0
+        ? 'tools'
+        : cutOff
+          ? 'limit'
+          : 'done';
+  return { turn: { role: 'assistant', content }, text: textOf(content), calls, next };
+}
 
 export function createClaudeAgent(opts: ClaudeAgentOptions): AgentProvider {
   const apiKey = opts.apiKey.trim();
@@ -131,131 +143,26 @@ export function createClaudeAgent(opts: ClaudeAgentOptions): AgentProvider {
     ...(opts.fetch ? { fetch: opts.fetch } : {}),
   });
 
-  /** Runs one tool call; every failure becomes an error result the model can read. */
-  async function runTool(
-    tools: readonly AgentTool[],
-    call: BetaToolUseBlockParam,
-    signal: AbortSignal,
-    onEvent: (event: AgentEvent) => void,
-  ): Promise<BetaToolResultBlockParam> {
-    const result = (content: string, isError: boolean, activity: string) => {
-      onEvent({ type: 'tool', name: call.name, activity, isError });
-      return {
-        type: 'tool_result' as const,
-        tool_use_id: call.id,
-        content,
-        ...(isError ? { is_error: true } : {}),
-      };
-    };
-    const tool = tools.find((t) => t.name === call.name);
-    if (!tool) {
-      const message = `There is no tool "${call.name}".`;
-      return result(message, true, message);
-    }
-    const input = tool.input.safeParse(call.input);
-    if (!input.success) {
-      const message = `Invalid input: ${z.prettifyError(input.error)}`.slice(0, MAX_ERROR_CHARS);
-      return result(message, true, `${tool.name}: invalid input`);
-    }
-    try {
-      const { content, activity } = await tool.run(input.data, signal);
-      return result(content, false, activity);
-    } catch (err) {
-      const message = shortMessage(err);
-      return result(message, true, message);
-    }
-  }
-
   async function run(req: AgentRunRequest): Promise<AgentRunResult> {
-    const previous = req.conversation ? conversations.get(req.conversation) : undefined;
-    if (req.conversation && !previous) throw new Error('claudeAgent: unknown conversation');
-    if (previous && previous.model !== opts.model) {
-      throw new Error(
-        `claudeAgent: a conversation started on ${previous.model} can't continue on ${opts.model}`,
-      );
-    }
-
-    const messages: BetaMessageParam[] = [
-      ...(previous?.messages ?? []),
-      { role: 'user', content: req.userMessage },
-    ];
     const tools = toolDefinitions(req.tools);
     const system = systemBlocks(req);
-    const texts: string[] = [];
-    let usage = NO_USAGE;
-    let breakBeforeText = false;
 
-    try {
-      for (let iteration = 0; iteration < req.maxIterations; iteration++) {
-        const message = await streamReply();
-        const content = echoContent(message.content);
-        const calls = content.filter((block) => block.type === 'tool_use');
-        const stop = message.stop_reason;
+    return runAgentLoop<BetaMessageParam, BetaToolUseBlockParam, BetaToolResultBlockParam>(req, {
+      model: opts.model,
+      conversations,
+      resends: JSON_RETRIES,
+      messages: CLAUDE_MESSAGES,
+      userTurn: (text) => ({ role: 'user', content: text }),
 
-        // A refusal can stop part-way, even inside a tool call: its partial reply is not kept.
-        if (stop === 'refusal') {
-          const category = message.stop_details?.category;
-          throw new ProviderError('refused', CLAUDE_MESSAGES.refused, {
-            retryable: false,
-            detail: category ? `refusal: ${category}` : 'refusal',
-          });
-        }
-        if ((stop === 'max_tokens' || stop === 'model_context_window_exceeded') && calls.length) {
-          throw new ProviderError('bad_output', CLAUDE_MESSAGES.badOutput, {
-            detail: `tool input cut off (${stop})`,
-          });
-        }
-
-        messages.push({ role: 'assistant', content });
-        const text = textOf(content);
-        if (text) {
-          texts.push(text);
-          breakBeforeText = true;
-        }
-
-        if (stop === 'pause_turn') continue;
-        if (stop !== 'tool_use' || calls.length === 0) {
-          const cutOff = stop === 'max_tokens' || stop === 'model_context_window_exceeded';
-          return finish(cutOff ? 'limit' : 'done');
-        }
-
-        // Parallel calls run together and are answered in one message (the skill's rule).
-        const results = await Promise.all(
-          calls.map((call) => runTool(req.tools, call, req.signal, req.onEvent)),
-        );
-        messages.push({ role: 'user', content: results });
-        if (req.signal.aborted) throw new ProviderError('aborted', CLAUDE_MESSAGES.aborted);
-      }
-      // The backstop: the conversation ends with tool results, which a follow-up question joins.
-      return finish('limit');
-    } catch (err) {
-      throw withoutSecret(toProviderError(err, opts.model), apiKey);
-    }
-
-    function finish(stopped: AgentRunResult['stopped']): AgentRunResult {
-      return {
-        text: texts.join('\n\n'),
-        conversation: makeConversation({ model: opts.model, messages }),
-        usage,
-        stopped,
-      };
-    }
-
-    /**
-     * One request, streamed; re-sent if a tool input couldn't be parsed. The re-send takes back the text the failed
-     * attempt streamed (a `retry` event) and counts its usage so far.
-     */
-    async function streamReply(): Promise<BetaMessage> {
-      for (let attempt = 0; ; attempt++) {
-        const breakAtStart = breakBeforeText;
-        let streamed = 0;
+      /** One request, streamed. A tool input the stream couldn't parse sends it again, with its usage so far. */
+      async send(messages, output) {
         const stream = client.beta.messages.stream(
           {
             model: opts.model,
             max_tokens: AGENT_MAX_OUTPUT_TOKENS,
             system,
             tools,
-            messages,
+            messages: [...messages],
             thinking: { type: 'adaptive' },
             output_config: { effort: CLAUDE_EFFORT },
             // Automatic caching: a breakpoint at the end of the conversation, moved on with every request.
@@ -265,22 +172,10 @@ export function createClaudeAgent(opts: ClaudeAgentOptions): AgentProvider {
           },
           { signal: req.signal },
         );
-        const emit = (delta: string) => {
-          streamed += delta.length;
-          req.onEvent({ type: 'text', delta });
-        };
-        stream.on('text', (delta) => {
-          if (breakBeforeText) {
-            emit('\n\n');
-            breakBeforeText = false;
-          }
-          emit(delta);
-        });
+        stream.on('text', (delta) => output.text(delta));
+        let message: BetaMessage;
         try {
-          const message = await stream.finalMessage();
-          usage = addUsage(usage, usageOf(message));
-          req.onEvent({ type: 'usage', usage: usageOf(message) });
-          return message;
+          message = await stream.finalMessage();
         } catch (err) {
           // The stream's own error for tool JSON it can't parse; API errors and aborts are APIErrors.
           const badJson = err instanceof AnthropicError && !(err instanceof APIError);
@@ -288,20 +183,23 @@ export function createClaudeAgent(opts: ClaudeAgentOptions): AgentProvider {
           // The error comes at the end of the tool block, before `message_delta`: the snapshot has the input and
           // cache tokens, and only the output tokens `message_start` reported.
           const partial = stream.currentMessage;
-          if (partial) {
-            usage = addUsage(usage, usageOf(partial));
-            req.onEvent({ type: 'usage', usage: usageOf(partial) });
-          }
-          if (attempt >= JSON_RETRIES) {
-            throw new ProviderError('bad_output', CLAUDE_MESSAGES.badOutput, {
-              detail: shortMessage(err),
-            });
-          }
-          req.onEvent({ type: 'retry', discard: streamed });
-          breakBeforeText = breakAtStart;
+          if (partial) output.usage(usageOf(partial));
+          return { resend: shortMessage(err) };
         }
-      }
-    }
+        output.usage(usageOf(message));
+        return readReply(message);
+      },
+
+      callOf: (call) => ({ name: call.name, input: call.input }),
+      result: (call, { content, isError }) => ({
+        type: 'tool_result',
+        tool_use_id: call.id,
+        content,
+        ...(isError ? { is_error: true } : {}),
+      }),
+      resultsTurn: (results) => ({ role: 'user', content: results }),
+      toError: (err) => withoutSecret(toProviderError(err, opts.model), apiKey),
+    });
   }
 
   /**
@@ -313,7 +211,7 @@ export function createClaudeAgent(opts: ClaudeAgentOptions): AgentProvider {
       { role: 'user' as const, content: question },
       { role: 'assistant' as const, content: [{ type: 'text' as const, text: answer }] },
     ]);
-    return makeConversation({ model: opts.model, messages });
+    return conversations.make(opts.model, messages);
   }
 
   return { model: opts.model, run, resume };

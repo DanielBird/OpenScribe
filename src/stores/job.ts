@@ -9,6 +9,7 @@ import { useGlossaryStore } from './glossary';
 import { usePlaybackStore } from './playback';
 import { useSettingsStore } from './settings';
 import { useTranscriptStore } from './transcript';
+import { createUnloadGuard } from './unloadGuard';
 
 export type JobStatus = 'idle' | 'uploading' | 'processing' | 'done' | 'error' | 'cancelled';
 
@@ -26,10 +27,8 @@ const MESSAGES = {
   unexpected: 'Something went wrong while transcribing. Try again.',
 } as const;
 
-/** Keeps the browser's "Leave site?" confirmation up while a run would be lost (Chromium 119+). */
-function onBeforeUnload(event: BeforeUnloadEvent): void {
-  event.preventDefault();
-}
+/** Asks before the page is left or reloaded while a run would be lost. */
+const unloadGuard = createUnloadGuard();
 
 //   idle ──start──▶ uploading ──upload done──▶ processing ──200──▶ done
 //                     │ cancel/error              │ cancel/error
@@ -65,7 +64,7 @@ export const useJobStore = defineStore('job', () => {
   function endRun(): void {
     controller = null;
     stopTicker();
-    window.removeEventListener('beforeunload', onBeforeUnload);
+    unloadGuard.release();
   }
 
   function snapshot(): RunSnapshot | null {
@@ -115,7 +114,7 @@ export const useJobStore = defineStore('job', () => {
     uploadDoneAt.value = null;
     elapsedSec.value = 0;
     stopTicker();
-    window.addEventListener('beforeunload', onBeforeUnload);
+    unloadGuard.hold();
 
     // Cancel (or a newer run) makes this run stale: whatever it produces afterwards is ignored.
     const isCurrent = () => controller === ctrl && !ctrl.signal.aborted;

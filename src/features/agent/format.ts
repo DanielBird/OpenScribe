@@ -5,17 +5,12 @@ import {
   type SessionText,
   type SessionTurn,
 } from '../../domain/corpus/sessionText';
-import { formatTimestamp, languageOrUnknown } from '../../domain/transcript';
-
-/** Text on one line: model-facing lines must not be broken by a newline in a title or a turn. */
-export function oneLine(text: string): string {
-  return text.replace(/\s+/g, ' ').trim();
-}
+import { oneLine } from '../../domain/text';
+import { formatTimestamp, isoDate, languageOrUnknown } from '../../domain/transcript';
 
 /** `YYYY-MM-DD` (UTC) of the recording's file date, or `?`. */
 export function recordingDate(ms: number): string {
-  const date = new Date(ms);
-  return Number.isNaN(date.getTime()) ? '?' : date.toISOString().slice(0, 10);
+  return isoDate(ms) ?? '?';
 }
 
 /** `1:12` (hours:minutes), or `?` when the length isn't known. */

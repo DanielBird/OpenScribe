@@ -90,9 +90,11 @@ src/
     chat.ts                     the project chat: the conversation, its frozen snapshot, streaming (parsed once a
                                 frame), Stop, Try again, New chat, the notices; saving it to chats/, opening a saved
                                 one and resuming it, a copy of a colleague's (D29); /compact (D33)
+    unloadGuard.ts              the "Leave site?" confirmation while a job, translation or pipeline runs (one each)
   domain/                       PURE TS — no Vue, no DOM, no I/O
     transcript.ts               canonical types + formatTimestamp, formatDateTime, normalizeLanguage, languageName,
-                                defaultSpeakerLabel, cleanTurnText / joinLines (edited turn text)
+                                defaultSpeakerLabel, cleanTurnText / joinLines (edited turn text), isoDate
+    text.ts                     plural, oneLine
     tokens.ts                   NormalizedToken / NormalizedTranscription (provider output, re-exported by providers)
     segmentation.ts             normalized tokens → speakers + turns
     buildTranscriptDoc.ts       assembles TranscriptDoc from provider result + source + request info
@@ -116,8 +118,10 @@ src/
     llm/models.ts               selectable models + defaults (one place to update), PROJECT_MODELS (Claude and
                                 Gemini, projectProviderOf, projectModelLabel), GEMINI_THINKING, MODEL_PRICES
     llm/claude.ts, llm/gemini.ts  both stream generateStructured
-    llm/claudeAgent.ts          the project agent's streamed tool-use loop with Claude
-    llm/geminiAgent.ts          the same contract with Gemini: a streamed function-calling loop (Phase 20)
+    llm/agentLoop.ts            the project agent's loop, shared by both providers: conversation, streamed text,
+                                re-sends, tools
+    llm/claudeAgent.ts          the project agent with Claude: its streamed request and the checks of its reply
+    llm/geminiAgent.ts          the same with Gemini: a streamed function-calling request (Phase 20)
   features/
     translation/                batching.ts, prompt.ts, translate.ts
     export/                     docxModel.ts (pure), docxRender.ts, download.ts, fileName.ts
@@ -159,7 +163,7 @@ src/
     composables/useRovingListbox.ts  one Tab stop and arrow keys for a listbox (SessionList, ChatList)
     composables/useCopy.ts      Copy with "Copied" and the Ctrl+C fallback (QuoteCard)
     clipboard.ts                writeClipboard (Copy buttons)
-    providerNames.ts            each LLM provider's company and key label (the pipeline's dialogs)
+    providerNames.ts            each LLM provider's name, company and key label, in the order the UI lists them
     speakerColor.ts             speaker index → `var(--speaker-N)`, cycling after 10 (D15)
   testing/
     transcriptDoc.ts            test only: makeDoc, makeLargeDoc, withTranslation (docs built from the fixtures)

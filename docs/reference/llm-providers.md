@@ -247,7 +247,10 @@ the entry point.
 
 The engine behind the project chat (PROJECTS.md §5.5) with Claude; Gemini is in "Project agent with Gemini"
 below. The provider is `src/providers/llm/claudeAgent.ts` (`createClaudeAgent`); the tools, context,
-instructions, caps and answer parsing are in `src/features/agent/`; `askProject()` runs one question.
+instructions, caps and answer parsing are in `src/features/agent/`; `askProject()` runs one question. The loop
+itself is `src/providers/llm/agentLoop.ts` (`runAgentLoop`), shared with Gemini: the conversation, the streamed text
+and its line breaks, re-sends, running the tools and ending the run. `claudeAgent.ts` makes one request and reads
+its reply (`AgentAdapter`).
 
 - **Loop: manual, streamed** (`client.beta.messages.stream` + `finalMessage()` per request), not the SDK's tool
   runner. After a **mid-output refusal fallback**, the API wants the `thinking`, `redacted_thinking` and `tool_use`
@@ -291,8 +294,8 @@ instructions, caps and answer parsing are in `src/features/agent/`; `askProject(
   instructions, the second adds the frozen context, and the automatic one moves along the conversation. 3 of 4
   breakpoints, all 5-minute. The minimum cacheable prefix on both models is 512 tokens. The unit tests check the
   request shape; the cache read share is live check A2.
-- **Conversation:** an opaque `AgentConversation` with the model id; the messages live in a `WeakMap` inside the
-  provider. Each assistant turn goes in as received (apart from the fallback rule above) and is never edited, so
+- **Conversation:** an opaque `AgentConversation` with the model id; the messages live in a `WeakMap` that belongs
+  to the provider module (`createConversations` in `agentLoop.ts`). Each assistant turn goes in as received (apart from the fallback rule above) and is never edited, so
   thinking blocks and their signatures go back unchanged. A conversation from another model, or one the provider
   didn't make, throws an `Error` (a programming error, not a `ProviderError`).
 - **Stop reasons:** `tool_use` runs the tools; `pause_turn` resends; `end_turn` ends with `stopped: 'done'`;
@@ -301,10 +304,8 @@ instructions, caps and answer parsing are in `src/features/agent/`; `askProject(
   `stop_details.category` in `detail`, and the partial reply isn't kept. After `maxIterations` (35) requests with
   tools still running, the run ends with `stopped: 'limit'`; the conversation then ends with the tool results, and
   a follow-up question joins that user turn.
-- **Events:** `text` deltas as they stream (with a `
-
-` delta between the text of two replies), a `tool` event as
-  each call finishes (`activity`, `isError`), `retry` before a re-send (see *Tools*), and `usage` after each
+- **Events:** `text` deltas as they stream (with a blank-line delta, `"\n\n"`, between the text of two replies; an
+  empty delta isn't passed on, so the blank line waits for real text), a `tool` event as each call finishes (`activity`, `isError`), `retry` before a re-send (see *Tools*), and `usage` after each
   request: `input_tokens`, `output_tokens`, `cache_read_input_tokens`, `cache_creation_input_tokens`. The run
   returns the summed usage. After a fallback the top-level usage covers the attempt that produced the message
   (`usage.iterations` isn't read).
@@ -316,7 +317,8 @@ instructions, caps and answer parsing are in `src/features/agent/`; `askProject(
 ## Project agent with Gemini (Phase 20)
 
 `src/providers/llm/geminiAgent.ts` (`createGeminiAgent`) implements the same `AgentProvider` contract as
-`claudeAgent.ts`; `getAgentProvider(id, key, model)` picks one by the project model's provider. `askProject`, the
+`claudeAgent.ts`, on the same loop (`agentLoop.ts`); `getAgentProvider(id, key, model)` picks one by the project
+model's provider. `askProject`, the
 tools, the caps, the instructions and `parseAnswer` are shared and unchanged.
 
 - **Loop: manual, streamed.** `ai.models.generateContentStream` per request, with `automaticFunctionCalling: {
@@ -382,8 +384,8 @@ tools, the caps, the instructions and `parseAnswer` are shared and unchanged.
 - **Errors:** an abort is `aborted` (checked first, also between tool calls). Otherwise `toProviderError` from
   `gemini.ts` (401/403/`API_KEY_INVALID` → `auth`, 402 and a daily quota → `quota`, 429 → `rate_limit`, 5xx →
   `server`, a failed fetch → `network`, another `TypeError` → `unknown`), then `withoutSecret`.
-- **Conversation:** an opaque `AgentConversation` with the model id; the contents live in a `WeakMap` inside the
-  provider. A conversation from another model, another provider (a Claude conversation is unknown here) or one the
+- **Conversation:** an opaque `AgentConversation` with the model id; the contents live in a `WeakMap` that belongs
+  to the provider module, as Claude's do. A conversation from another model, another provider (a Claude conversation is unknown here) or one the
   provider didn't make throws an `Error`.
 - **Cost:** `MODEL_PRICES` (per million tokens) has 3.8 Flash $1.50 in, $7.50 out, $0.15 cache read and 4 Argon $4,
   $20, $0.20, no cache writes. These are the prices from 2026-12-01 (Argon) and 2027-01-01 (Flash), twice today's:
