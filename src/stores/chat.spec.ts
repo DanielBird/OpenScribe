@@ -76,6 +76,10 @@ function fakeAgent(runs: Run[]) {
   return { requests, made, resumed };
 }
 
+/** The history a request's conversation was resumed from (`fakeAgent`), or `undefined`. */
+const resumedFrom = (req: AgentRunRequest) =>
+  (req.conversation as unknown as { resumed?: readonly AgentExchange[] } | null)?.resumed;
+
 /** A run that streams `text` and a search, then finishes. */
 const answers =
   (text: string, opts: { stopped?: 'done' | 'limit'; n?: number } = {}): Run =>
@@ -192,7 +196,7 @@ afterEach(() => {
 });
 
 describe('chat store', () => {
-  it('asks with a snapshot made once, and carries the conversation to the follow-up', async () => {
+  it('asks with a snapshot made once, and a follow-up starts from the earlier text (D47)', async () => {
     seedProject();
     const { requests, made } = fakeAgent([
       answers('First.', { n: 1 }),
@@ -225,7 +229,10 @@ describe('chat store', () => {
 
     await chat.ask('And who helps?');
     expect(requests[1]!.context).toBe(context);
-    expect((requests[1]!.conversation as unknown as { n: number }).n).toBe(1);
+    // Not the first question's conversation, with its tool results: its question and answer as text.
+    expect(resumedFrom(requests[1]!)).toEqual([
+      { question: 'Who charges at night?', answer: 'First.' },
+    ]);
     expect(chat.messages).toHaveLength(4);
   });
 
@@ -296,7 +303,7 @@ describe('chat store', () => {
       'done',
     ]);
     expect(requests[2]!.userMessage).toBe('Two');
-    expect((requests[2]!.conversation as unknown as { n: number }).n).toBe(1);
+    expect(resumedFrom(requests[2]!)).toEqual([{ question: 'One', answer: 'First.' }]);
   });
 
   it('turns an unexpected throw into a message', async () => {
@@ -330,8 +337,24 @@ describe('chat store', () => {
     expect(answer(chat).status).toBe('stopped');
 
     await chat.ask('Three');
-    expect((requests[2]!.conversation as unknown as { n: number }).n).toBe(1);
+    expect(resumedFrom(requests[2]!)).toEqual([{ question: 'One', answer: 'First.' }]);
     expect(answer(chat)).toMatchObject({ status: 'done', text: 'Third.' });
+  });
+
+  it('a follow-up takes back the text of an answer stopped at a limit, unless it has none', async () => {
+    seedProject();
+    const { requests } = fakeAgent([
+      answers('Partial.', { stopped: 'limit' }),
+      answers('', { stopped: 'limit' }),
+      answers('Third.'),
+    ]);
+    const chat = useChatStore();
+    await chat.ask('One');
+    await chat.ask('Two');
+    await chat.ask('Three');
+    expect(resumedFrom(requests[1]!)).toEqual([{ question: 'One', answer: 'Partial.' }]);
+    // An empty answer can't go back to the provider, so it is left out with its question.
+    expect(resumedFrom(requests[2]!)).toEqual([{ question: 'One', answer: 'Partial.' }]);
   });
 
   it('ignores a question while an answer is written, and a blank one', async () => {
@@ -980,7 +1003,7 @@ describe('/compact (D33)', () => {
     expect(resumed).toEqual([compactedHistory(SUMMARY)]);
 
     await chat.submit('And at work?');
-    expect((requests[2]!.conversation as unknown as { resumed: unknown }).resumed).toBe(resumed[0]);
+    expect(resumedFrom(requests[2]!)).toEqual(compactedHistory(SUMMARY));
     await vi.waitFor(() => expect(saves).toHaveLength(3));
     expect(saves[1]!.file.messages.at(-1)).toMatchObject({
       role: 'compaction',
@@ -1000,7 +1023,7 @@ describe('/compact (D33)', () => {
   it('Stop takes the compaction away, and the chat goes on as before it', async () => {
     seedProject();
     const saves = folderSaves();
-    const { requests, resumed } = fakeAgent([
+    const { requests } = fakeAgent([
       answers('First.', { n: 1 }),
       hangs('Half a summ'),
       answers('Next.'),
@@ -1018,8 +1041,7 @@ describe('/compact (D33)', () => {
     expect(saves).toHaveLength(1);
 
     await chat.ask('Two');
-    expect((requests[2]!.conversation as unknown as { n: number }).n).toBe(1);
-    expect(resumed).toEqual([]);
+    expect(resumedFrom(requests[2]!)).toEqual([{ question: 'One', answer: 'First.' }]);
   });
 
   it('shows an error in the compaction, keeps the conversation, and Try again compacts again', async () => {

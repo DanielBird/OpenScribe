@@ -122,6 +122,12 @@ describe('historyOf', () => {
     ).toEqual([{ question: 'two', answer: '2' }]);
   });
 
+  it('leaves out an answer with no text, with its question', () => {
+    expect(
+      historyOf([question('one'), answer(' \n', 'limit'), question('two'), answer('2')]).exchanges,
+    ).toEqual([{ question: 'two', answer: '2' }]);
+  });
+
   it('leaves out a question without an answer', () => {
     expect(historyOf([question('one'), question('two'), answer('2')]).exchanges).toEqual([
       { question: 'two', answer: '2' },

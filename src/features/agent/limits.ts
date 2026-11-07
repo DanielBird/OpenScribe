@@ -3,6 +3,8 @@
 export const AGENT_LIMITS = {
   /** Transcript text that `read_transcript` returns per question, in estimated tokens (about 20 hours). */
   transcriptTokensPerQuestion: 250_000,
+  /** Summary text that `get_summaries` returns per question, in estimated tokens (about 30 summaries, D45). */
+  summaryTokensPerQuestion: 75_000,
   /** Tool calls per question. After that every tool says to answer. */
   toolCallsPerQuestion: 30,
   /** Requests per question: a backstop behind the tool-call budget. */

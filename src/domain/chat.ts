@@ -1,4 +1,4 @@
-// Saved chats with the project agent (DECISIONS.md D27): one file per chat in the project folder's `chats/`.
+// Saved chats with the project agent (DECISIONS.md D29): one file per chat in the project folder's `chats/`.
 //   chats/2026-10-27-1402--3f9a1c2e.chat.json
 //   chats/2026-10-27-1402--3f9a1c2e.chat-LAPTOP-123.json   (a OneDrive conflict copy)
 // A chat is identified by the id inside its file, never by the name. Each file has one writer: its author's
@@ -51,7 +51,7 @@ export interface ChatAuthor {
   name: string;
 }
 
-/** `chats/<base>.chat.json` (D27). */
+/** `chats/<base>.chat.json` (D29). */
 export interface ChatFile {
   kind: 'describe.chat';
   schemaVersion: typeof CHAT_SCHEMA_VERSION;
@@ -123,9 +123,10 @@ export interface ChatHistory {
 }
 
 /**
- * A saved chat's history (D29, D33). The exchanges after the latest compaction are each question followed by an
- * answer that finished (`done` or `limit`). A stopped answer is left out with its question, as the live conversation
- * leaves it out.
+ * A chat's history (D29, D33, D47): what its next question goes on from. The exchanges after the latest compaction
+ * are each question followed by an answer that finished (`done` or `limit`). A stopped answer is left out with its
+ * question. So is an answer with no text (a `limit` reached before the agent wrote anything), since a provider
+ * can't take an empty answer back.
  */
 export function historyOf(messages: readonly ChatFileMessage[]): ChatHistory {
   let summary: string | null = null;
@@ -138,6 +139,7 @@ export function historyOf(messages: readonly ChatFileMessage[]): ChatHistory {
     }
     const answer = messages[i + 1];
     if (message.role !== 'user' || answer?.role !== 'assistant') return;
+    if (answer.text.trim() === '') return;
     if (answer.status === 'done' || answer.status === 'limit') {
       exchanges.push({ question: message.text, answer: answer.text });
     }

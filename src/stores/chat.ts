@@ -171,16 +171,28 @@ function settledMessages(list: readonly ChatMessage[]): ChatFileMessage[] {
 }
 
 /**
+ * What the next request goes on from (D29, D47): the questions and finished answers as text, from the latest
+ * compaction's summary if there is one (D33). The same for a live chat and an opened one.
+ */
+function pastExchanges(list: readonly ChatMessage[]): ChatExchange[] {
+  const { summary, exchanges } = historyOf(settledMessages(list));
+  return summary === null ? exchanges : compactedHistory(summary, exchanges);
+}
+
+/**
  * The project chat (Phase 17): one conversation with the project agent. The model (and so its provider, Claude or
  * Gemini), the sessions and the brief are frozen at the first question, so the cached context and the session keys
  * stay the same for the whole chat. Streamed text is parsed into blocks at most once per animation frame.
+ *
+ * Each question starts from the earlier questions and answers as text (D47): their tool results and thinking stay
+ * behind, so a follow-up doesn't re-read every earlier question's reading.
  *
  * Chats are saved in the project folder (D29) after each answer that ends, and saved ones can be opened again. An
  * opened chat goes on from its questions and answers as text, with its session keys kept. Asking in a colleague's
  * chat saves a copy of your own, so each file has one writer.
  *
- * `/compact` (D33) replaces the conversation with one that starts from the agent's summary of it. The messages stay
- * on screen and in the file, with the compaction among them.
+ * `/compact` (D33) has the agent summarise the conversation; the questions after it start from the summary. The
+ * messages stay on screen and in the file, with the compaction among them.
  */
 export const useChatStore = defineStore('chat', () => {
   const project = useProjectStore();
@@ -201,9 +213,8 @@ export const useChatStore = defineStore('chat', () => {
   /** Why the last command did nothing; cleared by the next one, or a question. */
   const commandNote = ref<string | null>(null);
 
+  /** The latest question's conversation, its tool results included, for `/compact` to summarise. */
   let conversation: AgentConversation | null = null;
-  /** An opened chat's questions and answers (after its summary, if any), sent back with its next question. */
-  let history: ChatExchange[] = [];
   /** An opened chat's messages by id, as they were read: saves, copies too, write them back unchanged (D38). */
   let openedMessages = new Map<string, ChatFileMessage>();
   let target: ChatTarget | null = null;
@@ -393,6 +404,7 @@ export const useChatStore = defineStore('chat', () => {
     const { corpus, context } = snapshot.value;
     const frozenModel = model.value;
     lastQuestion = text;
+    const past = pastExchanges(messages.value);
 
     const answerId = crypto.randomUUID();
     messages.value = [
@@ -473,13 +485,12 @@ export const useChatStore = defineStore('chat', () => {
     try {
       const id = projectProviderOf(frozenModel);
       const agent = getAgentProvider(id, settings.keyFor(id).trim(), frozenModel);
-      // An opened chat goes on from its questions and answers (D29).
-      if (conversation === null && history.length > 0) conversation = agent.resume(history);
+      // Every question goes on from the earlier questions and answers as text, as an opened chat does (D29, D47).
       const result = await askProject({
         provider: agent,
         corpus,
         context,
-        conversation,
+        conversation: past.length > 0 ? agent.resume(past) : null,
         question: text,
         signal: ctrl.signal,
         onEvent,
@@ -543,6 +554,7 @@ export const useChatStore = defineStore('chat', () => {
     model.value ??= settings.projectModel;
     const { corpus, context } = opened;
     const frozenModel = model.value;
+    const past = pastExchanges(messages.value);
 
     const entryId = crypto.randomUUID();
     messages.value = [
@@ -573,7 +585,7 @@ export const useChatStore = defineStore('chat', () => {
       const id = projectProviderOf(frozenModel);
       const agent = getAgentProvider(id, settings.keyFor(id).trim(), frozenModel);
       // An opened chat goes on from its questions and answers (D29); `hasNewAnswers` means there are some.
-      conversation ??= agent.resume(history);
+      conversation ??= agent.resume(past);
       const result = await compactChat({
         provider: agent,
         corpus,
@@ -588,7 +600,6 @@ export const useChatStore = defineStore('chat', () => {
       });
       if (!isCurrent()) return;
       conversation = result.conversation;
-      history = [];
       // The next request is small again, and its size will say so.
       lastRequestTokens.value = 0;
       patchCompaction(entryId, {
@@ -652,7 +663,6 @@ export const useChatStore = defineStore('chat', () => {
     model.value = null;
     snapshot.value = null;
     conversation = null;
-    history = [];
     openedMessages = new Map();
     target = null;
     chatId.value = null;
@@ -727,8 +737,6 @@ export const useChatStore = defineStore('chat', () => {
           };
       }
     });
-    const { summary, exchanges } = historyOf(file.messages);
-    history = summary === null ? exchanges : compactedHistory(summary, exchanges);
   }
 
   // A chat belongs to the project it was started in.

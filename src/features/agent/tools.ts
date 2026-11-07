@@ -1,6 +1,6 @@
 // The project agent's tools (PROJECTS.md §5.5). They only read the corpus: none can write a file or reach the
 // network. Each returns compact text for the model and one activity line for the UI. The budgets are enforced
-// here, per question (A18).
+// here, per question (A18, D45).
 import { parseQuery } from '../../domain/corpus/query';
 import type { SearchField, SessionHits } from '../../domain/corpus/search';
 import { englishText, type SessionTurn } from '../../domain/corpus/sessionText';
@@ -16,15 +16,18 @@ import { AGENT_LIMITS, estimateTokens } from './limits';
 
 export const TOOL_BUDGET_REACHED = 'Tool budget reached. Answer now.';
 export const READING_BUDGET_REACHED = 'Reading budget reached. Answer from what you have.';
+export const SUMMARY_BUDGET_REACHED =
+  'Summary budget reached. Search or read the transcripts, or answer from what you have.';
 
 /** What a question has used so far. Make a fresh one per question. */
 export interface AgentBudget {
   toolCalls: number;
   transcriptTokens: number;
+  summaryTokens: number;
 }
 
 export function createBudget(): AgentBudget {
-  return { toolCalls: 0, transcriptTokens: 0 };
+  return { toolCalls: 0, transcriptTokens: 0, summaryTokens: 0 };
 }
 
 /** A budget with nothing left, so every tool says to answer: for the summary of `/compact` (Phase 22). */
@@ -32,6 +35,7 @@ export function spentBudget(): AgentBudget {
   return {
     toolCalls: AGENT_LIMITS.toolCallsPerQuestion,
     transcriptTokens: AGENT_LIMITS.transcriptTokensPerQuestion,
+    summaryTokens: AGENT_LIMITS.summaryTokensPerQuestion,
   };
 }
 
@@ -184,10 +188,10 @@ function summaryText(session: CorpusSession): string {
   return lines.join('\n');
 }
 
-function summariesTool(corpus: CorpusReader): AgentTool {
+function summariesTool(corpus: CorpusReader, budget: AgentBudget): AgentTool {
   return defineTool({
     name: 'get_summaries',
-    description: `The full summaries of up to ${AGENT_LIMITS.summariesPerCall} sessions: overview, respondents, findings per research question, and themes, each with quotes already checked against the transcript.`,
+    description: `The full summaries of up to ${AGENT_LIMITS.summariesPerCall} sessions: overview, respondents, findings per research question, and themes, each with quotes already checked against the transcript. This counts against your summary budget.`,
     input: SummariesInput,
     async run(input): Promise<ToolResult> {
       const keys = [...new Set(input.sessions.map((k) => k.trim().toLowerCase()))];
@@ -196,9 +200,29 @@ function summariesTool(corpus: CorpusReader): AgentTool {
         throw new Error(`At most ${AGENT_LIMITS.summariesPerCall} sessions per call.`);
       }
       const sessions = keys.map((key) => sessionFor(corpus, key));
+
+      // Whole summaries, in the order asked for, until the next one would pass the budget (D45).
+      const shown: CorpusSession[] = [];
+      const texts: string[] = [];
+      for (const session of sessions) {
+        const text = summaryText(session);
+        const tokens = estimateTokens(text);
+        if (budget.summaryTokens + tokens > AGENT_LIMITS.summaryTokensPerQuestion) break;
+        budget.summaryTokens += tokens;
+        shown.push(session);
+        texts.push(text);
+      }
+
+      if (shown.length === 0) {
+        return { content: SUMMARY_BUDGET_REACHED, activity: 'Summary budget reached' };
+      }
+      const left = sessions.slice(shown.length).map((s) => s.key);
       return {
-        content: sessions.map(summaryText).join('\n\n'),
-        activity: `Read the summaries of ${sessions.map((s) => oneLine(s.title)).join(', ')}`,
+        content: [
+          ...texts,
+          ...(left.length ? [`${SUMMARY_BUDGET_REACHED} Not shown: ${left.join(', ')}.`] : []),
+        ].join('\n\n'),
+        activity: `Read the summaries of ${shown.map((s) => oneLine(s.title)).join(', ')}`,
       };
     },
   });
@@ -344,16 +368,47 @@ function themesTool(corpus: CorpusReader): AgentTool {
   });
 }
 
-/** Wraps a tool so that once the question has made its last call, every call says to answer. */
+/** Estimated tokens in thousands, rounded down, and never below 0: `212k`. */
+const thousands = (tokens: number) => `${Math.floor(Math.max(0, tokens) / 1000)}k`;
+
+/** `reading budget 212k of 250k tokens` */
+const tokensLeft = (name: string, used: number, limit: number) =>
+  `${name} ${thousands(limit - used)} of ${thousands(limit)} tokens`;
+
+/**
+ * What's left of the question's budgets, as the last line of every result that runs (D46), so the model can plan
+ * its remaining calls rather than be cut off part-way. It goes in the conversation, not in the cached prefix: the
+ * instructions and the tool descriptions don't mention it, so it has to make sense on its own.
+ */
+export function budgetNote(budget: AgentBudget): string {
+  const limits = AGENT_LIMITS;
+  const calls = Math.max(0, limits.toolCallsPerQuestion - budget.toolCalls);
+  const head = `Left for this question: ${calls} of ${limits.toolCallsPerQuestion} tool calls`;
+  if (calls === 0) return `${head}. Answer now.`;
+  return [
+    head,
+    tokensLeft('reading budget', budget.transcriptTokens, limits.transcriptTokensPerQuestion),
+    tokensLeft('summary budget', budget.summaryTokens, limits.summaryTokensPerQuestion),
+  ].join(' · ');
+}
+
+/**
+ * Wraps a tool so that every result that runs ends with the budget note, and once the question has made its last
+ * call, every call says to answer. A tool that throws gets no note: its message is also its activity line in the
+ * chat. The next result that runs shows the count.
+ */
 function counted(tool: AgentTool, budget: AgentBudget): AgentTool {
   return {
     ...tool,
-    run(input, signal) {
+    async run(input, signal) {
       budget.toolCalls++;
       if (budget.toolCalls > AGENT_LIMITS.toolCallsPerQuestion) {
-        return Promise.resolve({ content: TOOL_BUDGET_REACHED, activity: 'Tool budget reached' });
+        return { content: TOOL_BUDGET_REACHED, activity: 'Tool budget reached' };
       }
-      return tool.run(input, signal);
+      const result = await tool.run(input, signal);
+      // After the await: the loop starts a reply's calls together (`Promise.all` in agentLoop.ts), and each tool
+      // counts and spends before its first await, so every result of a reply shows what's left after all of them.
+      return { ...result, content: `${result.content}\n\n${budgetNote(budget)}` };
     },
   };
 }
@@ -362,7 +417,7 @@ function counted(tool: AgentTool, budget: AgentBudget): AgentTool {
 export function createAgentTools(corpus: CorpusReader, budget: AgentBudget): AgentTool[] {
   return [
     searchTool(corpus),
-    summariesTool(corpus),
+    summariesTool(corpus, budget),
     readTool(corpus, budget),
     themesTool(corpus),
   ].map((tool) => counted(tool, budget));

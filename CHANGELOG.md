@@ -17,6 +17,16 @@ All notable changes to DeScribe are recorded here. The format follows
 
 ### Changed
 
+- **Quotes with words left out** are verified only when each part has at least three words and no negation such as
+  "not" is left out. Otherwise the card says **Left-out words may change the meaning** and has no **Copy**. Quotes
+  are checked whenever they're shown, so some in older summaries and saved chats are now marked: **Regenerate** a
+  summary to replace its quotes.
+- **Project chat:** each question reads at most about 30 session summaries, besides about 20 hours of transcript.
+- **Project chat:** after each step, the agent sees how many tool calls and how much reading it has left, so it can
+  save its last steps for the evidence it needs.
+- **Project chat:** a follow-up question costs about the same as the first. It goes on from the earlier questions and
+  answers, as a reopened chat does, so the agent reads passages again when it needs them instead of sending back
+  everything it read for earlier questions.
 - **Run** and **Clear saved data** warn when the last transcript's latest changes aren't saved in its project yet,
   for example before **Reconnect**.
 - Saving a project's brief, a transcript or a chat keeps what a newer version of DeScribe added to the file.

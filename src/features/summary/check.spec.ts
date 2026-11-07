@@ -217,6 +217,23 @@ describe('checkSummary', () => {
     expect(quoteFailureRate).toBe(0.5);
   });
 
+  it('drops and counts a quote whose left-out words could change it (D44)', () => {
+    const output = reply({
+      themes: [
+        theme('welcome', [
+          quote('t2', 'Thank you … to be here'), // a part of two words
+          quote('t4', 'For about two years … a small team'),
+        ]),
+      ],
+    });
+    const { summary, droppedQuotes, verifiedQuotes } = checkSummary(output, SESSION, EMPTY_BRIEF);
+    expect(summary.themes[0]!.quotes).toEqual([
+      { turnId: 't4', text: 'For about two years … a small team.' },
+    ]);
+    expect(droppedQuotes).toBe(1);
+    expect(verifiedQuotes).toBe(1);
+  });
+
   it("caps the themes and each entry's quotes, and checks only the quotes of themes it keeps", () => {
     const output = reply({
       themes: many(15, (i) =>

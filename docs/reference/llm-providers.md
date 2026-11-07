@@ -297,13 +297,16 @@ its reply (`AgentAdapter`).
 - **Conversation:** an opaque `AgentConversation` with the model id; the messages live in a `WeakMap` that belongs
   to the provider module (`createConversations` in `agentLoop.ts`). Each assistant turn goes in as received (apart from the fallback rule above) and is never edited, so
   thinking blocks and their signatures go back unchanged. A conversation from another model, or one the provider
-  didn't make, throws an `Error` (a programming error, not a `ProviderError`).
+  didn't make, throws an `Error` (a programming error, not a `ProviderError`). A conversation lasts one question: the
+  chat store starts each question from `resume` (D47, "Resuming a saved chat" below), so earlier questions' blocks
+  are never sent back.
 - **Stop reasons:** `tool_use` runs the tools; `pause_turn` resends; `end_turn` ends with `stopped: 'done'`;
   `max_tokens` on a text answer ends with `stopped: 'limit'` and the text so far; `max_tokens` with a tool call is
   `bad_output` (the input may be cut off, so the call never runs); `refusal` is `refused` with
   `stop_details.category` in `detail`, and the partial reply isn't kept. After `maxIterations` (35) requests with
   tools still running, the run ends with `stopped: 'limit'`; the conversation then ends with the tool results, and
-  a follow-up question joins that user turn.
+  a follow-up question would join that user turn. The chat never sends one: its next question starts from the text
+  (D47).
 - **Events:** `text` deltas as they stream (with a blank-line delta, `"\n\n"`, between the text of two replies; an
   empty delta isn't passed on, so the blank line waits for real text), a `tool` event as each call finishes (`activity`, `isError`), `retry` before a re-send (see *Tools*), and `usage` after each
   request: `input_tokens`, `output_tokens`, `cache_read_input_tokens`, `cache_creation_input_tokens`. The run
@@ -409,7 +412,14 @@ SDK shapes (AGENTS.md rule 5), and Claude's thinking blocks are only valid in th
 - The context is rebuilt when the chat is opened, with the chat's session keys kept, so `s3/t12` in the history still
   means the same turn. The first request of a resumed chat writes a new cache. The agent doesn't remember what it
   read before, so it searches again when it needs to.
-- Live checks H1 (Claude) and H2 (Gemini) below.
+- **Every follow-up too** (D47, Phase 29). A live chat's next question also starts from `resume`, with the same
+  history a reopened chat would send. The `claude-api` skill (read 2026-11-07, model-migration "Breaking change 3")
+  says the history-editing check binds a thinking block to the messages before it. A history with no thinking
+  blocks has nothing to check, and the question's own loop stays append-only. Rebuilding between questions is the
+  skill's "simple compaction" shape, with the questions and answers in place of a summary. The tools and `system`
+  are the same bytes, so only the messages are written to the cache again. An answer with no text is left out
+  (`historyOf`), since an empty text block can't go back.
+- Live checks H1 (Claude) and H2 (Gemini) below. They now cover every follow-up, not only reopened chats.
 
 ## Compacting a chat (Phase 22)
 
@@ -465,18 +475,18 @@ browser. Phase 21 (D29) changed "Chats aren't kept" to say where chats are saved
 | L2 | Gemini: does `@google/genai` bundle into the single file, and how much size does it add? Which schema field works? | **Yes**, through `@google/genai/web`. 2.29.1 adds about 381 KB, under T6's 1 MB, so the REST fallback is not needed. The schema field is `responseJsonSchema` (typed in `web.d.ts`, sent as `generationConfig.responseJsonSchema`). Both SDKs together: 632 → 1,236 KB (198 → 327 KB gzip, as Vite reports it). The live request shape is still unchecked (L3). | 2026-10-13 |
 | S1 | Summary quality on a real German session and a real English one, with Sonnet 5.5 and Opus 5.5: themes, respondent details, findings per research question, quotes | *Pending* (no real API calls until the maintainer asks). Assumption until then: the prompt and check as built in Phase 13. | – |
 | S2 | Tokens and cost per hour of transcript for a summary, with each model (input, output including thinking) | *Pending*. Estimate (PROJECTS.md §3): ≈ $0.10 an hour with Sonnet 5.5, ≈ $0.20 with Opus 5.5. | – |
-| S3 | Dropped-quote rate: the share of a summary's quotes the check doesn't find, and how often the retry runs | *Pending*. Assumption: under a third, so the retry is rare. | – |
+| S3 | Dropped-quote rate: the share of a summary's quotes the check doesn't verify (not found, or an unsafe omission, D44), and how often the retry runs | *Pending*. Assumption: under a third, so the retry is rare. | – |
 | L3 | Translation quality and cost for a 30 min German transcript with each default model (rough tokens and €) | **Accepted for 1.0 as a known limitation** until [TESTING.md](../TESTING.md) scenario 7 is run on the release file with the maintainer's keys; the result goes here. That run also confirms that the real APIs accept the browser's CORS preflight for every SDK header (`x-stainless-*`, `anthropic-beta`); the e2e mocks allow all headers. Until then: the defaults in `models.ts`, effort `medium` (T9). | 2026-10-14 (accepted) |
-| A1 | Project agent: quote recall on 10 questions with known answers, with Sonnet 5.5 and Opus 5.5 (planted quotes found, quotes verified) | *Pending* (no real API calls until the maintainer asks). Assumption: the instructions and tools as built in Phase 16. | – |
-| A2 | Project agent: cost per question, and the share of input read from the cache | *Pending*. Estimate (PROJECTS.md §3): $0.25–1 per question with Sonnet 5.5; most input cached after the first request. | – |
+| A1 | Project agent: quote recall on 10 questions with known answers, with Sonnet 5.5 and Opus 5.5 (planted quotes found, quotes verified, and how many good quotes the omission rules of D44 reject) | *Pending* (no real API calls until the maintainer asks). Assumption: the instructions and tools as built in Phase 16, with D46's budget note at the end of each tool result. | – |
+| A2 | Project agent: cost per question, and the share of input read from the cache; whether D46's budget note makes questions use more tool calls; D47 on three heavy questions in a row with Sonnet 5.5, one of them asked more than 5 minutes after the last answer: each request's `input_tokens`, `cache_read_input_tokens` and `cache_creation_input_tokens`, and each question's cost | *Pending*. Estimate (PROJECTS.md §3): $0.25–1 per question with Sonnet 5.5; most input cached after the first request. With D47, a follow-up should cost about what the first question did: its first request writes only the text history to the cache, and reads the tools, instructions and context from it. | – |
 | A3 | Project agent: effort `medium` against `high` (answer quality, tool calls, cost) | *Pending*. Until then `medium` (T9). | – |
 | A4 | Project agent: the real API accepts the browser's CORS preflight with the agent's headers (`anthropic-beta`, `x-stainless-*`) from `Origin: null` | *Pending*. The agent sends the same headers as translation (no tool-runner helper header), so L3's check covers it once run. | – |
 | G1 | Gemini accepts `responseJsonSchema` for the summary schema (with the nullable `speakerId` as a type array), and the streamed reply parses: the same request as the unit tests. Also closes L3 for Gemini translation. | *Pending* (no real API calls until the maintainer asks). Assumption: the request as built in Phase 19. | – |
 | G2 | Gemini summary quality on the S1–S3 sessions (a real German one and a real English one), with 3.8 Flash and 4 Argon: the dropped-quote rate, tokens, time and cost per hour, against Sonnet 5.5 | *Pending*. Prices are above. | – |
-| A1–A4 (Gemini) | Phase 18's A1–A4 with Gemini 3.8 Flash and Gemini 4 Argon: quote recall against Sonnet 5.5; cost per question and the cached share (implicit caching); thinking `MEDIUM` against `HIGH`; CORS for `:streamGenerateContent?alt=sse` with function calling, and that Gemini accepts the tools' `parametersJsonSchema` | *Pending* (no real API calls until the maintainer asks). Assumption: the request as built in Phase 20. | – |
+| A1–A4 (Gemini) | Phase 18's A1–A4 with Gemini 3.8 Flash and Gemini 4 Argon: quote recall against Sonnet 5.5; cost per question and the cached share (implicit caching); thinking `MEDIUM` against `HIGH`; CORS for `:streamGenerateContent?alt=sse` with function calling, and that Gemini accepts the tools' `parametersJsonSchema` | *Pending* (no real API calls until the maintainer asks). Assumption: the request as built in Phase 20, with D46's budget note at the end of each function response. | – |
 | G3 | CORS from `file://` for `:streamGenerateContent?alt=sse`, and a real 429 from a spent quota and from a rate limit: what their bodies and details say | *Pending*. Until then, the 429 mapping above and the queue rule (a Gemini `rate_limit` stops **Summarise all**). | – |
-| H1 | A resumed chat with Sonnet 5.5 and Opus 5.5, on an account created after 2026-08-31 (preserved thinking enforced): earlier turns as text only, then a question that uses tools | *Pending* (no real API calls until the maintainer asks). Assumption: accepted, since no thinking block is sent back (see "Resuming a saved chat"). | – |
-| H2 | A resumed chat with Gemini 3.8 Flash and 4 Argon: earlier model turns without thought signatures, then a question that calls functions | *Pending*. Assumption: accepted, since only the current turn's function calls need signatures. | – |
+| H1 | A resumed chat, and a live follow-up (D47), with Sonnet 5.5 and Opus 5.5, on an account created after 2026-08-31 (preserved thinking enforced): earlier turns as text only, then a question that uses tools | *Pending* (no real API calls until the maintainer asks). Assumption: accepted, since no thinking block is sent back (see "Resuming a saved chat"). | – |
+| H2 | A resumed chat, and a live follow-up (D47), with Gemini 3.8 Flash and 4 Argon: earlier model turns without thought signatures, then a question that calls functions | *Pending*. Assumption: accepted, since only the current turn's function calls need signatures. | – |
 | C1 | `/compact` on a long chat with Sonnet 5.5, Opus 5.5, Gemini 3.8 Flash and Gemini 4 Argon: the summary request reads its prefix from the cache (`cache_read_input_tokens`), the summary keeps what follow-up questions need, and a question after it is accepted | *Pending* (no real API calls until the maintainer asks). Assumption: accepted, since the new conversation is text only, as in H1 and H2. | – |
 | K1 | Claude key check: `GET /v1/models?limit=1` from `file://` (`Origin: null`) passes the CORS preflight with the SDK's headers, a valid key gets 200, a wrong one 401 `authentication_error` | *Pending* (no real API calls until the maintainer asks). Assumption: as for messages (L3), since the SDK sends the same headers. | – |
 | K2 | Gemini key check: `GET /v1beta/models?pageSize=1` from `file://` passes CORS, a valid key gets 200, a wrong one 400 with `API_KEY_INVALID` | *Pending*. Assumption: the 400 body already mapped for `generateContent`. | – |

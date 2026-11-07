@@ -335,6 +335,8 @@ MVP = Phases 0–5. Each phase is sized for one agent session (or a few) and end
 | 24 | [Desktop shell and the Store pipeline](phases/24-desktop-shell.md) | – | 23 | ☑ Done (Task 8, the Store submission, and the work-laptop checklist W1–W15 open) |
 | 26 | [Recordings in more languages](phases/26-more-languages.md) | – | 23, 25 | ☑ Done (live check V7 and manual row 21 open) |
 | 27 | [Rescan the project every two minutes](phases/27-background-rescan.md) | 14 | 23, 25 | ☑ Done (manual row 15's two-minute step open) |
+| 28 | [The agent sees its budget left](phases/28-budget-left.md) | 16, 20 | 23, 25 | ☑ Done (live checks A1–A3 open) |
+| 29 | [Follow-up questions start from the text](phases/29-follow-ups-from-text.md) | 17, 21, 22 | 23, 25 | ☑ Done (live checks A2, H1 and H2 open) |
 
 Status values: ☐ Not started · ◐ In progress · ☑ Done.
 
@@ -391,6 +393,7 @@ dependency is merged.
 
 - [DECISIONS.md](DECISIONS.md) — what was decided and why
 - [PROJECTS.md](PROJECTS.md) — release 2 (Projects): architecture and phase plan
+- [AGENTIC_SEARCH.md](AGENTIC_SEARCH.md) — how the Project chat's agent searches, reads and quotes: its tools and caps
 - [reference/elevenlabs-stt.md](reference/elevenlabs-stt.md) — ElevenLabs API facts, limits, open checks
 - [reference/llm-providers.md](reference/llm-providers.md) — Claude and Gemini usage from the browser
 - [reference/file-system-access.md](reference/file-system-access.md) — the project folder on `file://` and OneDrive

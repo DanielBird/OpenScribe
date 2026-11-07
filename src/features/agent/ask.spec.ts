@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { hashText } from '../../domain/hash';
 import type {
   AgentEvent,
   AgentProvider,
@@ -105,6 +106,8 @@ describe('askProject', () => {
     for (const contents of results) {
       expect(contents.filter((c) => c === TOOL_BUDGET_REACHED)).toHaveLength(1);
       expect(contents.at(-1)).toBe(TOOL_BUDGET_REACHED);
+      // The budget note starts again too (D46).
+      expect(contents[0]).toMatch(/\n\nLeft for this question: 29 of 30 tool calls · /);
     }
   });
 
@@ -152,6 +155,10 @@ describe('askProject', () => {
     expect(read.content[0]!.content).toContain(
       't4 [00:41:12] Mary: Every night. My husband reminds me',
     );
+    // The tool result, not the prefix, says what's left (D46).
+    expect(read.content[0]!.content).toMatch(
+      /\n\nLeft for this question: 28 of 30 tool calls · reading budget 249k of 250k tokens · summary budget 75k of 75k tokens$/,
+    );
 
     const second = await askProject({
       provider,
@@ -166,5 +173,20 @@ describe('askProject', () => {
     expect(requests[3]!.body.messages).toHaveLength(7);
     expect(requests[3]!.body.system).toEqual(requests[0]!.body.system);
     expect(requests[3]!.body.tools).toEqual(requests[0]!.body.tools);
+  });
+
+  it('keeps the cached prefix byte for byte: the tool definitions and the instructions', async () => {
+    const { fetch, requests } = scriptedFetch([{ message: agentMessage([textBlock(ANSWER)]) }]);
+    const provider = createClaudeAgent({
+      apiKey: 'test-key',
+      model: 'claude-sonnet-5-5',
+      fetch,
+      maxRetries: 0,
+    });
+    await ask(provider);
+    const { tools, system } = requests[0]!.body;
+    // Every cached request starts with these bytes, so any change invalidates every cached prefix. Change the hash
+    // only when the tools or the instructions are meant to change (AGENTIC_SEARCH.md, "Changing it").
+    expect(hashText(JSON.stringify([tools, (system as unknown[])[0]]))).toBe('186b00b0a93588');
   });
 });

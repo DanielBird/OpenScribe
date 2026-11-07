@@ -36,7 +36,7 @@ session is useful as soon as it has been added.
 | A15 | People are named **by their speaker labels**. There is no automatic pseudonymisation. | The team's own data rules apply. The prompt tells the agent to use the labels. |
 | A16 | Researchers get their **own keyword search box** in Project mode, using the agent's search engine. | An exact search across all transcripts, with **Copy** on each hit. It also lets researchers check what the agent found. |
 | A17 | **Claude Sonnet 5.5 is the default** for project work, with **Opus 5.5 as the option**. The choice is saved on each computer. *From Phase 19 (D26), Gemini models are options too.* | One select in Project mode, used for the pipeline's translation, for summaries and for chat. A change takes effect on the next chat. The Translate dialog keeps its own choice (T7). |
-| A18 | **Caps per question:** 250k tokens of transcript text and 30 tool calls. | Kept in one file (§5.5) and tuned after the live checks. |
+| A18 | **Caps per question:** 250k tokens of transcript text and 30 tool calls. *Changed 2026-11-07 (D45): summaries have their own budget, about 30 per question.* | Kept in one file (§5.5) and tuned after the live checks. |
 
 ## 3. Scale
 
@@ -58,7 +58,7 @@ cached reads. These are estimates; the live checks (§6) measure them.
 | Summarising a 1-hour session (~15k tokens in, ~6k out including thinking) | ≈ $0.10 | ≈ $0.20 |
 | Summarising 300 hours | ≈ $30 | ≈ $60 |
 | A question that reads passages from 10–15 sessions | $0.25–1 | $0.50–2 |
-| A question at the cap (§5.5) | about $2 | about $3 |
+| A question at the cap (§5.5; up to ~75k tokens of summaries come on top, D45) | about $2 | about $3 |
 
 - Translating an hour in another language costs about the same again as summarising it.
 - A question's cost is mostly for the passages it reads. The cards are cached across the conversation.
@@ -166,7 +166,7 @@ interface SessionSummaryFile {
   model: string;                  // the model that was chosen
   transcriptHash: string;         // turn texts, speaker labels and English texts the summary was made from
   briefHash: string;              // the brief it was made with
-  droppedQuotes: number;          // quotes removed because they weren't found in the transcript
+  droppedQuotes: number;          // quotes removed because they weren't verified in the transcript (T13, D44)
   summary: SessionSummary;        // §5.3
 }
 ```
@@ -292,8 +292,9 @@ tools, the caps and the chat stay the same. It is a manual function-calling loop
 - A conversation keeps the provider and the model it started with.
 - Until Phase 20 is done, the chat is offered only with a Claude model.
 
-The provider hides the SDK's types behind a small interface. The conversation is an opaque, append-only value,
-because thinking blocks must be passed back unchanged.
+The provider hides the SDK's types behind a small interface. Within a question, the conversation is an opaque,
+append-only value, because thinking blocks must be passed back unchanged. Each question starts a new one from the
+earlier questions and answers as text (`resume`, D47).
 
 ```ts
 // providers/llm/types.ts (additions)
@@ -333,7 +334,9 @@ interface AgentProvider {
 2. **Context,** frozen when the chat starts: the brief, and one card per session, sorted by date and keyed
    `s1…sN`. Short keys keep the prompts small, as T5 does for turns. A session with no summary yet gets a card
    with its file name, language and duration, and its transcript can still be searched.
-3. **The conversation.** Every turn of the tool loop resends it, and automatic caching keeps that cheap.
+3. **The conversation.** Every turn of the tool loop resends it, and automatic caching keeps that cheap. A new
+   question starts from the earlier questions and answers as text, without their tool results (D47), so a follow-up
+   costs about as much as the first question.
 
 | Tool | Input | Returns |
 |---|---|---|
@@ -347,25 +350,30 @@ but a prompt injection hidden in a transcript can at worst mislead an answer, an
 that.
 
 **Caps,** kept in one place (`features/agent/limits.ts`):
-- **Transcript text per question:** 250k tokens, about 20 hours. After that, `read_transcript` replies "Limit
-  reached. Answer from what you have."
+- **Transcript text per question:** 250k tokens, about 20 hours. After that, `read_transcript` replies "Reading
+  budget reached. Answer from what you have."
+- **Summary text per question** (D45): 75k tokens, about 30 summaries. After that, `get_summaries` says the budget
+  is reached and names the sessions it didn't show.
 - **Tool calls per question:** 30.
+- **What's left** (D46): every result that runs ends with a note of what's left of the three, so the agent can plan
+  instead of being cut off part-way.
 
 Two notices cover the rest:
 - Once a chat passes about 600k tokens: "This chat is long. Type /compact to summarise it, or start a new chat."
   `/compact` has the agent summarise the chat and go on from the summary (Phase 22, D33).
-- When sessions are added during a chat: "3 new sessions. Start a new chat to include them." Changing the frozen
-  context would invalidate the cache.
+- When sessions are added during a chat: "3 new sessions since this chat started.", with a **New chat** button.
+  Changing the frozen context would invalidate the cache.
 
 **Answers.**
 - **Rendering:** our own code turns a small Markdown subset (paragraphs, short headings, lists, bold, italic) into
   Vue nodes. Never use `v-html`: the CSP allows inline script, so model output must never become HTML.
 - **Quotes:** `<quote ref="s12/t412">…</quote>` becomes a quote card.
 - **The quote check** (`domain/corpus/quoteCheck.ts`): the quote is split at `…`. Each part, normalised as for
-  search, must appear in order in the turn's English text. For English sessions it's the original text.
+  search, must appear in order in the turn's English text. For English sessions it's the original text. With an
+  omission, each part has at least three words and the words left out include no negation (D44).
   - **Verified:** the card shows the transcript's own text, the speaker, the time and the session title. **Copy**
     puts it on the clipboard as `"…" — Anna (P07), 00:41:12, P07 – home visit, Hamburg (translated from German)`.
-  - **Not found:** the card is marked, and it has no **Copy** button.
+  - **Not found**, or an omission that could change the meaning: the card is marked, and it has no **Copy** button.
 
 **Activity.** Under each answer, a collapsed `<details>` lists the tool activity, for example "Searched
 *charg\* night* · 23 hits in 9 sessions" and "Read P07 00:38–00:47". It also gives the approximate cost, worked out

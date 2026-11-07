@@ -49,8 +49,8 @@ const speakerLabel = (speakerId: string) =>
 
 const droppedText = (n: number) =>
   n === 1
-    ? "1 quote wasn't found in the transcript and was left out."
-    : `${n} quotes weren't found in the transcript and were left out.`;
+    ? "1 quote couldn't be verified against the transcript and was left out."
+    : `${n} quotes couldn't be verified against the transcript and were left out.`;
 
 /** "14 Sept 2026 · 01:32:10 · German, translated". A language that is not known is left out ("Translated"). */
 const meta = computed(() => {
@@ -88,19 +88,18 @@ function quoteCards(quotes: readonly SummaryQuote[]) {
     const turn = turns.value.get(q.turnId);
     const english = turn ? englishText(t, turn) : null;
     const check = english !== null ? checkQuote(english, q.text) : null;
-    const verified = check?.status === 'verified';
     const shown = check?.status === 'verified' ? check.sourceText : q.text;
     const speaker = turn ? speakerLabel(turn.speakerId) : null;
     const start = turn?.start ?? null;
     const translatedFrom = turn && turn.en !== null && !isEnglishSession(t) ? t.languageCode : null;
     const parts: CitationParts | null =
-      verified && speaker !== null && start !== null
+      check?.status === 'verified' && speaker !== null && start !== null
         ? { text: shown, speakerLabel: speaker, start, sessionTitle: s.title, translatedFrom }
         : null;
     return {
       key: `${q.turnId}-${i}`,
       text: shown,
-      verified,
+      check: check?.status ?? 'not_found',
       speaker,
       start,
       translatedFrom,
@@ -263,7 +262,7 @@ watch(
               <li v-for="c in q.cards" :key="c.key">
                 <QuoteCard
                   :text="c.text"
-                  :verified="c.verified"
+                  :check="c.check"
                   :speaker="c.speaker"
                   :start="c.start"
                   :translated-from="c.translatedFrom"
@@ -286,7 +285,7 @@ watch(
                 <li v-for="c in t.cards" :key="c.key">
                   <QuoteCard
                     :text="c.text"
-                    :verified="c.verified"
+                    :check="c.check"
                     :speaker="c.speaker"
                     :start="c.start"
                     :translated-from="c.translatedFrom"

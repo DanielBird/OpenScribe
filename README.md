@@ -143,6 +143,8 @@ changes only some of Settings' wording. Decisions and their reasons are in [docs
 - [docs/TESTING.md](docs/TESTING.md): the test suites, performance numbers and the manual release checklist
 - [docs/ROADMAP.md](docs/ROADMAP.md), [docs/PROJECTS.md](docs/PROJECTS.md) and [docs/phases/](docs/phases/): the plan,
   each phase's tasks and handoff notes, and the status of each phase
+- [docs/AGENTIC_SEARCH.md](docs/AGENTIC_SEARCH.md): how the Project chat's agent searches the transcripts, and its
+  tools
 - [docs/reference/](docs/reference/): API and platform facts for ElevenLabs, Claude and Gemini, the File System
   Access API, and the desktop app
 

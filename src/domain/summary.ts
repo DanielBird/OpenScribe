@@ -59,6 +59,6 @@ export interface SessionSummaryFile {
   provider?: LlmProviderId; // its provider (Phase 19, DECISIONS.md D26); missing = 'claude'
   transcriptHash: string; // of the session text the summary was made from
   briefHash: string; // of the brief it was made with
-  droppedQuotes: number; // quotes removed because they weren't found in the transcript
+  droppedQuotes: number; // quotes removed because they weren't verified in the transcript (T13, D44)
   summary: SessionSummary;
 }

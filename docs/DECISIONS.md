@@ -330,6 +330,7 @@ summarise them.
   - A quote that is found is shown, and copied, with the transcript's own text.
   - A quote that isn't found is marked and can't be copied. In summaries, such quotes are dropped and counted.
 - **Why:** research integrity. An invented or altered quote must never look verified.
+- *Changed by D44:* an omission must keep at least three words in each part and leave out no negation.
 
 ### T14 — Phase 10: the project folder works on `file://` (go)
 - **Decision** (2026-10-15): Phases 14–15 go ahead on the File System Access API (T11).
@@ -456,7 +457,8 @@ summarise them.
 - **Consequences:**
   - Changes A9 and D22's "Chats are not kept". Everyone who can open the project folder can read its chats; the
     About text says so.
-  - A resumed chat doesn't remember what the agent read; it searches again if it needs to.
+  - A resumed chat doesn't remember what the agent read; it searches again if it needs to. *(D47: from Phase 29, nor
+    does a live chat's next question.)*
   - **Clear saved data** forgets this browser's chat identity, so your earlier chats then read as a colleague's.
   - Not in this decision: deleting or renaming chats, searching them, and a chat updating while a colleague adds to
     it (opening it again shows the latest).
@@ -763,3 +765,88 @@ summarise them.
     sessions in the new ones.
   - `FileSystemObserver` (Chromium 133+) could add a rescan on each change later. It is unproven on `file://` and with
     OneDrive's cloud-only files, so it would need a Phase 10-style check first.
+
+### D44 — An omission in a quote mustn't be able to change what was said (2026-11-07; design review)
+- **Decision:** a quote with an omission (` … `) is verified only when each part around it has at least three words
+  (`MIN_PART_WORDS` in `domain/corpus/quoteCheck.ts`) and the turn's words it leaves out include no negation: *not*,
+  *no*, *never*, *nor*, *neither*, *none*, *nobody*, *nothing*, *nowhere*, *cannot*, or the *t* of *n't* (a "t" after
+  a word ending in "n" and an apostrophe). Otherwise its status is `unsafe_omission`: the card is marked "Left-out
+  words may change the meaning" and has no **Copy**. A quote without an omission, or with `…` only at its ends,
+  is checked as before.
+- **Why:** T13 checked only that the parts were there, in order. `I … love … them` verified from "I don't love the
+  way the charger makes them hot", and copied with a citation. Short parts and a dropped negation are the ways an
+  omission most often reverses what someone said.
+- **Consequences:**
+  - The agent's instructions and the summary prompt say the rule, so the models quote a passage whole instead.
+  - Summaries drop such quotes and count them in `droppedQuotes`, so the session view now says quotes "couldn't be
+    verified against the transcript". More drops can mean more retries of a summary, which is sent again when over
+    a third of its quotes fail (PROJECTS.md §5.3).
+  - Quotes are checked again whenever they are shown, so quotes in summaries and saved chats from before this
+    decision can now be marked. **Regenerate** replaces a summary's quotes.
+  - The negation list is English, which is enough: the check only runs on a turn's English text.
+  - Each part matches its first run after the part before it. When a part occurs twice in a turn, that run can leave
+    a negation out where a later one wouldn't, and the quote is rejected: never wrongly verified.
+  - Not covered: a quote cut at its ends ("happy with them" from "not happy with them"). Live check A1 measures how
+    many good quotes the rule rejects.
+
+### D45 — Summaries have a budget per question (2026-11-07; design review)
+- **Decision:** `get_summaries` returns at most 75,000 estimated tokens of summaries per question
+  (`summaryTokensPerQuestion` in `features/agent/limits.ts`, about 30 summaries), on top of the 250k of transcript
+  text (A18). Summaries are added whole, in the order asked for. When the next one doesn't fit, the result ends with
+  "Summary budget reached. Search or read the transcripts, or answer from what you have." and names the sessions not
+  shown. `spentBudget()` (`/compact`) spends it too.
+- **Why:** summaries weren't counted. At 10 per call and 30 calls, one question could read every summary of a
+  300-session project (~750k tokens), past A18's cap and §3's cost estimate, and near the context window. The cards
+  already give the whole project's overview in every request.
+- **Consequences:**
+  - A question reads at most about 325k tokens of tool text from summaries and transcripts, plus its search results.
+  - A separate budget keeps summaries from using up the reading meant for evidence.
+
+### D46 — Tool results say what's left of the question's budgets (2026-11-07; Phase 28)
+- **Decision:** every tool result that runs ends with a blank line and one note:
+  "Left for this question: 12 of 30 tool calls · reading budget 212k of 250k tokens · summary budget 60k of 75k
+  tokens" (`budgetNote` in `features/agent/tools.ts`). On the 30th call it says "0 of 30 tool calls. Answer now."
+  Token figures are rounded down to thousands. Results from the 31st call on, and error results, have no note.
+- **Why:** the agent learnt about a budget only when it ran out: a call refused, or a read stopped part-way. With
+  the count in front of it, it can choose its last calls, for example to read the passages behind its best hits
+  rather than run one more search.
+- **Consequences:**
+  - The cached prefix doesn't change. The note is in the tool results, which the conversation only adds to, so it
+    works with Claude's breakpoints and Gemini's implicit caching. The instructions and the tool descriptions don't
+    mention it, so it says what it means on its own. A test pins a hash of the tools and instructions.
+  - About 40 tokens a result, so about 1,200 for a question that uses all 30 calls.
+  - The calls of one reply all show what's left after the whole reply.
+  - A call that fails still counts, but its result has no note: an error's message is also its line in the chat's
+    activity list. The next result shows the count.
+  - A model that's told its budget may spend more of it. Live checks A1–A3 will show whether questions make more
+    calls or cost more.
+
+### D47 — Each question starts from the earlier questions and answers as text (2026-11-07; Phase 29)
+- **Decision** (maintainer): when a question starts, the chat's conversation is rebuilt from its questions and
+  finished answers as plain text, as a reopened chat already is (D29): `AgentProvider.resume`, from the latest
+  compaction's summary if there is one (D33). Earlier questions' thinking, tool calls and tool results stay behind. A
+  question's own tool results stay until it ends, so its loop, Stop and `/compact` work as before.
+- **Why:** every request of a question's loop sent everything earlier questions had read. After two questions that
+  each read 250k tokens, each request of the third re-read over 500k cached tokens: about $1.70 over 15 requests with
+  Sonnet 5.5 ($0.20 per million), before it read anything new. A follow-up asked more than 5 minutes later, once the
+  cache had expired, first wrote all of it to the cache again (about $1.25 at $2.50 per million). The 600k notice
+  came after about two heavy questions. D29 had already accepted that a reopened chat can do without old tool
+  results.
+- **Consequences:**
+  - A follow-up's requests send the tools, instructions and context (still cached), the earlier questions and
+    answers, and the follow-up's own reading. The first request of each question writes the text history to the
+    cache once, a few thousand tokens.
+  - As in a reopened chat, the agent doesn't remember what it read for earlier questions. Its answers keep their
+    quote refs, so it can read around them again. The instructions don't mention this, so the cached prefix doesn't
+    change.
+  - A live chat and a reopened chat send the same history, so live checks H1 and H2 cover every follow-up.
+  - The `claude-api` skill (read 2026-11-07) checks preserved thinking only on the thinking blocks that are sent
+    back. The rebuilt history has none, and nothing is rebuilt inside a question's tool loop: the skill's
+    "simple compaction" shape, with the text history in place of a summary.
+  - Not Claude's server-side context editing (`clear_tool_uses`): Claude only, by token threshold rather than per
+    question, and it keeps the old thinking blocks.
+  - A stopped or failed answer is left out with its question, as before. An answer with no text (a limit reached
+    before the agent wrote anything) is left out too, since a provider won't take an empty answer back.
+  - The long-chat notice and `/compact` stay, for chats with many questions. Live check A2 measures the cost.
+  - Not in this decision: changing model between questions, which the text history would now allow but which would
+    lose the cache.

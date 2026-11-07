@@ -212,7 +212,9 @@ describe('SessionSummary', () => {
     expect(wrapper!.get('.themes dt').text()).toBe('charging routines');
     const details = wrapper!.get('details').text();
     expect(details).toContain('Made with Sonnet 5.5 on 15 Oct 2026');
-    expect(details).toContain("2 quotes weren't found in the transcript and were left out.");
+    expect(details).toContain(
+      "2 quotes couldn't be verified against the transcript and were left out.",
+    );
     expect(details).toContain('P07--x.summary-LAPTOP.json');
     expect(wrapper!.get('details').find('button').text()).toBe('Regenerate');
     // Up to date: no status notice.
@@ -228,7 +230,7 @@ describe('SessionSummary', () => {
       ['LI', 'I put them on the charger by the bed'],
       ['DD', 'My daughter helps me'],
     ]);
-    expect(cards.map((c) => c.props('verified'))).toEqual([true, true]);
+    expect(cards.map((c) => c.props('check'))).toEqual(['verified', 'verified']);
     expect(cards[0]!.props('text')).toBe('I put them on the charger by the bed');
     expect(cards[0]!.props('translatedFrom')).toBe('deu');
     expect(cards[0]!.props('citation')).toBe(
@@ -261,7 +263,26 @@ describe('SessionSummary', () => {
     project.corpus = [edited];
     wrapper = mount(SessionSummary, { props: { sessionId: text.sessionId } });
     const cards = wrapper.findAllComponents(QuoteCard);
-    expect(cards.map((c) => c.props('verified'))).toEqual([true, false]);
+    expect(cards.map((c) => c.props('check'))).toEqual(['verified', 'not_found']);
+    expect(cards[1]!.props('citation')).toBeNull();
+  });
+
+  it('marks a saved quote whose left-out words could change it (D44)', () => {
+    const text = sessionText();
+    const file = summaryFile(text);
+    const themes = file.summary.themes.map((t) => ({
+      ...t,
+      quotes: [{ turnId: 't2', text: 'I put … every night' }],
+    }));
+    const project = useProjectStore();
+    project.sessions = [
+      makeProjectSession(text, [], { file: { ...file, summary: { ...file.summary, themes } } }),
+    ];
+    project.corpus = [text];
+    wrapper = mount(SessionSummary, { props: { sessionId: text.sessionId } });
+    const cards = wrapper.findAllComponents(QuoteCard);
+    expect(cards.map((c) => c.props('check'))).toEqual(['verified', 'unsafe_omission']);
+    expect(cards[1]!.text()).toContain('Left-out words may change the meaning');
     expect(cards[1]!.props('citation')).toBeNull();
   });
 
