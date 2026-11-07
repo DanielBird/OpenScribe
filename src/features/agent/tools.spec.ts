@@ -4,11 +4,14 @@ import type { AgentTool } from '../../providers/llm/types';
 import { makeAgentCorpus } from '../../testing/agentCorpus';
 import { makeSessionText } from '../../testing/projectSessions';
 import { createCorpusReader } from './corpus';
-import { AGENT_LIMITS, estimateTokens } from './limits';
+import { AGENT_LIMITS, agentBudgetLimits, DEFAULT_AGENT_LIMITS, estimateTokens } from './limits';
 import {
+  budgetNote,
   createAgentTools,
   createBudget,
   READING_BUDGET_REACHED,
+  spentBudget,
+  SUMMARY_BUDGET_REACHED,
   TOOL_BUDGET_REACHED,
   type AgentBudget,
 } from './tools';
@@ -18,13 +21,23 @@ const signal = new AbortController().signal;
 function tools(corpus = makeAgentCorpus(), budget: AgentBudget = createBudget()) {
   const list = createAgentTools(corpus, budget);
   const byName = (name: string) => list.find((t) => t.name === name) as AgentTool;
-  /** Runs a tool with input checked by its schema, as the provider does. */
-  const call = (name: string, input: unknown) => {
+  /** Runs a tool with input checked by its schema, as the provider does: the result as the model gets it. */
+  const run = (name: string, input: unknown) => {
     const tool = byName(name);
     return tool.run(tool.input.parse(input), signal);
   };
-  return { list, call, budget };
+  /** `run`, with the budget note at the end checked and taken off, so a test compares the tool's own text (D46). */
+  const call = async (name: string, input: unknown) => {
+    const result = await run(name, input);
+    if (result.content === TOOL_BUDGET_REACHED) return result;
+    const note = `\n\n${budgetNote(budget)}`;
+    expect(result.content.slice(-note.length)).toBe(note);
+    return { ...result, content: result.content.slice(0, -note.length) };
+  };
+  return { list, run, call, budget };
 }
+
+const lastLine = (content: string) => content.split('\n').at(-1);
 
 /** A session of `count` English turns, each `words` words long. */
 function longSession(n: number, count: number, words = 20): SessionText {
@@ -159,6 +172,57 @@ describe('createAgentTools', () => {
         'Unknown session s7.',
       );
     });
+
+    it('gives whole summaries until the summary budget is reached, then names the rest (D45)', async () => {
+      const s1 = (await tools().call('get_summaries', { sessions: ['s1'] })).content;
+      const budget = createBudget();
+      // Room for s1 exactly.
+      budget.summaryTokens = DEFAULT_AGENT_LIMITS.summaryTokens - estimateTokens(s1);
+      const { call } = tools(makeAgentCorpus(), budget);
+
+      const partial = await call('get_summaries', { sessions: ['s1', 's2', 's3'] });
+      expect(partial).toEqual({
+        content: `${s1}\n\n${SUMMARY_BUDGET_REACHED} Not shown: s2, s3.`,
+        activity: 'Read the summaries of P01 – kitchen interview, Leeds',
+      });
+      expect(budget.summaryTokens).toBe(DEFAULT_AGENT_LIMITS.summaryTokens);
+
+      const refused = await call('get_summaries', { sessions: ['s2'] });
+      expect(refused).toEqual({
+        content: SUMMARY_BUDGET_REACHED,
+        activity: 'Summary budget reached',
+      });
+    });
+
+    it('keeps the summary budget apart from the reading budget', async () => {
+      const { call, budget } = tools();
+      await call('get_summaries', { sessions: ['s1', 's2'] });
+      const summaryTokens = budget.summaryTokens;
+      expect(summaryTokens).toBeGreaterThan(0);
+      expect(budget.transcriptTokens).toBe(0);
+      await call('read_transcript', { session: 's1' });
+      expect(budget.transcriptTokens).toBeGreaterThan(0);
+      expect(budget.summaryTokens).toBe(summaryTokens);
+
+      const noReading = createBudget();
+      noReading.transcriptTokens = DEFAULT_AGENT_LIMITS.transcriptTokens;
+      const summaries = await tools(makeAgentCorpus(), noReading).call('get_summaries', {
+        sessions: ['s1'],
+      });
+      expect(summaries.content).not.toContain(SUMMARY_BUDGET_REACHED);
+    });
+
+    it('refuses on a spent budget, as for /compact', async () => {
+      const { call } = tools(makeAgentCorpus(), { ...spentBudget(), toolCalls: 0 });
+      expect(await call('get_summaries', { sessions: ['s1'] })).toEqual({
+        content: SUMMARY_BUDGET_REACHED,
+        activity: 'Summary budget reached',
+      });
+      expect(await call('read_transcript', { session: 's1' })).toEqual({
+        content: READING_BUDGET_REACHED,
+        activity: 'Reading budget reached',
+      });
+    });
   });
 
   describe('read_transcript', () => {
@@ -269,7 +333,7 @@ describe('createAgentTools', () => {
       const budget = createBudget();
       // Room for 3 more lines of about this size.
       budget.transcriptTokens =
-        AGENT_LIMITS.transcriptTokensPerQuestion - 3 * estimateTokens(line) - 1;
+        DEFAULT_AGENT_LIMITS.transcriptTokens - 3 * estimateTokens(line) - 1;
       const { call } = tools(createCorpusReader([session], new Map()), budget);
 
       const partial = await call('read_transcript', { session: 's1' });
@@ -309,7 +373,7 @@ describe('createAgentTools', () => {
 
   it('answers every call after the 30th with the tool budget message', async () => {
     const { call, budget } = tools();
-    for (let i = 0; i < AGENT_LIMITS.toolCallsPerQuestion; i++) {
+    for (let i = 0; i < DEFAULT_AGENT_LIMITS.toolCalls; i++) {
       expect((await call('list_themes', {})).content).not.toBe(TOOL_BUDGET_REACHED);
     }
     expect(await call('search_transcripts', { query: 'bed' })).toEqual({
@@ -317,5 +381,119 @@ describe('createAgentTools', () => {
       activity: 'Tool budget reached',
     });
     expect(budget.toolCalls).toBe(31);
+  });
+
+  describe('chosen budgets (D48)', () => {
+    const low = agentBudgetLimits('low', 'low');
+
+    it('stops at the chosen number of tool calls', async () => {
+      const { call } = tools(makeAgentCorpus(), createBudget(low));
+      for (let i = 0; i < low.toolCalls; i++) {
+        expect((await call('list_themes', {})).content).not.toBe(TOOL_BUDGET_REACHED);
+      }
+      expect((await call('list_themes', {})).content).toBe(TOOL_BUDGET_REACHED);
+    });
+
+    it('stops reading and summaries at the chosen amounts', async () => {
+      const reading = createBudget(low);
+      reading.transcriptTokens = low.transcriptTokens;
+      const read = await tools(makeAgentCorpus(), reading).run('read_transcript', {
+        session: 's1',
+      });
+      expect(read.activity).toBe('Reading budget reached');
+
+      const summaries = createBudget(low);
+      summaries.summaryTokens = low.summaryTokens;
+      const got = await tools(makeAgentCorpus(), summaries).run('get_summaries', {
+        sessions: ['s1'],
+      });
+      expect(got.activity).toBe('Summary budget reached');
+    });
+
+    it('shows the chosen budgets in the note', () => {
+      expect(budgetNote(createBudget(low))).toBe(
+        'Left for this question: 15 of 15 tool calls · reading budget 125k of 125k tokens · summary budget 37k of 37k tokens',
+      );
+    });
+
+    it('spends whichever budgets it is given', () => {
+      expect(spentBudget(low)).toEqual({
+        limits: low,
+        toolCalls: 15,
+        transcriptTokens: 125_000,
+        summaryTokens: 37_500,
+      });
+    });
+  });
+
+  describe('budget note (D46)', () => {
+    it("ends every result with what's left for the question, after a blank line", async () => {
+      const result = await tools().run('list_themes', {});
+      const lines = result.content.split('\n');
+      expect(lines.at(-1)).toBe(
+        'Left for this question: 29 of 30 tool calls · reading budget 250k of 250k tokens · summary budget 75k of 75k tokens',
+      );
+      expect(lines.at(-2)).toBe('');
+      // The chat's activity list never shows it.
+      expect(result.activity).toBe('Listed 2 themes');
+    });
+
+    it('counts down the reading budget for reads and the summary budget for summaries', async () => {
+      const { run } = tools();
+      expect(lastLine((await run('read_transcript', { session: 's1' })).content)).toBe(
+        'Left for this question: 29 of 30 tool calls · reading budget 249k of 250k tokens · summary budget 75k of 75k tokens',
+      );
+      expect(lastLine((await run('get_summaries', { sessions: ['s1'] })).content)).toBe(
+        'Left for this question: 28 of 30 tool calls · reading budget 249k of 250k tokens · summary budget 74k of 75k tokens',
+      );
+    });
+
+    it('rounds tokens down to thousands, and never below 0', () => {
+      expect(
+        budgetNote({
+          ...createBudget(),
+          toolCalls: 3,
+          transcriptTokens: 37_600,
+          summaryTokens: 80_000,
+        }),
+      ).toBe(
+        'Left for this question: 27 of 30 tool calls · reading budget 212k of 250k tokens · summary budget 0k of 75k tokens',
+      );
+    });
+
+    it("gives every result of one reply what's left after all of them", async () => {
+      const { run } = tools();
+      const results = await Promise.all([
+        run('list_themes', {}),
+        run('search_transcripts', { query: 'charg*' }),
+        run('get_summaries', { sessions: ['s1'] }),
+      ]);
+      const notes = new Set(results.map((r) => lastLine(r.content)));
+      expect([...notes]).toEqual([
+        'Left for this question: 27 of 30 tool calls · reading budget 250k of 250k tokens · summary budget 74k of 75k tokens',
+      ]);
+    });
+
+    it('says to answer on the last call, and nothing more after it', async () => {
+      const { run } = tools(makeAgentCorpus(), { ...createBudget(), toolCalls: 29 });
+      expect(lastLine((await run('list_themes', {})).content)).toBe(
+        'Left for this question: 0 of 30 tool calls. Answer now.',
+      );
+      expect(await run('list_themes', {})).toEqual({
+        content: TOOL_BUDGET_REACHED,
+        activity: 'Tool budget reached',
+      });
+    });
+
+    it('leaves it off a call that fails, which still counts', async () => {
+      const { run, budget } = tools();
+      await expect(run('read_transcript', { session: 's9' })).rejects.toThrow(
+        /^Unknown session s9\. Use the keys from the session list\.$/,
+      );
+      expect(budget.toolCalls).toBe(1);
+      expect(lastLine((await run('list_themes', {})).content)).toMatch(
+        /^Left for this question: 28 of 30 tool calls · /,
+      );
+    });
   });
 });

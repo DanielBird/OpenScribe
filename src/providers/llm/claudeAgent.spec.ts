@@ -78,6 +78,7 @@ function request(
     conversation: null,
     userMessage: 'Quotes about charging at night?',
     maxIterations: 35,
+    effort: 'medium',
     signal: new AbortController().signal,
     onEvent: (event) => events.push(event),
     events,
@@ -136,6 +137,15 @@ const lastMessage = (body: Record<string, unknown>) => {
 };
 
 describe('createClaudeAgent', () => {
+  it.each(['low', 'medium', 'high'] as const)(
+    'sends the effort it is given: %s',
+    async (effort) => {
+      const { agent, requests } = setup([{ message: agentMessage([textBlock('Hello.')]) }]);
+      await agent.run(request({ effort }));
+      expect(requests[0]!.body).toMatchObject({ output_config: { effort } });
+    },
+  );
+
   it('sends the cached system blocks, the tools in order, effort, thinking and the fallback', async () => {
     const { agent, requests } = setup([{ message: agentMessage([textBlock('Hello.')]) }]);
     await agent.run(request());

@@ -177,10 +177,12 @@ onBeforeUnmount(() => {
   transition:
     box-shadow 0.2s ease-out,
     background-color 0.2s ease-out;
+  --color-button: var(--color-bg);
 }
 
 .zone.is-dragging {
   background: var(--color-bg);
+  --color-button: var(--color-surface);
   box-shadow: inset 0 0 0 2px var(--color-accent);
 }
 

@@ -20,7 +20,7 @@ import SummariseDialog from './SummariseDialog.vue';
 
 // The project's sessions, newest recording first (PROJECTS.md §5.6), each with its summary status. Selecting one
 // shows its summary. One Tab stop (`useRovingListbox`). Files that couldn't be read and conflict copies are listed
-// under a <details>; **Summarise all** is at the foot. The sidebar's Sessions tab shows the count, so the heading is
+// under a <details>; **Summarise all** is at the foot. The sidebar's Sessions tab names the list, so the heading is
 // for screen readers only.
 const project = useProjectStore();
 const pipeline = usePipelineStore();

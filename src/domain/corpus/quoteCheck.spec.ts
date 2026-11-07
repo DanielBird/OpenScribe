@@ -7,6 +7,7 @@ const GERMAN = 'Ich lege das Hörgerät nachts auf das Ladegerät, neben dem Bet
 
 const verified = (sourceText: string) => ({ status: 'verified', sourceText });
 const NOT_FOUND = { status: 'not_found' };
+const UNSAFE = { status: 'unsafe_omission' };
 
 describe('checkQuote', () => {
   it('verifies an exact quote and returns the turn’s own text', () => {
@@ -50,8 +51,8 @@ describe('checkQuote', () => {
   );
 
   it('verifies several omissions, in order', () => {
-    expect(checkQuote(TURN, 'I just … the bed … every night')).toEqual(
-      verified('I just … the bed … every night.'),
+    expect(checkQuote(TURN, 'I just put … by the bed … yes every night')).toEqual(
+      verified('I just put … by the bed … Yes, every night.'),
     );
   });
 
@@ -60,10 +61,11 @@ describe('checkQuote', () => {
   });
 
   it('matches repeated words in order', () => {
-    expect(checkQuote('Night after night after night.', 'night … night … night')).toEqual(
-      verified('Night … night … night.'),
+    const quote = 'night after night … night after night';
+    expect(checkQuote('Night after night, and night after night again.', quote)).toEqual(
+      verified('Night after night … night after night'),
     );
-    expect(checkQuote('Night after night.', 'night … night … night')).toEqual(NOT_FOUND);
+    expect(checkQuote('Night after night again.', quote)).toEqual(NOT_FOUND);
   });
 
   it('verifies a quote across a sentence boundary', () => {
@@ -107,5 +109,59 @@ describe('checkQuote', () => {
       verified("The doctor's advice."),
     );
     expect(checkQuote("The doctor's advice.", 'the doctors advice')).toEqual(NOT_FOUND);
+  });
+});
+
+describe('checkQuote: omissions that could change what was said (D44)', () => {
+  it('rejects a part shorter than three words', () => {
+    expect(checkQuote(TURN, 'I just … like my phone')).toEqual(UNSAFE);
+    expect(checkQuote(TURN, 'I just put them … phone')).toEqual(UNSAFE);
+    expect(
+      checkQuote("I don't love the way the charger makes them hot.", 'I … love … them'),
+    ).toEqual(UNSAFE);
+  });
+
+  it.each([
+    [
+      'Honestly I would not recommend them to anyone.',
+      'Honestly I would … recommend them to anyone',
+    ],
+    ['To be honest I never charge them at night.', 'To be honest … charge them at night'],
+    ["To be fair I don't like them at all.", 'To be fair … like them at all'],
+    ['To be fair I don’t like them at all.', 'To be fair … like them at all'],
+    ['To be fair I cannot see them at all.', 'To be fair … see them at all'],
+  ])('rejects an omission that leaves out a negation: %j', (turn, quote) => {
+    expect(checkQuote(turn, quote)).toEqual(UNSAFE);
+  });
+
+  it('allows a negation outside the words left out', () => {
+    const turn = "I don't know, I put them on the charger by the bed every night.";
+    expect(checkQuote(turn, 'I put them on … by the bed every night')).toEqual(
+      verified('I put them on … by the bed every night.'),
+    );
+  });
+
+  it('takes a "t" as a negation only after "n" and an apostrophe', () => {
+    expect(
+      checkQuote(
+        'I wear a T-shirt and charge them at night.',
+        'I wear a … and charge them at night',
+      ),
+    ).toEqual(verified('I wear a … and charge them at night.'));
+  });
+
+  it('applies the rules only to a quote with an omission', () => {
+    expect(checkQuote(TURN, 'the bed')).toEqual(verified('the bed'));
+    expect(checkQuote(TURN, '… the bed …')).toEqual(verified('the bed'));
+  });
+
+  it('allows an omission that leaves nothing out', () => {
+    expect(checkQuote(TURN, 'I just put … them on the charger')).toEqual(
+      verified('I just put … them on the charger'),
+    );
+  });
+
+  it('says a quote is not found before it says an omission is unsafe', () => {
+    expect(checkQuote(TURN, 'I … charger by my bed')).toEqual(NOT_FOUND);
   });
 });

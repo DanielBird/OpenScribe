@@ -157,7 +157,11 @@ test('Project works from the keyboard: open, the Brief, the model, search, Copy,
   await page.keyboard.press('Enter');
   const brief = page.getByRole('dialog', { name: 'Brief' });
   await expect(brief.getByLabel('Project Name')).toBeFocused();
-  await tabTo(page, brief.getByLabel('Research questions'));
+  await tabTo(page, brief.getByRole('tab', { name: 'Context' }));
+  await page.keyboard.press('ArrowRight');
+  await expect(brief.getByRole('tab', { name: 'Research questions' })).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect(brief.getByRole('textbox', { name: 'Key research questions' })).toBeFocused();
   await tabTo(page, brief.getByRole('button', { name: 'Cancel' }));
   await page.keyboard.press('Escape');
   await expect(brief).toBeHidden();

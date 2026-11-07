@@ -4,6 +4,7 @@ import {
   apiError,
   brokenToolUseBlock,
   textBlock,
+  thinkingBlock,
   toolUseBlock,
 } from '../../src/testing/agent';
 import { functionCallPart, geminiTurn, geminiUsage, textPart } from '../../src/testing/geminiAgent';
@@ -187,7 +188,7 @@ test('with Gemini, a question runs a function call, streams a checked quote that
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(CITATION);
 });
 
-test('an invented quote is marked and has no Copy', async ({ page }) => {
+test('an invented or unsafely cut quote is marked and has no Copy', async ({ page }) => {
   await useProjectFolder(page, SEEDED);
   await mockAgent(page, () =>
     says(
@@ -195,6 +196,8 @@ test('an invented quote is marked and has no Copy', async ({ page }) => {
         `<quote ref="s1/t2">${QUOTE}</quote>`,
         '<quote ref="s2/t4">Then I always take the charger with me</quote>',
         '<quote ref="s1/t4">I never charge them at all</quote>',
+        // Its words are in the turn, but a part of two words is too short to keep (D44).
+        '<quote ref="s1/t2">I put … every evening</quote>',
         'Text that looks like <b>HTML</b> stays text.',
       ].join('\n'),
     ),
@@ -204,15 +207,20 @@ test('an invented quote is marked and has no Copy', async ({ page }) => {
   await ask(page, 'Quotes about charging?');
   const answer = answers(page).first();
   const cards = answer.locator('.quote-card');
-  await expect(cards).toHaveCount(3);
+  await expect(cards).toHaveCount(4);
   await expect(cards.nth(2)).toContainText('Not found in the transcript');
   await expect(cards.nth(2).getByRole('button')).toHaveCount(0);
+  await expect(cards.nth(3)).toContainText('Left-out words may change the meaning');
+  await expect(cards.nth(3).locator('blockquote')).toHaveText('“I put … every evening”');
+  await expect(cards.nth(3).getByRole('button')).toHaveCount(0);
   await expect(answer).toContainText('Text that looks like <b>HTML</b> stays text.');
   await expect(answer.locator('b')).toHaveCount(0);
   await expect(answer.getByRole('button', { name: 'Copy all quotes' })).toHaveCount(0);
 });
 
-test('a follow-up carries the earlier turns; New chat starts afresh', async ({ page }) => {
+test('a follow-up carries the earlier questions and answers; New chat starts afresh', async ({
+  page,
+}) => {
   await useProjectFolder(page, SEEDED);
   const calls = await mockAgent(page, (n) => says(`Answer ${n + 1}.`));
   await openChat(page);
@@ -235,6 +243,44 @@ test('a follow-up carries the earlier turns; New chat starts afresh', async ({ p
   await ask(page, 'Third question?');
   await expect(answers(page).first()).toContainText('Answer 3.');
   expect(calls[2]!.body.messages.map((m) => m.role)).toEqual(['user']);
+});
+
+test("a follow-up leaves the earlier question's thinking, tool calls and results behind (D47)", async ({
+  page,
+}) => {
+  await useProjectFolder(page, SEEDED);
+  const calls = await mockAgent(page, (n) => {
+    if (n === 0)
+      return {
+        message: agentMessage(
+          [
+            thinkingBlock('sig_1'),
+            textBlock('Let me look.'),
+            toolUseBlock('tu_1', 'search_transcripts', { query: 'charg*' }),
+          ],
+          { usage: USAGE },
+        ),
+      };
+    return says(n === 1 ? 'By the bed.' : 'Her husband helps.');
+  });
+  await openChat(page);
+
+  await ask(page, 'Where do people charge?');
+  await expect(answers(page).first()).toContainText('By the bed.');
+  // The question's own loop sends its tool call and result back, as before.
+  expect(JSON.stringify(calls[1]!.body.messages)).toContain('"tool_result"');
+
+  await ask(page, 'Who helps?');
+  await expect(answers(page).nth(1)).toContainText('Her husband helps.');
+  const followUp = calls[2]!.body;
+  expect(followUp.messages).toEqual([
+    { role: 'user', content: 'Where do people charge?' },
+    { role: 'assistant', content: [{ type: 'text', text: 'Let me look.\n\nBy the bed.' }] },
+    { role: 'user', content: 'Who helps?' },
+  ]);
+  // The tools, instructions and context are the same bytes, so they are still read from the cache.
+  expect(followUp.system).toEqual(calls[0]!.body.system);
+  expect(followUp.tools).toEqual(calls[0]!.body.tools);
 });
 
 test('Stop ends the answer at once, keeps what was written, and the next question works', async ({
@@ -429,4 +475,90 @@ test('a long chat suggests /compact, which summarises it; the next question carr
   expect(after[1]).toEqual({ role: 'assistant', content: [{ type: 'text', text: SUMMARY }] });
   expect(after[2]).toEqual({ role: 'user', content: 'Who helps?' });
   expect(JSON.stringify(after)).not.toContain('Where do people charge?');
+});
+
+test("the chat settings set the next question's effort and budgets, and are remembered (D48)", async ({
+  page,
+}) => {
+  await useProjectFolder(page, SEEDED);
+  const calls = await mockAgent(page, (n) => (n === 0 ? search('charg*') : says('By the bed.')));
+  await openChat(page);
+
+  // By keyboard: the button opens the panel, Tab reaches the checked Effort, an arrow key moves it.
+  const button = page.getByRole('button', { name: 'Chat settings' });
+  const panel = page.getByRole('group', { name: 'Chat settings' });
+  await button.focus();
+  await page.keyboard.press('Enter');
+  await expect(panel).toBeVisible();
+  const effort = panel.getByRole('group', { name: 'Effort' });
+  await expect(effort.getByRole('radio', { name: 'Medium' })).toBeChecked();
+  await page.keyboard.press('Tab');
+  await expect(effort.getByRole('radio', { name: 'Medium' })).toBeFocused();
+  await page.keyboard.press('ArrowRight');
+  await expect(effort.getByRole('radio', { name: 'High' })).toBeChecked();
+
+  await panel
+    .getByRole('group', { name: 'Tool calls' })
+    .locator('label', { hasText: '60' })
+    .click();
+  await panel.getByRole('group', { name: 'Reading' }).locator('label', { hasText: '40 h' }).click();
+  await page.keyboard.press('Escape');
+  await expect(panel).toBeHidden();
+  await expect(button).toBeFocused();
+
+  await ask(page, 'Where do people charge?');
+  await expect(answers(page).first()).toContainText('By the bed.');
+  expect(calls[0]!.body).toMatchObject({ output_config: { effort: 'high' } });
+  expect(JSON.stringify(calls[1]!.body.messages)).toContain(
+    'Left for this question: 59 of 60 tool calls · reading budget 500k of 500k tokens · summary budget 150k of 150k tokens',
+  );
+
+  // A reload opens the project again by itself.
+  await page.reload();
+  await enterProject(page);
+  await expect(page.getByRole('heading', { name: /^Sessions/ })).toBeVisible();
+  await page.getByRole('button', { name: 'Chat settings' }).click();
+  await expect(effort.getByRole('radio', { name: 'High' })).toBeChecked();
+  await expect(
+    panel.getByRole('group', { name: 'Tool calls' }).getByRole('radio', { name: '60' }),
+  ).toBeChecked();
+  await expect(
+    panel
+      .getByRole('group', { name: 'Reading' })
+      .getByRole('radio', { name: '40 h of transcript' }),
+  ).toBeChecked();
+});
+
+test('each chat setting explains itself on hover and on keyboard focus', async ({ page }) => {
+  await useProjectFolder(page, SEEDED);
+  await openChat(page);
+  await page.getByRole('button', { name: 'Chat settings' }).click();
+  const panel = page.getByRole('group', { name: 'Chat settings' });
+  const tip = panel.getByRole('tooltip');
+  await expect(tip).toHaveCount(0);
+  // The last one stays a moment after the pointer leaves its label.
+  const shows = async (text: string) => {
+    await expect(tip).toHaveCount(1);
+    await expect(tip).toHaveText(text);
+  };
+
+  await panel.locator('legend', { hasText: 'Tool calls' }).hover();
+  await shows('How many searches and reads the model can make.');
+  await panel.locator('legend', { hasText: 'Reading' }).hover();
+  await shows('How many hours of transcript the model can read.');
+  await page.mouse.move(0, 0);
+  await expect(tip).toHaveCount(0);
+
+  await page.keyboard.press('Tab');
+  await expect(panel.getByRole('radio', { name: 'Medium' })).toBeFocused();
+  await shows('How hard the model thinks at each step.');
+  await page.keyboard.press('Escape');
+
+  // In a narrow window it's above its group, never over the label: hover fails if something covers the label.
+  await page.setViewportSize({ width: 375, height: 700 });
+  await page.getByRole('button', { name: 'Chat settings' }).click();
+  for (const name of ['Effort', 'Tool calls', 'Reading']) {
+    await panel.locator('legend', { hasText: name }).hover();
+  }
+  await shows('How many hours of transcript the model can read.');
 });

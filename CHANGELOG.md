@@ -6,8 +6,12 @@ All notable changes to DeScribe are recorded here. The format follows
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-11-08
+
 ### Added
 
+- **Chat settings:** the button beside the model in Analyse sets the chat's effort, how many tool calls a question may
+  use, and how much it may read: Low, Medium (as before) or High. Higher settings can find more and cost more.
 - **English that is out of date:** after a turn is edited, the English view marks it "Changed since translation",
   **Translate** becomes **Update English…**, which translates only the changed turns, and the export dialog says how
   many turns of the English are out of date. Summaries, the project chat and search use only English that is up to
@@ -17,6 +21,16 @@ All notable changes to DeScribe are recorded here. The format follows
 
 ### Changed
 
+- **Quotes with words left out** are verified only when each part has at least three words and no negation such as
+  "not" is left out. Otherwise the card says **Left-out words may change the meaning** and has no **Copy**. Quotes
+  are checked whenever they're shown, so some in older summaries and saved chats are now marked: **Regenerate** a
+  summary to replace its quotes.
+- **Project chat:** each question reads at most about 30 session summaries, besides about 20 hours of transcript.
+- **Project chat:** after each step, the agent sees how many tool calls and how much reading it has left, so it can
+  save its last steps for the evidence it needs.
+- **Project chat:** a follow-up question costs about the same as the first. It goes on from the earlier questions and
+  answers, as a reopened chat does, so the agent reads passages again when it needs them instead of sending back
+  everything it read for earlier questions.
 - **Run** and **Clear saved data** warn when the last transcript's latest changes aren't saved in its project yet,
   for example before **Reconnect**.
 - Saving a project's brief, a transcript or a chat keeps what a newer version of DeScribe added to the file.
@@ -138,6 +152,7 @@ The first release: one HTML file that colleagues open in Edge or Chrome.
 - On a slow laptop, renaming a speaker in a 3-hour transcript takes about 0.1–0.2 s per keystroke.
 - Firefox is not supported.
 
-[Unreleased]: https://github.com/DanielBird/Describe/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/DanielBird/Describe/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/DanielBird/Describe/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/DanielBird/Describe/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/DanielBird/Describe/releases/tag/v1.0.0

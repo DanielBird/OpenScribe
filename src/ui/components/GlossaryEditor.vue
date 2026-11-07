@@ -363,6 +363,11 @@ async function clearAll(): Promise<void> {
    shortcut and Add sit in its bottom padding. While typing, the well rings in the accent colour. */
 .composer {
   position: relative;
+  --color-button: var(--color-bg);
+}
+
+.composer:focus-within {
+  --color-button: var(--color-surface);
 }
 
 .composer-input {

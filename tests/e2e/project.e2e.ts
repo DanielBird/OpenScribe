@@ -60,9 +60,25 @@ test("New project creates the project file and opens the Brief; a folder that is
     name: ROOT,
   });
 
-  await dialog.getByLabel('Project Name').fill('Hearing at home 2026');
-  await dialog.getByLabel('Research questions').fill('How do people charge?\n\nWho helps them?  ');
-  await dialog.getByLabel('Respondent details').fill('Age\nCountry');
+  // The name's outline shows only while it's edited or empty.
+  const projectName = dialog.getByLabel('Project Name');
+  await expect(projectName).toHaveCSS('font-weight', '600');
+  await expect(dialog.locator('label', { hasText: 'Project Name' })).toHaveCSS(
+    'font-weight',
+    '400',
+  );
+  await projectName.fill('');
+  await dialog.getByRole('tab', { name: 'Context' }).click();
+  await expect(projectName).toHaveCSS('border-top-color', 'rgb(110, 119, 129)');
+  await projectName.fill('Hearing at home 2026');
+  await expect(projectName).toHaveCSS('border-top-color', 'rgb(11, 92, 173)');
+  await dialog.getByRole('tab', { name: 'Research questions' }).click();
+  await expect(projectName).toHaveCSS('border-top-color', 'rgba(0, 0, 0, 0)');
+  await dialog
+    .getByRole('textbox', { name: 'Key research questions' })
+    .fill('How do people charge?\n\nWho helps them?  ');
+  await dialog.getByRole('tab', { name: 'Respondent details' }).click();
+  await dialog.getByRole('textbox', { name: 'Respondent details' }).fill('Age\nCountry');
   await dialog.getByRole('button', { name: 'Save' }).click();
   await expect(dialog).toBeHidden();
   await expect(page.getByRole('banner')).toContainText('Hearing at home 2026');
@@ -288,7 +304,7 @@ test("never overwrites a colleague's brief: Save says so, and Reload shows their
   await openSeeded(page);
   await page.getByRole('button', { name: 'Brief' }).click();
   const dialog = page.getByRole('dialog', { name: 'Brief' });
-  await dialog.getByLabel('Context').fill('Mine');
+  await dialog.getByRole('textbox', { name: 'Context' }).fill('Mine');
 
   const theirs = projectFileText({
     brief: { researchQuestions: ['Theirs?'], context: 'Their context', metadataFields: [] },
@@ -301,9 +317,13 @@ test("never overwrites a colleague's brief: Save says so, and Reload shows their
   expect(folder.files(ROOT)[PROJECT_FILE]).toBe(theirs);
 
   await dialog.getByRole('button', { name: 'Reload' }).click();
-  await expect(dialog.getByLabel('Context')).toHaveValue('Their context');
-  await expect(dialog.getByLabel('Research questions')).toHaveValue('Theirs?');
-  await dialog.getByLabel('Context').fill('Both of ours');
+  await expect(dialog.getByRole('textbox', { name: 'Context' })).toHaveValue('Their context');
+  await dialog.getByRole('tab', { name: 'Research questions' }).click();
+  await expect(dialog.getByRole('textbox', { name: 'Key research questions' })).toHaveValue(
+    'Theirs?',
+  );
+  await dialog.getByRole('tab', { name: 'Context' }).click();
+  await dialog.getByRole('textbox', { name: 'Context' }).fill('Both of ours');
   await dialog.getByRole('button', { name: 'Save' }).click();
   await expect(dialog).toBeHidden();
   expect(JSON.parse(folder.files(ROOT)[PROJECT_FILE]!)).toMatchObject({

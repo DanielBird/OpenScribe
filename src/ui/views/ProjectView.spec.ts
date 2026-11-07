@@ -152,7 +152,7 @@ describe('ProjectView', () => {
     expect(wrapper!.find('.session-summary').exists()).toBe(false);
   });
 
-  it('ready: Sessions and Chats are two tabs with their counts, by click and by the arrow keys', async () => {
+  it('ready: Sessions and Chats are two tabs, by click and by the arrow keys', async () => {
     const project = readyProject();
     project.chats = [
       {
@@ -163,9 +163,9 @@ describe('ProjectView', () => {
     ];
     project.chatsLoaded = true;
     mountIn('ready');
-    const tabs = () => wrapper!.findAll('[role="tab"]');
+    const tabs = () => wrapper!.findAll('.sessions-pane [role="tab"]');
     const panel = (id: string) => wrapper!.get(`#sidebar-panel-${id}`);
-    expect(tabs().map((t) => t.text())).toEqual(['Sessions 2', 'Chats 1']);
+    expect(tabs().map((t) => t.text())).toEqual(['Sessions', 'Chats']);
     expect(tabs().map((t) => t.attributes('aria-selected'))).toEqual(['true', 'false']);
     expect(tabs().map((t) => t.attributes('tabindex'))).toEqual(['0', '-1']);
     expect(panel('sessions').attributes('aria-labelledby')).toBe(tabs()[0]!.attributes('id'));

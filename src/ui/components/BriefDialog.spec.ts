@@ -52,6 +52,28 @@ describe('BriefDialog', () => {
     expect(field('Key research questions').attributes('aria-describedby')).toBeTruthy();
   });
 
+  it('shows one section at a time: a tab opens its editor, and the arrow keys stay on the tabs', async () => {
+    openWith();
+    await flushPromises();
+    const tab = (name: string) =>
+      wrapper!.findAll('[role="tab"]').find((t) => t.text().startsWith(name))!;
+    const panelOf = (label: string) =>
+      field(label).element.closest<HTMLElement>('[role="tabpanel"]')!;
+    expect(tab('Research questions').text()).toBe('Research questions');
+    expect(panelOf('Key research questions').style.display).toBe('none');
+
+    await tab('Research questions').trigger('click');
+    await flushPromises();
+    expect(panelOf('Key research questions').style.display).toBe('');
+    expect(panelOf('Context').style.display).toBe('none');
+    expect(document.activeElement).toBe(field('Key research questions').element);
+
+    await tab('Research questions').trigger('keydown', { key: 'ArrowRight' });
+    await flushPromises();
+    expect(tab('Respondent details').attributes('aria-selected')).toBe('true');
+    expect(document.activeElement).toBe(tab('Respondent details').element);
+  });
+
   it('saves what was typed, against the stat when it opened, and closes', async () => {
     const store = openWith();
     const save = vi.spyOn(store, 'saveBrief').mockResolvedValue({ ok: true });

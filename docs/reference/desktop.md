@@ -56,7 +56,7 @@ set it yourself for any `winapp` command run by hand.
 
 **What `pack-desktop.mjs` stages** in `src-tauri/target/msix/` (gitignored): `describe.exe` and
 `src-tauri/msix/Assets/`. The manifest, with the version written in, goes beside the stage in
-`src-tauri/target/msix-manifest/`. The committed manifest never changes.
+`src-tauri/target/msix-manifest/`. The committed manifest never changes, and its `Version` is a placeholder.
 
 **Signing for this PC:** `winapp cert generate` makes `devcert.pfx` with the manifest's Publisher and the public
 default password `password`, so it is for development only. Trust it once, as administrator:

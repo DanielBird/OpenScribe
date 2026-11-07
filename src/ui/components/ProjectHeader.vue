@@ -16,7 +16,7 @@ const id = useId();
       Change
     </button>
     <label :for="`${id}-model`" class="visually-hidden">Model</label>
-    <ProjectModelSelect :id="`${id}-model`" class="model" />
+    <ProjectModelSelect :id="`${id}-model`" class="model" chat-settings />
   </div>
 </template>
 
@@ -30,7 +30,8 @@ const id = useId();
 
 /* Quiet controls: no box until focused, and a grey fill on hover, so the row stays a line of words. */
 .quiet,
-.model {
+.project-header :deep(.model),
+.project-header :deep(.settings-button) {
   padding: var(--space-1);
   border: 1px solid transparent;
   border-radius: var(--radius-sm);
@@ -45,7 +46,8 @@ const id = useId();
 
 /* The fill reaches as far as the focus ring (2px offset + 2px outline) without moving the row. */
 .quiet:hover,
-.model:hover {
+.project-header :deep(.model:hover),
+.project-header :deep(.settings-button:hover) {
   background: var(--color-surface);
   box-shadow: 0 0 0 4px var(--color-surface);
   color: var(--color-text);
@@ -53,7 +55,8 @@ const id = useId();
 
 @media (prefers-reduced-motion: reduce) {
   .quiet,
-  .model {
+  .project-header :deep(.model),
+  .project-header :deep(.settings-button) {
     transition: none;
   }
 }

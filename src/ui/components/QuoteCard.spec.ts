@@ -27,7 +27,7 @@ describe('QuoteCard', () => {
     mount(QuoteCard, {
       props: {
         text: 'I put them on the charger by the bed.',
-        verified: true,
+        check: 'verified',
         speaker: 'Anna',
         start: 2472,
         translatedFrom: 'deu',
@@ -68,15 +68,28 @@ describe('QuoteCard', () => {
   });
 
   it('marks a quote that was not found, with no Copy', () => {
-    wrapper = verified({ verified: false, citation: null, translatedFrom: null });
-    expect(wrapper.classes()).toContain('not-found');
+    wrapper = verified({ check: 'not_found', citation: null, translatedFrom: null });
+    expect(wrapper.classes()).toContain('unverified');
     expect(wrapper.get('.flag').text()).toBe('Not found in the transcript');
     expect(wrapper.find('button').exists()).toBe(false);
   });
 
+  it('marks a quote whose left-out words could change it, with no Copy', () => {
+    wrapper = verified({ check: 'unsafe_omission', citation: null, translatedFrom: null });
+    expect(wrapper.classes()).toContain('unverified');
+    expect(wrapper.get('.flag').text()).toBe('Left-out words may change the meaning');
+    expect(wrapper.find('button').exists()).toBe(false);
+  });
+
+  it('has no flag on a verified quote', () => {
+    wrapper = verified();
+    expect(wrapper.classes()).not.toContain('unverified');
+    expect(wrapper.find('.flag').exists()).toBe(false);
+  });
+
   it('leaves out the speaker and time when the turn is unknown', () => {
     wrapper = verified({
-      verified: false,
+      check: 'not_found',
       citation: null,
       speaker: null,
       start: null,

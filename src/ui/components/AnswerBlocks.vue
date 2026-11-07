@@ -8,7 +8,7 @@ import QuoteCard from './QuoteCard.vue';
 // HTML (no v-html: the CSP allows inline script), so anything that looks like a tag shows as text.
 defineProps<{
   blocks: readonly AnswerBlock[];
-  /** The chat's corpus, for the session title of a quote that wasn't found. */
+  /** The chat's corpus, for the session title of a quote that wasn't verified. */
   corpus: CorpusReader | null;
 }>();
 </script>
@@ -42,7 +42,7 @@ defineProps<{
       <QuoteCard
         v-else-if="block.citation"
         :text="block.citation.text"
-        :verified="true"
+        check="verified"
         :speaker="block.citation.speakerLabel"
         :start="block.citation.start"
         :translated-from="block.citation.translatedFrom"
@@ -52,7 +52,7 @@ defineProps<{
       <QuoteCard
         v-else
         :text="block.modelText"
-        :verified="false"
+        :check="block.check.status"
         :speaker="null"
         :start="null"
         :session-title="block.sessionId ? (corpus?.byId(block.sessionId)?.title ?? null) : null"

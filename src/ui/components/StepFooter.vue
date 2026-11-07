@@ -69,6 +69,7 @@ const describedBy = computed(() => (props.missing.length > 0 ? missingId : undef
 
 :slotted(.button:not(.button-primary):hover:not(:disabled)) {
   border-color: transparent;
+  background: none;
   color: var(--color-accent);
 }
 

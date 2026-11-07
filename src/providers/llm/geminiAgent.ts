@@ -17,7 +17,7 @@ import {
 import { ProviderError, withoutSecret } from '../errors';
 import { createConversations, runAgentLoop, type AgentOutput } from './agentLoop';
 import { GEMINI_MESSAGES, REFUSAL_FINISH, toGeminiSchema, toProviderError } from './gemini';
-import { GEMINI_THINKING } from './models';
+import { GEMINI_THINKING_FOR } from './models';
 import {
   AGENT_MAX_OUTPUT_TOKENS,
   type AgentConversation,
@@ -155,7 +155,7 @@ export function createGeminiAgent(opts: GeminiAgentOptions): AgentProvider {
             systemInstruction: system,
             tools,
             automaticFunctionCalling: { disable: true },
-            thinkingConfig: { thinkingLevel: ThinkingLevel[GEMINI_THINKING] },
+            thinkingConfig: { thinkingLevel: ThinkingLevel[GEMINI_THINKING_FOR[req.effort]] },
             maxOutputTokens: AGENT_MAX_OUTPUT_TOKENS,
             abortSignal: req.signal,
           },

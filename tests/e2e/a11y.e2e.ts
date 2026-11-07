@@ -201,6 +201,22 @@ test('attaching a different recording after a reload asks first', async ({ page 
   await expectAccessible(page, testInfo, 'Mismatch confirmation');
 });
 
+test('Project: the chat settings', async ({ page }, testInfo) => {
+  const { docs } = makeCorpus({ hours: 1, seed: 3 });
+  await useProjectFolder(page, { 'Hearing at home': projectFiles(docs) });
+  await openHome(page);
+  await page.getByRole('button', { name: 'Analyse' }).click();
+  await page.getByRole('button', { name: 'Open project…' }).click();
+  await expect(page.getByRole('heading', { name: /^Sessions/ })).toBeVisible();
+
+  await page.getByRole('button', { name: 'Chat settings' }).click();
+  await expect(page.getByRole('group', { name: 'Chat settings' })).toBeVisible();
+  await expectAccessible(page, testInfo, 'Project, chat settings');
+  await page.locator('legend', { hasText: 'Tool calls' }).hover();
+  await expect(page.getByRole('tooltip')).toBeVisible();
+  await expectAccessible(page, testInfo, 'Project, chat settings, an explanation');
+});
+
 test('Project: every state, search results and the Brief dialog', async ({ page }, testInfo) => {
   const { docs } = makeCorpus({ hours: 8, seed: 3 });
   const copy = transcriptPath(docs[0]!).replace('.transcript.json', '.transcript-LAPTOP.json');

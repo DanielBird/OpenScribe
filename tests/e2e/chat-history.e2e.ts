@@ -41,6 +41,9 @@ const says = (text: string): AgentReply => ({ message: agentMessage([textBlock(t
 const question = (page: Page) => page.getByRole('textbox', { name: 'Question' });
 const answers = (page: Page) => page.locator('.chat-message.answer');
 const chatsTab = (page: Page) => page.getByRole('tab', { name: /^Chats/ });
+/** The Chats list's heading, for screen readers only, carries the count (the panel may be hidden). */
+const chatsHeading = (page: Page, count: number) =>
+  page.getByRole('heading', { name: `Chats ${count}`, exact: true, includeHidden: true });
 
 async function ask(page: Page, text: string) {
   await question(page).fill(text);
@@ -71,7 +74,7 @@ test('a chat is saved, listed, opened again after a reload, and goes on in the s
   const folder = await useProjectFolder(page, { [ROOT]: SEEDED });
   const calls = await mockAgent(page, (n) => says(n === 0 ? ANSWER : 'Yes, every evening.'));
   await openProject(page);
-  await expect(chatsTab(page)).toHaveText('Chats 0');
+  await expect(chatsHeading(page, 0)).toBeAttached();
 
   await ask(page, 'Where do people charge?');
   await expect(answers(page).first()).toContainText('Most people charge at night.');
@@ -90,13 +93,13 @@ test('a chat is saved, listed, opened again after a reload, and goes on in the s
     ['user', 'Where do people charge?'],
     ['assistant', ANSWER],
   ]);
-  await expect(chatsTab(page)).toHaveText('Chats 1');
+  await expect(chatsHeading(page, 1)).toBeAttached();
 
   // After a reload the chat pane starts empty, and the chat is in the list.
   await page.reload();
   await expect(page.getByRole('heading', { level: 1, name: 'Home' })).toBeAttached();
   await enterProject(page);
-  await expect(chatsTab(page)).toHaveText('Chats 1');
+  await expect(chatsHeading(page, 1)).toBeAttached();
   await expect(answers(page)).toHaveCount(0);
 
   await chatsTab(page).click();

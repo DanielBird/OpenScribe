@@ -232,10 +232,11 @@ what it finds, and uses the summaries for an overview. Then it answers in Englis
 - **What it did:** under each answer, a line like *6 searches · 5 reads · ≈ $0.40* opens to every search and read.
 - **Quotes** are checked against the transcript. A checked quote shows the transcript's own words, the speaker, the
   time and the session. **Copy** copies it with its citation. A quote marked **Not found in the transcript** isn't in the words of the turn the model pointed to, so it
-  can't be copied: treat it with care.
+  can't be copied: treat it with care. One marked **Left-out words may change the meaning** is there, but with words
+  left out that could reverse it, such as a "not": check the transcript before you use it.
 - **Costs and limits:** the line under an answer gives its approximate cost, usually well under a dollar with Sonnet
-  5.5. For each question the model reads at most about 20 hours of transcript and makes at most 30 searches or reads,
-  then answers from what it has. An answer that hit a limit says so.
+  5.5. For each question the model reads at most about 20 hours of transcript and about 30 summaries, and makes at
+  most 30 searches or reads, then answers from what it has. An answer that hit a limit says so.
 - **Stop** ends an answer at once and keeps what was written. Your next question carries on from before it.
 - **Follow-up questions** carry on the conversation. Selecting a session shows its summary; **Esc** returns.
 - **Chats are saved in the project folder,** after each answer. The **Chats** tab, next to **Sessions**, lists them,

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { hashText } from '../../domain/hash';
 import type {
   AgentEvent,
   AgentProvider,
@@ -16,7 +17,7 @@ import {
 import { makeAgentCorpus } from '../../testing/agentCorpus';
 import { askProject } from './ask';
 import { AGENT_INSTRUCTIONS } from './instructions';
-import { AGENT_LIMITS } from './limits';
+import { agentBudgetLimits, DEFAULT_AGENT_LIMITS } from './limits';
 import { TOOL_BUDGET_REACHED } from './tools';
 
 const corpus = makeAgentCorpus();
@@ -63,6 +64,8 @@ const ask = (provider: AgentProvider, events: AgentEvent[] = []) =>
     context: CONTEXT,
     conversation: null,
     question: 'Who charges at night?',
+    effort: 'medium',
+    limits: DEFAULT_AGENT_LIMITS,
     signal: new AbortController().signal,
     onEvent: (e) => events.push(e),
   });
@@ -78,7 +81,8 @@ describe('askProject', () => {
       context: CONTEXT,
       conversation: null,
       userMessage: 'Who charges at night?',
-      maxIterations: AGENT_LIMITS.maxIterations,
+      maxIterations: DEFAULT_AGENT_LIMITS.maxIterations,
+      effort: 'medium',
     });
     expect(requests[0]!.tools.map((t) => t.name)).toEqual([
       'search_transcripts',
@@ -98,13 +102,34 @@ describe('askProject', () => {
     });
   });
 
+  it('runs with the effort and the budgets it is given (D48)', async () => {
+    const { provider, requests, results } = fakeProvider(1);
+    await askProject({
+      provider,
+      corpus,
+      context: CONTEXT,
+      conversation: null,
+      question: 'Who charges at night?',
+      effort: 'high',
+      limits: agentBudgetLimits('low', 'high'),
+      signal: new AbortController().signal,
+      onEvent: () => {},
+    });
+    expect(requests[0]).toMatchObject({ effort: 'high', maxIterations: 20 });
+    expect(results[0]![0]).toMatch(
+      /Left for this question: 14 of 15 tool calls · reading budget 500k of 500k tokens · summary budget 150k of 150k tokens$/,
+    );
+  });
+
   it('gives each question a fresh tool budget', async () => {
-    const { provider, results } = fakeProvider(AGENT_LIMITS.toolCallsPerQuestion + 1);
+    const { provider, results } = fakeProvider(DEFAULT_AGENT_LIMITS.toolCalls + 1);
     await ask(provider);
     await ask(provider);
     for (const contents of results) {
       expect(contents.filter((c) => c === TOOL_BUDGET_REACHED)).toHaveLength(1);
       expect(contents.at(-1)).toBe(TOOL_BUDGET_REACHED);
+      // The budget note starts again too (D46).
+      expect(contents[0]).toMatch(/\n\nLeft for this question: 29 of 30 tool calls · /);
     }
   });
 
@@ -152,6 +177,10 @@ describe('askProject', () => {
     expect(read.content[0]!.content).toContain(
       't4 [00:41:12] Mary: Every night. My husband reminds me',
     );
+    // The tool result, not the prefix, says what's left (D46).
+    expect(read.content[0]!.content).toMatch(
+      /\n\nLeft for this question: 28 of 30 tool calls · reading budget 249k of 250k tokens · summary budget 75k of 75k tokens$/,
+    );
 
     const second = await askProject({
       provider,
@@ -159,6 +188,8 @@ describe('askProject', () => {
       context: CONTEXT,
       conversation: first.conversation,
       question: 'Who helps?',
+      effort: 'medium',
+      limits: DEFAULT_AGENT_LIMITS,
       signal: new AbortController().signal,
       onEvent: () => {},
     });
@@ -166,5 +197,20 @@ describe('askProject', () => {
     expect(requests[3]!.body.messages).toHaveLength(7);
     expect(requests[3]!.body.system).toEqual(requests[0]!.body.system);
     expect(requests[3]!.body.tools).toEqual(requests[0]!.body.tools);
+  });
+
+  it('keeps the cached prefix byte for byte: the tool definitions and the instructions', async () => {
+    const { fetch, requests } = scriptedFetch([{ message: agentMessage([textBlock(ANSWER)]) }]);
+    const provider = createClaudeAgent({
+      apiKey: 'test-key',
+      model: 'claude-sonnet-5-5',
+      fetch,
+      maxRetries: 0,
+    });
+    await ask(provider);
+    const { tools, system } = requests[0]!.body;
+    // Every cached request starts with these bytes, so any change invalidates every cached prefix. Change the hash
+    // only when the tools or the instructions are meant to change (AGENTIC_SEARCH.md, "Changing it").
+    expect(hashText(JSON.stringify([tools, (system as unknown[])[0]]))).toBe('186b00b0a93588');
   });
 });

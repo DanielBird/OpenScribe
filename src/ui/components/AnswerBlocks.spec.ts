@@ -57,7 +57,7 @@ describe('AnswerBlocks', () => {
     const card = wrapper!.getComponent(QuoteCard);
     expect(card.props()).toMatchObject({
       text: 'I put them on the charger by the bed',
-      verified: true,
+      check: 'verified',
       speaker: 'Mary',
       start: 61,
       sessionTitle: 'P01 – kitchen interview, Leeds',
@@ -79,7 +79,7 @@ describe('AnswerBlocks', () => {
     const [changed, unknown] = wrapper!.findAllComponents(QuoteCard);
     expect(changed!.props()).toMatchObject({
       text: 'I charge them at the office',
-      verified: false,
+      check: 'not_found',
       speaker: null,
       sessionTitle: 'P01 – kitchen interview, Leeds',
       citation: null,
@@ -87,5 +87,18 @@ describe('AnswerBlocks', () => {
     expect(changed!.text()).toContain('Not found in the transcript');
     expect(changed!.find('button').exists()).toBe(false);
     expect(unknown!.props('sessionTitle')).toBeNull();
+  });
+
+  it('marks a quote whose left-out words could change it, in the model’s words, with no Copy', () => {
+    show('<quote ref="s1/t2">I put … like my phone</quote>');
+    const card = wrapper!.getComponent(QuoteCard);
+    expect(card.props()).toMatchObject({
+      text: 'I put … like my phone',
+      check: 'unsafe_omission',
+      sessionTitle: 'P01 – kitchen interview, Leeds',
+      citation: null,
+    });
+    expect(card.text()).toContain('Left-out words may change the meaning');
+    expect(card.find('button').exists()).toBe(false);
   });
 });

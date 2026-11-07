@@ -5,6 +5,7 @@
 import { ProviderError } from '../../providers/errors';
 import type {
   AgentConversation,
+  AgentEffort,
   AgentEvent,
   AgentExchange,
   AgentProvider,
@@ -56,6 +57,7 @@ export interface CompactOptions {
   conversation: AgentConversation;
   /** What `/compact` was asked to keep; '' for nothing. */
   focus: string;
+  effort: AgentEffort; // the chat's, so the cache holds
   signal: AbortSignal;
   onEvent(event: AgentEvent): void;
 }
@@ -76,6 +78,7 @@ export async function compactChat(opts: CompactOptions): Promise<CompactResult> 
     conversation: opts.conversation,
     userMessage: compactPrompt(opts.focus),
     maxIterations: AGENT_LIMITS.compactIterations,
+    effort: opts.effort,
     signal: opts.signal,
     onEvent: opts.onEvent,
   });

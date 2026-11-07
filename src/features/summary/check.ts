@@ -1,6 +1,7 @@
-// The check every summary reply goes through before it is kept (PROJECTS.md §5.3, DECISIONS.md T13): turn ids must
-// exist, research questions follow the brief, and every quote must be found in its turn. A verified quote is kept
-// in the transcript's own words; the others are dropped and counted.
+// The check every summary reply goes through before it is kept (PROJECTS.md §5.3, DECISIONS.md T13, D44): turn ids
+// must exist, research questions follow the brief, and every quote must be verified in its turn: found there, with no
+// omission that could change what was said. A verified quote is kept in the transcript's own words; the others are
+// dropped and counted.
 import { matchString } from '../../domain/corpus/normalize';
 import { checkQuote } from '../../domain/corpus/quoteCheck';
 import { englishText, type SessionText } from '../../domain/corpus/sessionText';
@@ -16,9 +17,9 @@ export const SUMMARY_LIMITS = { themes: 12, quotesPerEntry: 3, titleChars: 80 } 
 
 export interface CheckedSummary {
   summary: SessionSummary;
-  /** Quotes removed because they weren't found in their turn (or the turn doesn't exist). */
+  /** Quotes removed because they weren't verified in their turn (or the turn doesn't exist). */
   droppedQuotes: number;
-  /** Quotes found in their turn, before the cap. */
+  /** Quotes verified in their turn, before the cap. */
   verifiedQuotes: number;
   /** `droppedQuotes` out of the quotes that were checked; 0 when none were. */
   quoteFailureRate: number;
@@ -85,7 +86,7 @@ export function checkSummary(
   let checkedQuotes = 0;
   let droppedQuotes = 0;
   let verifiedQuotes = 0;
-  /** An entry's quotes that are found in their turn, in its own words, up to the cap. The others are counted. */
+  /** An entry's quotes that are verified in their turn, in its own words, up to the cap. The others are counted. */
   const checkQuotes = (given: readonly SummaryQuote[]): SummaryQuote[] => {
     const kept: SummaryQuote[] = [];
     for (const quote of given) {

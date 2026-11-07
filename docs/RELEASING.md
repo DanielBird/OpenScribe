@@ -9,6 +9,9 @@ A release is one file, `DeScribe-v<version>.html`, shared on SharePoint. This pa
   - **Patch** (1.0.1): fixes.
   - **Minor** (1.1.0): new features.
   - **Major** (2.0.0): changes that drop support for something colleagues rely on.
+- It's the only place to change the number. The `version` values in `src-tauri/Cargo.toml` and
+  `src-tauri/msix/Package.appxmanifest` are placeholders, because `tauri.conf.json` and `pack-desktop.mjs` read
+  `package.json`.
 - Every release has a dated entry in [CHANGELOG.md](../CHANGELOG.md).
 
 ## Steps

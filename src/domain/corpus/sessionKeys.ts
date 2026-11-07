@@ -6,7 +6,7 @@ const KEY = /^s([1-9]\d*)$/;
 
 /**
  * `sessionId → 's1'…'sN'`, in a stable order: oldest recording first, then by session id. With `fixed` (a saved
- * chat's keys, D27), those sessions keep their keys, and the others are numbered after the highest fixed key, so a
+ * chat's keys, D29), those sessions keep their keys, and the others are numbered after the highest fixed key, so a
  * key in an old answer never comes to mean another session. Sessions that are gone leave gaps.
  */
 export function assignSessionKeys(
