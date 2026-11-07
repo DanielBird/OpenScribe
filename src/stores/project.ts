@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia';
-import { computed, onScopeDispose, ref, shallowRef } from 'vue';
+import { computed, onScopeDispose, ref, shallowRef, watch } from 'vue';
 import { formatCitation } from '../domain/corpus/citation';
 import { parseQuery } from '../domain/corpus/query';
 import {
@@ -107,6 +107,8 @@ export const SEARCH_PAGE_SESSIONS = 20;
 export const SEARCH_HITS_PER_SESSION = 4;
 /** Focus and `visibilitychange` often come together: one rescan, this long after the last. */
 export const REFRESH_DELAY_MS = 300;
+/** A window that stays in front never gets focus again: it rescans this often while it is visible (D43). */
+export const RESCAN_INTERVAL_MS = 120_000;
 
 export const PROJECT_MESSAGES = {
   notAProject:
@@ -295,9 +297,10 @@ function fileInfo(name: string, stat: FileStat): SessionFileInfo {
 }
 
 // The project folder in Project mode (PROJECTS.md §5.2, §5.4): connecting, the project file and its brief, the
-// sessions with their text (cached per computer) and their summaries, the rescan on focus, keyword search, and the
-// writes the pipeline and the Output tab make. Sessions and the corpus are shallowRefs, replaced and never mutated
-// (AGENTS.md rule 8). This store is the only one that holds the folder.
+// sessions with their text (cached per computer) and their summaries, the rescans (on focus, and every two minutes
+// while the window is visible), keyword search, and the writes the pipeline and the Output tab make. Sessions and the
+// corpus are shallowRefs, replaced and never mutated (AGENTS.md rule 8). This store is the only one that holds the
+// folder.
 export const useProjectStore = defineStore('project', () => {
   const status = ref<ProjectStatus>(isFolderAccessSupported() ? 'none' : 'unsupported');
   /** The project's name: the remembered one before access is granted, then the project file's. */
@@ -645,16 +648,32 @@ export const useProjectStore = defineStore('project', () => {
     }, REFRESH_DELAY_MS);
   }
 
-  // Colleagues' new sessions arrive through OneDrive: rescan when the window comes back.
-  const onFocus = () => scheduleRefresh();
-  const onVisibilityChange = () => {
+  // Colleagues' new sessions arrive through OneDrive: rescan when the window comes back, and every two minutes while
+  // it's visible. A rescan that finds nothing new changes nothing (refresh()).
+  const whenVisible = () => {
     if (document.visibilityState === 'visible') scheduleRefresh();
   };
+  const onFocus = () => scheduleRefresh();
   window.addEventListener('focus', onFocus);
-  document.addEventListener('visibilitychange', onVisibilityChange);
+  document.addEventListener('visibilitychange', whenVisible);
+  // The interval runs only while a project is open, so nothing ticks without one.
+  let rescanTimer: ReturnType<typeof setInterval> | null = null;
+  function stopRescans(): void {
+    if (rescanTimer !== null) clearInterval(rescanTimer);
+    rescanTimer = null;
+  }
+  watch(
+    status,
+    (now) => {
+      if (now !== 'ready') stopRescans();
+      else if (rescanTimer === null) rescanTimer = setInterval(whenVisible, RESCAN_INTERVAL_MS);
+    },
+    { flush: 'sync' },
+  );
   onScopeDispose(() => {
     window.removeEventListener('focus', onFocus);
-    document.removeEventListener('visibilitychange', onVisibilityChange);
+    document.removeEventListener('visibilitychange', whenVisible);
+    stopRescans();
     if (refreshTimer !== null) clearTimeout(refreshTimer);
   });
 

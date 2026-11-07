@@ -36,6 +36,11 @@ const sessions = shallowRef<SessionHits[]>([]);
 const totals = ref({ hits: 0, sessions: 0 });
 const nextOffset = ref<number | null>(null);
 const active = computed(() => searched.value !== '' && error.value === '');
+/** The sessions changed since these results were found (a rescan): they stay, and Update results replaces More. */
+const outdated = ref(false);
+const outdatedStatus = computed(() =>
+  outdated.value ? 'The sessions have changed. Update results is at the end of the list.' : '',
+);
 
 const countText = computed(() => {
   if (!active.value) return '';
@@ -53,6 +58,7 @@ function run(): void {
   }
   const outcome = project.search(text);
   searched.value = text;
+  outdated.value = false;
   open.value = null;
   allHits.value = new Map();
   if (outcome.kind === 'error') {
@@ -71,6 +77,7 @@ function run(): void {
 
 function clearResults(): void {
   searched.value = '';
+  outdated.value = false;
   error.value = '';
   sessions.value = [];
   nextOffset.value = null;
@@ -110,13 +117,26 @@ function clear(): void {
   clearResults();
 }
 
-// A rescan that adds or changes sessions changes the answers: search again from the first page.
+// A rescan that adds or changes sessions changes the answers (D43). Results stay where the reader may be reading them,
+// and Update results takes More's place: More would page the new answers from the old ones' offset, repeating or
+// skipping sessions. A search that found nothing has nothing to keep, so it searches again at once.
 watch(
   () => project.corpus,
   () => {
-    if (searched.value !== '') run();
+    if (!active.value) return;
+    if (totals.value.hits === 0) run();
+    else outdated.value = true;
   },
 );
+
+/** Searches again from the first page. The button goes with the click: focus goes to the first result, or the box. */
+async function update(): Promise<void> {
+  runNow();
+  await nextTick();
+  const first = root.value?.querySelector<HTMLElement>('.result-title');
+  if (first) first.focus();
+  else input.value?.focus();
+}
 
 async function more(): Promise<void> {
   if (nextOffset.value === null) return;
@@ -440,6 +460,7 @@ defineExpose({ focus: () => input.value?.focus() });
       <!-- Always rendered, so a new count is announced. -->
       <p class="count" :class="{ 'visually-hidden': !active }" role="status">{{ countText }}</p>
       <p class="visually-hidden" aria-live="polite">{{ copyStatus }}</p>
+      <p class="visually-hidden" aria-live="polite">{{ outdatedStatus }}</p>
 
       <ol v-if="active && sessions.length > 0" class="results">
         <li v-for="(s, si) in sessions" :key="s.sessionId" class="result">
@@ -535,7 +556,10 @@ defineExpose({ focus: () => input.value?.focus() });
           </button>
         </li>
       </ol>
-      <div v-if="active && nextOffset !== null">
+      <div v-if="active && outdated">
+        <button type="button" class="button" @click="update">Update results</button>
+      </div>
+      <div v-else-if="active && nextOffset !== null">
         <button type="button" class="button" @click="more">More</button>
       </div>
     </div>

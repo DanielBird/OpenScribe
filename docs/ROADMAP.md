@@ -334,6 +334,7 @@ MVP = Phases 0–5. Each phase is sized for one agent session (or a few) and end
 | 22 | [Compacting a chat with `/compact`](phases/22-chat-compaction.md) | 17, 20, 21 | – | ☑ Done (live check C1 open) |
 | 24 | [Desktop shell and the Store pipeline](phases/24-desktop-shell.md) | – | 23 | ☑ Done (Task 8, the Store submission, and the work-laptop checklist W1–W15 open) |
 | 26 | [Recordings in more languages](phases/26-more-languages.md) | – | 23, 25 | ☑ Done (live check V7 and manual row 21 open) |
+| 27 | [Rescan the project every two minutes](phases/27-background-rescan.md) | 14 | 23, 25 | ☑ Done (manual row 15's two-minute step open) |
 
 Status values: ☐ Not started · ◐ In progress · ☑ Done.
 
