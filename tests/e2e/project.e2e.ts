@@ -19,8 +19,8 @@ import {
   useProjectFolder,
 } from './helpers';
 
-// Project mode against the fake project folder (Phase 14): create and open, reconnect, the rescan on focus, the
-// brief, the model, the sessions list and the search in the chat pane (D30).
+// Project mode against the fake project folder (Phase 14): create and open, reconnect, the rescans (on focus and
+// every two minutes, D43), the brief, the model, the sessions list and the search in the chat pane (D30).
 
 const ROOT = 'Hearing at home';
 const { docs, planted } = makeCorpus({ hours: 16, seed: 14 });
@@ -185,6 +185,56 @@ test("picks up a colleague's new session when the window gets focus", async ({ p
   await page.evaluate(() => window.dispatchEvent(new Event('focus')));
   await expect(sessionItems(page)).toHaveCount(docs.length);
   await expect(page.getByText(docs[0]!.source.fileName, { exact: true })).toBeVisible();
+});
+
+test("picks up a colleague's new session within two minutes, with the window kept in front", async ({
+  page,
+}) => {
+  // The rescan's interval starts with the app, so the clock is faked before the app opens. Time still runs.
+  await page.clock.install();
+  const folder = await useProjectFolder(page, { [ROOT]: projectFiles(docs.slice(1)) });
+  await openSeeded(page);
+  await expect(sessionItems(page)).toHaveCount(docs.length - 1);
+
+  await folder.put(ROOT, transcriptPath(docs[0]!), transcriptFileText(docs[0]!));
+  await page.clock.fastForward('02:00');
+  await expect(sessionItems(page)).toHaveCount(docs.length);
+});
+
+test('a rescan keeps the search results, and Update results searches again', async ({ page }) => {
+  // A phrase planted in one session only, so nothing matches it until that session arrives.
+  const later = planted.find((p) => planted.filter((q) => q.phrase === p.phrase).length === 1)!;
+  const kept = planted.find((p) => p.sessionId !== later.sessionId)!;
+  const added = docs.find((d) => d.id === later.sessionId)!;
+  const folder = await useProjectFolder(page, {
+    [ROOT]: projectFiles(docs.filter((d) => d !== added)),
+  });
+  await openSeeded(page);
+  const box = await openSearch(page);
+  const update = page.getByRole('button', { name: 'Update results' });
+  const rescan = async (savedAt?: string) => {
+    await folder.put(ROOT, transcriptPath(added), transcriptFileText(added, savedAt));
+    await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+  };
+
+  // Nothing matched, so there was nothing to keep: the colleague's session is found at once.
+  await box.fill(`"${later.phrase}"`);
+  await expect(page.getByRole('status').filter({ hasText: 'No matches' })).toBeVisible();
+  await rescan();
+  await expect(page.locator('li.result', { hasText: added.source.fileName })).toBeVisible();
+  await expect(update).toBeHidden();
+
+  // Results stay as they are, and Update results searches again.
+  await box.fill(`"${kept.phrase}"`);
+  const result = page.locator('li.result').first();
+  await expect(result).toBeVisible();
+  await rescan('2026-11-07T12:00:00Z');
+  await expect(update).toBeVisible();
+  await expect(result).toBeVisible();
+  await expect(page.getByRole('button', { name: 'More' })).toBeHidden();
+  await update.click();
+  await expect(update).toBeHidden();
+  await expect(result.locator('.result-title')).toBeFocused();
 });
 
 test('a second load reads from the cache, and the sessions survive a reload', async ({ page }) => {

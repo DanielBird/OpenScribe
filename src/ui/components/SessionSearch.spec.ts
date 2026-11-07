@@ -131,15 +131,69 @@ describe('SessionSearch', () => {
     expect(document.activeElement).toBe(input().element);
   });
 
-  it('searches again when the sessions change', async () => {
-    const project = mountWith([makeSessionText(1)]);
-    await type('charger');
-    expect(results()).toHaveLength(1);
-    const texts = [makeSessionText(1), makeSessionText(2)];
-    project.sessions = texts.map((t) => makeProjectSession(t));
-    project.corpus = texts;
-    await flushPromises();
-    expect(results()).toHaveLength(2);
+  describe('when a rescan changes the sessions', () => {
+    const button = (name: string) => wrapper!.findAll('button').find((b) => b.text() === name);
+    const announced = () => wrapper!.findAll('[aria-live="polite"]').map((p) => p.text());
+
+    async function change(project: ReturnType<typeof useProjectStore>, texts: SessionText[]) {
+      project.sessions = texts.map((t) => makeProjectSession(t));
+      project.corpus = texts;
+      await flushPromises();
+    }
+
+    it('keeps the results, with Update results in place of More, and says so', async () => {
+      const texts = Array.from({ length: SEARCH_PAGE_SESSIONS + 3 }, (_, i) =>
+        makeSessionText(i + 1),
+      );
+      const project = mountWith(texts);
+      await type('charger');
+      expect(button('More')).toBeDefined();
+      expect(announced()).not.toContain(
+        'The sessions have changed. Update results is at the end of the list.',
+      );
+
+      await change(project, [...texts, makeSessionText(SEARCH_PAGE_SESSIONS + 4)]);
+      expect(results()).toHaveLength(SEARCH_PAGE_SESSIONS);
+      expect(status().text()).toBe('23 hits in 23 sessions');
+      expect(button('More')).toBeUndefined();
+      expect(button('Update results')).toBeDefined();
+      expect(announced()).toContain(
+        'The sessions have changed. Update results is at the end of the list.',
+      );
+    });
+
+    it('searches again from the first page with Update results, and focuses the first result', async () => {
+      const project = mountWith([makeSessionText(1)]);
+      await type('charger');
+      await change(project, [makeSessionText(1), makeSessionText(2)]);
+      expect(results()).toHaveLength(1);
+
+      await button('Update results')!.trigger('click');
+      await flushPromises();
+      expect(results()).toHaveLength(2);
+      expect(status().text()).toBe('2 hits in 2 sessions');
+      expect(button('Update results')).toBeUndefined();
+      expect(document.activeElement).toBe(results()[0]!.get('h3').element);
+    });
+
+    it('searches again at once when nothing matched', async () => {
+      const project = mountWith([]);
+      await type('charger');
+      expect(status().text()).toBe('No matches');
+      await change(project, [makeSessionText(1)]);
+      expect(results()).toHaveLength(1);
+      expect(button('Update results')).toBeUndefined();
+    });
+
+    it('drops Update results on a new search', async () => {
+      const project = mountWith([makeSessionText(1)]);
+      await type('charger');
+      await change(project, [makeSessionText(1), makeSessionText(2)]);
+      expect(button('Update results')).toBeDefined();
+      await type('bed');
+      expect(status().text()).toBe('2 hits in 2 sessions');
+      expect(button('Update results')).toBeUndefined();
+    });
   });
 
   it('copies the whole turn with its citation, and says Copied for a moment', async () => {

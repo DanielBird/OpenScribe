@@ -256,8 +256,8 @@ the quotes under each finding and theme (D21).
 when it changes.
 - The first time a project opens on a computer, DeScribe reads every file once and shows progress ("Reading 120
   of 300 sessions").
-- When the window gets focus, DeScribe rescans the folder, which picks up colleagues' new sessions. A rescan
-  costs one listing plus the files' sizes and dates.
+- When the window gets focus, and every two minutes while it is visible (D43), DeScribe rescans the folder, which
+  picks up colleagues' new sessions. A rescan costs one listing plus the files' sizes and dates.
 - The corpus is held in a `shallowRef` (AGENTS.md rule 8).
 
 **Search** lives in `domain/corpus/search.ts`, which is pure TypeScript. Each turn's text is normalised once:
@@ -526,7 +526,7 @@ There are no new hosts, so the CSP, `API_HOSTS` and `ALLOWED_HOSTS` stay as they
 | R3 A permission prompt on every visit | **Certain on `file://`** (Phase 10): access ends with the browser session, and "Allow on every visit" isn't offered. One **Reconnect** click per session. |
 | R4 Correct quotes are rejected because the model changed punctuation or a word | Normalised matching, splitting at `…`, a rule in the prompt, and the rate measured in the live checks. Integrity matters more than recall: a quote that isn't found is never shown as verified. |
 | R5 Questions cost more than expected | Caps, the cost shown under each answer, caching, and one place to set the effort. |
-| R6 OneDrive sync lag: a colleague's session is missing for a while | Rescan when the window gets focus. DeScribe can't speed up the sync itself. |
+| R6 OneDrive sync lag: a colleague's session is missing for a while | Rescan when the window gets focus, and every two minutes while it is visible (D43). DeScribe can't speed up the sync itself. |
 | R7 Two people edit the same transcript | The change check before autosave, with **Reload** / **Keep mine**. |
 
 ## 8. Phases

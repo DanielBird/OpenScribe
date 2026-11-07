@@ -35,6 +35,7 @@ import { makeDoc, withTranslation } from '../testing/transcriptDoc';
 import {
   PROJECT_MESSAGES,
   REFRESH_DELAY_MS,
+  RESCAN_INTERVAL_MS,
   SEARCH_HITS_PER_SESSION,
   SEARCH_PAGE_SESSIONS,
   useProjectStore,
@@ -447,6 +448,55 @@ describe('refresh', () => {
     await vi.waitFor(() => expect(project.sessions).toHaveLength(2));
     // One listing of sessions/ and one of chats/.
     expect(folder.listCount).toBe(lists + 2);
+  });
+
+  describe('every two minutes', () => {
+    /** Real time for the rescan that a tick schedules, REFRESH_DELAY_MS later. */
+    const afterTheDelay = () =>
+      new Promise((resolve) => setTimeout(resolve, REFRESH_DELAY_MS + 50));
+
+    // The interval starts with the store, so only it is faked, before the store exists; reads keep real timers.
+    beforeEach(() => {
+      vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+    });
+
+    it('rescans while the window is visible, without focus', async () => {
+      const folder = memoryFolder('P', projectFiles([docAt(1)]));
+      const project = await readyStore(folder);
+      folder.put(transcriptPath(docAt(2)), transcriptFileText(docAt(2)));
+      vi.advanceTimersByTime(RESCAN_INTERVAL_MS - 1);
+      await afterTheDelay();
+      expect(project.sessions).toHaveLength(1);
+      vi.advanceTimersByTime(1);
+      await vi.waitFor(() => expect(project.sessions).toHaveLength(2));
+    });
+
+    it('ticks only while a project is open', async () => {
+      const folder = memoryFolder('P', projectFiles([docAt(1)]));
+      const project = useProjectStore();
+      expect(project.status).toBe('none');
+      expect(vi.getTimerCount()).toBe(0);
+      await readyStore(folder);
+      expect(vi.getTimerCount()).toBe(1);
+      folder.failAll('permission');
+      await project.refresh();
+      expect(project.status).toBe('reconnect');
+      expect(vi.getTimerCount()).toBe(0);
+    });
+
+    it("doesn't rescan while the window is hidden", async () => {
+      const folder = memoryFolder('P', projectFiles([docAt(1)]));
+      await readyStore(folder);
+      const hidden = vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden');
+      try {
+        const lists = folder.listCount;
+        vi.advanceTimersByTime(RESCAN_INTERVAL_MS * 2);
+        await afterTheDelay();
+        expect(folder.listCount).toBe(lists);
+      } finally {
+        hidden.mockRestore();
+      }
+    });
   });
 
   it('switches to reconnect when access has ended', async () => {

@@ -55,7 +55,8 @@ the first that colleagues get with projects.
    - Record what changed in this file's Handoff.
 6. **The manual OneDrive checklist** (TESTING.md), with two people on two computers, in Edge and Chrome:
    - both open one project;
-   - A adds a session; B sees it after focusing the window;
+   - A adds a session; B sees it within two minutes of OneDrive syncing it, or at once after focusing the window
+     (D43);
    - B regenerates its summary; A sees the new summary;
    - A saves a chat; B sees it after sync and a focus (H3, Phase 21);
    - both edit the same transcript, and the change check catches it;

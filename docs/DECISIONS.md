@@ -746,3 +746,20 @@ summarise them.
   - The English view, the export, search, summaries, the agent and the quote checks see the original text as that
     turn's English, as they do for a turn the model returns unchanged.
   - A third matches the summaries' retry threshold.
+
+### D43 — The project rescans every two minutes while it is visible; no refresh button (2026-11-07; Phase 27)
+- **Decision:** besides the rescans on focus, on becoming visible and on entering Project mode, the project store
+  rescans the folder every two minutes while a project is open and the window is visible (`RESCAN_INTERVAL_MS` in
+  `stores/project.ts`). There is no refresh button.
+  - Keyword search no longer runs again under the reader. When a rescan changes the sessions, the results stay and
+    **Update results** takes **More**'s place; a search that found nothing runs again at once.
+- **Why:** a window that stays in front, such as the desktop app kept maximised, never gets focus again, so a
+  colleague's work never appeared. A button wouldn't help: nothing tells the user when OneDrive has delivered a file,
+  so a click before then would seem to do nothing. A rescan that finds nothing costs one listing with the files'
+  sizes and dates (about 70 ms for 300 files, reference/file-system-access.md F7) and changes nothing on screen.
+- **Consequences:**
+  - A colleague's session appears within two minutes of OneDrive delivering it, or at once on focus.
+  - **More** can't page across a rescan: results are ordered by hit count, so the old offset would repeat or skip
+    sessions in the new ones.
+  - `FileSystemObserver` (Chromium 133+) could add a rescan on each change later. It is unproven on `file://` and with
+    OneDrive's cloud-only files, so it would need a Phase 10-style check first.
