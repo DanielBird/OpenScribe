@@ -66,8 +66,8 @@ index.html                      Vite entry (CSP injected at build time only)
 vite.config.ts                  a function of mode: vue() + viteSingleFile() + csp plugin + defines; `desktop` mode
                                 drops the single file and the CSP meta and writes dist-desktop/
 src-tauri/                      the desktop app (D35): tauri.conf.json (window, CSP), capabilities/ (none granted),
-                                src/ (a bare Tauri app), icons/ (from source.svg), msix/ (Package.appxmanifest +
-                                Assets, for winapp)
+                                src/ (a bare Tauri app and its launch splash), icons/ (from source.svg), msix/
+                                (Package.appxmanifest + Assets, for winapp)
 src/
   main.ts, App.vue              shell: AppHeader (top row), current view, footer (the Settings link)
   env.d.ts                      types for the build-time defines (__APP_VERSION__, __BUILD_DATE__, __DESKTOP__)
@@ -339,6 +339,7 @@ MVP = Phases 0–5. Each phase is sized for one agent session (or a few) and end
 | 29 | [Follow-up questions start from the text](phases/29-follow-ups-from-text.md) | 17, 21, 22 | 23, 25 | ☑ Done (live checks A2, H1 and H2 open) |
 | 30 | [Chat settings: effort, tool calls and reading](phases/30-chat-settings.md) | 16, 20, 28, 29 | 23, 25 | ☑ Done (live check A3 open) |
 | 31 | [Choose the project in Add to project](phases/31-choose-project.md) | 14, 15 | 23, 25 | ☑ Done (manual row 22 open) |
+| 32 | [Launch splash and hidden start](phases/32-launch-splash.md) | 24 | 23, 25 | ☑ Done (manual check W16 open) |
 
 Status values: ☐ Not started · ◐ In progress · ☑ Done.
 

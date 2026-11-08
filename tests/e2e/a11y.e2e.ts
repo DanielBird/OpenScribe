@@ -321,7 +321,7 @@ test('the Project dropdown in Add to project, and the recent projects under Chan
 
   await page.getByRole('button', { name: 'Add to project…' }).click();
   await page.getByRole('button', { name: 'Open project…' }).click();
-  const one = page.getByRole('dialog', { name: 'Add to “Hearing at home 2026”' });
+  const one = page.getByRole('dialog', { name: 'Add to Hearing at home 2026' });
   await expect(one).toBeVisible();
   await expectAccessible(page, testInfo, 'Add to project, one project known');
   await folder.pickNext('Field study');
@@ -366,7 +366,7 @@ test('Add to project, its progress and error, the folder notice, and a summary',
   await expect(page.getByRole('dialog', { name: 'Add to project' })).toBeVisible();
   await expectAccessible(page, testInfo, 'Add to project, no project');
   await page.getByRole('button', { name: 'Open project…' }).click();
-  await expect(page.getByRole('dialog', { name: 'Add to “Hearing at home 2026”' })).toBeVisible();
+  await expect(page.getByRole('dialog', { name: 'Add to Hearing at home 2026' })).toBeVisible();
   await expectAccessible(page, testInfo, 'Add to project, project open, key missing');
   await page.getByLabel('Claude (Anthropic) API key').fill('test-key');
   await page.getByRole('button', { name: 'Add', exact: true }).click();

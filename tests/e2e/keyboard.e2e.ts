@@ -329,7 +329,7 @@ test('Add to project: the project is chosen from the keyboard', async ({ page })
   await page.keyboard.press('Enter');
   await tabTo(page, page.getByRole('button', { name: 'Open project…' }));
   await page.keyboard.press('Enter');
-  await expect(page.getByRole('dialog', { name: 'Add to “Hearing at home 2026”' })).toBeVisible();
+  await expect(page.getByRole('dialog', { name: 'Add to Hearing at home 2026' })).toBeVisible();
   await folder.pickNext('Field study');
   await tabTo(page, page.getByRole('button', { name: 'Open another project…' }));
   await page.keyboard.press('Enter');

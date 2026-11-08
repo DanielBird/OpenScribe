@@ -14,8 +14,8 @@ Official docs: [Tauri 2](https://v2.tauri.app/) ·
 
 The same Vue app as the HTML file, in a Tauri 2 window, which draws with WebView2 (the Edge engine). `vite build
 --mode desktop` writes a normal multi-file build to `dist-desktop/`, and Tauri embeds it in `describe.exe`.
-`__DESKTOP__` is the only switch in `src/`, and it changes only Settings' wording. The Rust side is configuration: no
-commands, no plugins, and a capability that grants nothing. The app is packed as MSIX with Microsoft's `winapp` CLI,
+`__DESKTOP__` is the only switch in `src/`, and it changes only Settings' wording. The Rust side is configuration and the
+launch splash: no commands, no plugins, and a capability that grants nothing. The app is packed as MSIX with Microsoft's `winapp` CLI,
 not Tauri's bundler, and the Store signs, hosts and updates it.
 
 ## Prerequisites
@@ -116,6 +116,12 @@ Made by `winapp manifest generate`, then edited:
   keeps Windows' title bar light to match the app, which is light-only (`color-scheme: light`); by default it follows
   Windows' dark mode. `create` is false in
   `tauri.conf.json`: `src-tauri/src/lib.rs` builds the window from that config, with an `on_new_window` handler.
+- **Launch (DECISIONS T20):** `src-tauri/src/splash.rs` shows the mark in a borderless window, 128 px at 100 % and
+  scaled for the monitor under the pointer, as soon as the exe starts. The main window is built hidden and shown by
+  `on_page_load` when the page has finished loading, or by a watchdog after 15 s. tao records "maximised" on a hidden
+  window and applies it on show, so the window never appears at 1280 × 860. WebView2 doesn't paint while its window is
+  hidden, so the first paint comes after the window appears; `backgroundColor` matches the page's white, so that moment
+  is blank white during Windows' own open animation.
 - **Folder access:** WebView2's File System Access prompts name the origin ("http://tauri.localhost will be able to
   edit files in …") and come twice, view then edit (W10, 1.0.0); their wording can't be set. The window's
   `on_permission_request` answers `PermissionKind::FileSystemAccess` (WebView2's `FILE_READ_WRITE`) with **Allow**,
@@ -197,6 +203,7 @@ link.
 | W13 | Debug build: the CSP the web view reports, and the Network panel shows only the three API hosts (plus Tauri's `ipc`). | **Pass.** The CSP is [above](#the-csp). Requests over a whole run went to `http://tauri.localhost` and the three API hosts only, with no `ipc` traffic (the app makes no IPC calls). No console errors. | *not run* |
 | W14 | **Update:** submit a second version. It updates and keeps keys, glossary and the last transcript. | *Store only* | *not run* |
 | W15 | **Uninstall:** saved data goes too. Record where it lived. | **Failed in 1.0.0, fixed.** Installed 1.0.0 kept its data outside the package, in `%LOCALAPPDATA%\io.github.danielbird.describe\EBWebView`. With `data_directory`, a side-by-side test package (`DeScribe.Test`) kept it in `Packages\DeScribe.Test_gsbrz2a1s0qx4\LocalState\EBWebView` (7.6 MB on first launch), and uninstalling removed that folder. **Confirmed by the maintainer** on the installed build: after uninstalling, `PackagesDeScribe_gsbrz2a1s0qx4` was gone. | *not run* |
+| W16 | **Launch:** the mark appears at once and looks sharp, with no taskbar button. The app then appears already maximised, with no blank window or jump, and Tab works without a click. Check after a reboot (a cold start), at 100 % and 150 %, on a second monitor and on a blue wallpaper. | **Order and timing pass** (the agent, release exe, an empty profile). The splash was up within about 60 ms in four of five runs. The window appeared maximised at 600–730 ms and was never visible at 1280 × 860. Tab reached **Transcribe** with no click. With the page-load reveal disabled, the watchdog opened the window at 15.2 s. **How the mark looks on screen is still to check:** a full-screen, always-on-top window covered it in the agent's runs. *Cold start, 150 % and the second monitor: not run.* | *not run* |
 
 **How my rows ran:** the debug exe was built with `CARGO_TARGET_DIR=src-tauri/target/cdp npx tauri build --debug
 --no-bundle`. It was started with `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9333` and
@@ -246,4 +253,6 @@ localStorage in the app's own profile, the keys' Remember setting, and Clear sav
 | 2026-10-31 | Maintainer's PC, a test package (`DeScribe.Test`, same certificate) beside the installed app | W15 with `data_directory`: install, launch, uninstall | Data in the package's `LocalState\EBWebView`; gone after uninstalling. The installed app wasn't touched. |
 | 2026-10-31 | Maintainer's PC, the rebuilt MSIX (with T17, T18, the light title bar) | W2, W8, W10 (no folder prompts), W15 | All confirmed by the maintainer. |
 | 2026-10-31 | Maintainer's PC, Windows App Certification Kit 10.0.22621.5040 (Windows 11 26200), the unsigned 1.0.0.0 MSIX | **Validate Store App** | **Passed.** Every required test passed. One optional test failed, *Blocked executables*: see [the certification kit](#the-certification-kit). |
-| – | Work laptop | W1–W15 from the direct link | Not run |
+| 2026-11-08 | Maintainer's PC, release exe, a scratch profile (the agent) | W16: a script polling the app's own windows, `PrintWindow`, and CDP for the page's paint timings, focus and reload | As in the checklist. In the run with paint timings: page loaded at 686 ms, window shown at 727 ms, first paint at 803 ms after the process started. |
+| 2026-11-08 | Maintainer's PC, debug exe with the page-load reveal disabled (not committed) | The 15 s watchdog | The window appeared and the splash closed at 15.2 s. |
+| – | Work laptop | W1–W16 from the direct link | Not run |
