@@ -905,3 +905,16 @@ summarise them.
   - `describe.v1.recentProjects` is a new key with a default, not a change of shape, so D18 doesn't apply. The
     remembered folder stays under `describe.v1.projectFolder`, which older builds still read. **Clear saved data**
     clears both.
+
+### T20 — The desktop app opens behind a native splash (2026-11-08; Phase 32)
+- **Decision:** the main window starts hidden (`visible: false`) and is shown when the page has loaded
+  (`on_page_load`, `PageLoadEvent::Finished`). Until then `src-tauri/src/splash.rs` shows the DeScribe mark in a small
+  borderless window, drawn with Win32 on its own thread. If the page hasn't reported after 15 s, the window is shown
+  anyway and the splash closes.
+- **Why:** the window used to appear at 1280 × 860, jump to maximised and stay blank while WebView2 started. Tauri's
+  documented splash is a second WebView2 window, which can't draw before WebView2 has started either. Hiding the window
+  alone would leave nothing on screen during the wait, and the app doesn't limit itself to one instance, so a second
+  click would open a second window.
+- **Consequences:** no IPC, commands, plugins or permissions, so `capabilities/default.json` still grants nothing. The
+  mark's geometry is in `splash.rs` as well as `icons/source.svg`, so a new mark means changing both. The HTML build is
+  unchanged.
