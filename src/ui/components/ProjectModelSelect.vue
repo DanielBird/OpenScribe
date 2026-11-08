@@ -54,7 +54,7 @@ const groups = [
 
 <template>
   <span class="project-model">
-    <select v-bind="$attrs" v-model="settings.projectModel">
+    <select v-bind="$attrs" v-model="settings.projectModel" class="list-select">
       <option v-for="m in models" :key="m.id" :value="m.id">{{ m.label }}</option>
     </select>
     <template v-if="chatSettings">
@@ -127,47 +127,6 @@ const groups = [
 .project-model > select {
   flex: 1 1 auto;
   min-width: 0;
-}
-
-/*
- * The open list is a customizable select (Chromium's `base-select`), so it can be wider than the closed control and have
- * rounded corners. Browsers without it show their native list.
- */
-select,
-select::picker(select) {
-  appearance: base-select;
-}
-
-select::picker-icon {
-  display: none;
-}
-
-select::picker(select) {
-  min-width: max(anchor-size(width), 14rem);
-  margin-block: var(--space-1);
-  padding: var(--space-1);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background: var(--color-bg);
-  color: var(--color-text);
-  box-shadow: 0 4px 16px color-mix(in srgb, var(--color-text) 14%, transparent);
-}
-
-option {
-  padding: var(--space-2) var(--space-3);
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-}
-
-option:hover,
-option:focus-visible {
-  background: var(--color-surface);
-  outline: none;
-}
-
-option:checked {
-  color: var(--color-accent);
-  font-weight: 600;
 }
 
 .settings-button {

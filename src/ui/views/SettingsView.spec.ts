@@ -220,7 +220,7 @@ describe('SettingsView', () => {
       expect(text).toContain(
         'Chats are saved in the project folder, where everyone who can open it can read them.',
       );
-      expect(text).toContain("a copy of the project's transcript text");
+      expect(text).toContain("a copy of the projects' transcript text");
     });
 
     it('says where to create each key, and links to each provider’s privacy and terms pages', () => {

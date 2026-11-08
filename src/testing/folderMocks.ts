@@ -10,6 +10,9 @@ import type { MemoryFolder } from './memoryFolder';
 export const folderMocks = {
   supported: true,
   stored: null as null | { handle: unknown; projectName: string },
+  /** The saved recent list, and how many times it has been saved. */
+  recent: [] as FolderModule.RecentFolder[],
+  recentSaves: 0,
   permission: 'granted' as PermissionState,
   grantOnRequest: true,
   requests: 0,
@@ -20,6 +23,8 @@ export const folderMocks = {
 export function resetFolderMocks(): void {
   folderMocks.supported = true;
   folderMocks.stored = null;
+  folderMocks.recent = [];
+  folderMocks.recentSaves = 0;
   folderMocks.permission = 'granted';
   folderMocks.grantOnRequest = true;
   folderMocks.requests = 0;
@@ -30,6 +35,17 @@ export const handleFor = (folder: MemoryFolder) => ({
   kind: 'directory',
   name: folder.name,
   folder,
+});
+
+/** An entry of the saved recent list, for `folderMocks.recent`. */
+export const recentEntry = (
+  folder: MemoryFolder,
+  projectId: string,
+  projectName: string,
+): FolderModule.RecentFolder => ({
+  handle: handleFor(folder) as unknown as FileSystemDirectoryHandle,
+  projectId,
+  projectName,
 });
 
 /** The next folder picker returns this folder; `null` dismisses it. */
@@ -70,6 +86,14 @@ export function mockFolderModule(actual: typeof FolderModule): typeof FolderModu
     },
     forgetFolderHandle: async () => {
       folderMocks.stored = null;
+    },
+    loadRecentFolders: async () => folderMocks.recent,
+    saveRecentFolders: async (folders) => {
+      folderMocks.recent = [...folders];
+      folderMocks.recentSaves++;
+    },
+    forgetRecentFolders: async () => {
+      folderMocks.recent = [];
     },
   };
 }

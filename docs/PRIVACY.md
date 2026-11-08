@@ -66,7 +66,7 @@ We never receive your data, so we can't sell, rent, share or disclose it.
   it.
 - **The single-file version** keeps its data in your browser's storage for that file.
 
-This storage holds your settings, glossary, name, last transcript, the link to your project folder, a copy of your
+This storage holds your settings, glossary, name, last transcript, links to your recent project folders, a copy of your
 project's transcript text so it opens quickly, and your API keys if you ticked **Remember keys on this computer**.
 Otherwise, keys are kept only until you close the app or the browser tab.
 

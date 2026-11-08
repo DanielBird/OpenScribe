@@ -173,7 +173,8 @@ interface SessionSummaryFile {
 
 The new files have their own `kind` and `schemaVersion`, so D18 applies to them from the start. A build keeps the
 fields it doesn't know when it writes a file back (D38). The handle to the folder is kept in IndexedDB under
-`describe.v1.projectFolder`. That is a new key, not a change of shape.
+`describe.v1.projectFolder`. That is a new key, not a change of shape. The last 10 project folders opened on a
+computer are listed under `describe.v1.recentProjects` (D49).
 
 **Permissions.**
 - The first time, **Open project…** or **New project…** opens the folder picker.
@@ -187,8 +188,9 @@ fields it doesn't know when it writes a file back (D38). The handle to the folde
 **Add to project** sits in the Output actions row, next to **Translate**. Like translation (D14), it shows its
 progress, **Cancel** and **Resume** in the row. It runs these steps:
 
-1. **Connect.** If no project is connected, a dialog opens or creates one. If the key for the project model's
-   provider is missing, it can be entered there (Claude until Phase 19, then Claude or Gemini, D26).
+1. **Connect.** If no project is connected, a dialog opens or creates one. With two or more recent projects it offers
+   them in a dropdown, and **Add** opens the chosen one first (D49). If the key for the project model's provider is
+   missing, it can be entered there (Claude until Phase 19, then Claude or Gemini, D26).
 2. **Save** the transcript file. From then on, the Output tab's autosave writes to this file too.
 3. **Translate,** if the language isn't English and there's no English translation yet. This uses
    `translateTranscript` with the project model and its provider (A17). An existing translation from either provider

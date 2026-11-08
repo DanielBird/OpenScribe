@@ -2,10 +2,16 @@ import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PROJECT_MESSAGES, useProjectStore } from '../../stores/project';
-import { makeChatFile, makeProjectFile } from '../../testing/projectSeed';
+import { folderMocks, recentEntry, resetFolderMocks } from '../../testing/folderMocks';
+import { memoryFolder } from '../../testing/memoryFolder';
+import { makeChatFile, makeProjectFile, TEST_PROJECT_ID } from '../../testing/projectSeed';
 import { makeProjectSession, makeSessionText } from '../../testing/projectSessions';
 import { resetProjectUi, useProjectUi } from '../composables/useProjectUi';
 import ProjectView from './ProjectView.vue';
+
+vi.mock('../../storage/folder', async (importOriginal) =>
+  (await import('../../testing/folderMocks')).mockFolderModule(await importOriginal()),
+);
 
 describe('ProjectView', () => {
   let wrapper: VueWrapper | null = null;
@@ -14,6 +20,7 @@ describe('ProjectView', () => {
     localStorage.clear();
     setActivePinia(createPinia());
     resetProjectUi();
+    resetFolderMocks();
   });
 
   afterEach(() => {
@@ -261,5 +268,56 @@ describe('ProjectView', () => {
     await button('Open project…').trigger('click');
     await flushPromises();
     expect(ui.choosing).toBe(false);
+  });
+
+  describe('recent projects under Change (D49)', () => {
+    /** The open project and one other in the recent list, with the chooser showing. */
+    async function choosing() {
+      folderMocks.recent = [
+        recentEntry(memoryFolder('A'), TEST_PROJECT_ID, 'Hearing at home 2026'),
+        recentEntry(memoryFolder('B'), 'other-id', 'Field study Lyon'),
+      ];
+      const project = readyProject();
+      await project.init();
+      mountIn('ready');
+      useProjectUi().choosing = true;
+      await flushPromises();
+      return project;
+    }
+
+    it('lists the other projects first, in a labelled group', async () => {
+      await choosing();
+      expect(buttons()).toEqual(['Field study Lyon', 'Open project…', 'New project…', 'Cancel']);
+      expect(wrapper!.get('[aria-label="Recent projects"]').attributes('role')).toBe('group');
+      expect(document.activeElement?.textContent?.trim()).toBe('Field study Lyon');
+    });
+
+    it('opens one with a click and closes the chooser', async () => {
+      const project = await choosing();
+      const openRecent = vi.spyOn(project, 'openRecent').mockResolvedValue(true);
+      await button('Field study Lyon').trigger('click');
+      await flushPromises();
+      expect(openRecent).toHaveBeenCalledWith('other-id');
+      expect(useProjectUi().choosing).toBe(false);
+    });
+
+    it('keeps the chooser and shows why when one cannot be opened', async () => {
+      const project = await choosing();
+      vi.spyOn(project, 'openRecent').mockImplementation(async () => {
+        project.notice = PROJECT_MESSAGES.accessRefused;
+        return false;
+      });
+      await button('Field study Lyon').trigger('click');
+      await flushPromises();
+      expect(useProjectUi().choosing).toBe(true);
+      expect(wrapper!.get('[role="alert"]').text()).toBe(PROJECT_MESSAGES.accessRefused);
+    });
+
+    it('is not offered outside the chooser', async () => {
+      await choosing();
+      useProjectUi().choosing = false;
+      await flushPromises();
+      expect(wrapper!.find('[aria-label="Recent projects"]').exists()).toBe(false);
+    });
   });
 });

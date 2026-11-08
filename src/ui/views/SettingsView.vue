@@ -216,8 +216,8 @@ async function clearSavedData(): Promise<void> {
             <h3>{{ desktop ? 'On this computer' : 'In this browser' }}</h3>
             <p>
               Your API keys (when remember keys is selected), glossary, settings and last
-              transcript, the link to your project folder, and a copy of the project's transcript
-              text are saved
+              transcript, links to your recent project folders, and a copy of the projects'
+              transcript text are saved
               {{
                 desktop
                   ? "in DeScribe's own storage"

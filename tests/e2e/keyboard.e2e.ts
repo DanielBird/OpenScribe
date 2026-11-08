@@ -309,6 +309,48 @@ test('Add to project works from the keyboard, and focus stays in the actions row
   expect(await page.evaluate(() => document.activeElement !== document.body)).toBe(true);
 });
 
+test('Add to project: the project is chosen from the keyboard', async ({ page }) => {
+  await page.addInitScript(() =>
+    sessionStorage.setItem('describe.v1.key.claude', JSON.stringify('test-key')),
+  );
+  const other = { id: '99999999-0000-4000-8000-000000000000', name: 'Field study Lyon' };
+  const folder = await useProjectFolder(
+    page,
+    { 'Hearing at home': projectFiles([]), 'Field study': projectFiles([], other) },
+    { pick: 'Hearing at home' },
+  );
+  await mockAnthropic(page, projectAnswer);
+  await mockElevenLabs(page, () => ok());
+  await openApp(page);
+  await goToGlossary(page);
+  await run(page);
+
+  await tabTo(page, page.getByRole('button', { name: 'Add to project…' }));
+  await page.keyboard.press('Enter');
+  await tabTo(page, page.getByRole('button', { name: 'Open project…' }));
+  await page.keyboard.press('Enter');
+  await expect(page.getByRole('dialog', { name: 'Add to “Hearing at home 2026”' })).toBeVisible();
+  await folder.pickNext('Field study');
+  await tabTo(page, page.getByRole('button', { name: 'Open another project…' }));
+  await page.keyboard.press('Enter');
+
+  // The button goes while the project loads: focus lands on the new dropdown.
+  const select = page.getByLabel('Project', { exact: true });
+  await expect(select).toBeFocused();
+  await expect(select).toHaveValue(other.id);
+  await page.keyboard.press('Enter');
+  await page.keyboard.press('ArrowDown');
+  await page.keyboard.press('Enter');
+  await expect(select).not.toHaveValue(other.id);
+
+  await tabTo(page, page.getByRole('button', { name: 'Add', exact: true }));
+  await page.keyboard.press('Enter');
+  await expect(page.getByText('In Hearing at home 2026')).toBeVisible();
+  expect(Object.keys(folder.files('Field study')).filter((p) => p.startsWith('sessions/'))).toEqual(
+    [],
+  );
+});
+
 test('the chat works from the keyboard: ask, Stop, the details, Copy, and Escape from a summary', async ({
   page,
 }) => {

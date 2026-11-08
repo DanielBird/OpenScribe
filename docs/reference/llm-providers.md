@@ -458,8 +458,8 @@ SDK shapes (AGENTS.md rule 5), and Claude's thinking blocks are only valid in th
 > summaries and the transcript passages the model reads are sent to the same provider. Chats are saved in the
 > project folder, where everyone who can open it can read them.
 >
-> **In this browser.** Your API keys, glossary, settings and last transcript, the link to your project folder, and
-> a copy of the project's transcript text so it opens quickly.
+> **In this browser.** Your API keys, glossary, settings and last transcript, links to your recent project folders,
+> and a copy of the projects' transcript text so they open quickly.
 
 The chat's sentence (PROJECTS.md §5.8) came with the chat, in Phase 17. The project sentence names either provider
 from Phase 19 (D26), and the chat's sentence refers to it from Phase 20, when the chat works with either. On

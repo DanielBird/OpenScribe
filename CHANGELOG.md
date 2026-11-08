@@ -6,6 +6,12 @@ All notable changes to DeScribe are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **Choose the project in Add to project:** DeScribe remembers the last ten project folders on each computer. The
+  dialog offers them in a **Project** list, with **Open another project…** and **New project…** beside it, and
+  **Change** in Analyse lists them too.
+
 ## [1.2.0] - 2026-11-08
 
 ### Added

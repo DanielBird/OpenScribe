@@ -32,14 +32,18 @@ import {
   FolderError,
   folderPermission,
   forgetFolderHandle,
+  forgetRecentFolders,
   isFolderAccessSupported,
   loadFolderHandle,
+  loadRecentFolders,
   openFolder,
   pickFolder,
   requestFolderPermission,
   saveFolderHandle,
+  saveRecentFolders,
   type FileStat,
   type ProjectFolder,
+  type RecentFolder,
 } from '../storage/folder';
 import {
   createProject,
@@ -82,6 +86,12 @@ export interface ProjectChat {
   stat: FileStat;
 }
 
+/** A project in the recent list (D49). Its folder handle stays in this store. */
+export interface RecentProject {
+  id: string;
+  name: string;
+}
+
 /** A file that couldn't be read, and why. */
 export interface FileProblem {
   file: string;
@@ -109,6 +119,8 @@ export const SEARCH_HITS_PER_SESSION = 4;
 export const REFRESH_DELAY_MS = 300;
 /** A window that stays in front never gets focus again: it rescans this often while it is visible (D43). */
 export const RESCAN_INTERVAL_MS = 120_000;
+/** How many project folders the recent list keeps (D49). */
+export const MAX_RECENT_PROJECTS = 10;
 
 export const PROJECT_MESSAGES = {
   notAProject:
@@ -120,6 +132,8 @@ export const PROJECT_MESSAGES = {
   accessRefused:
     "The browser didn't let DeScribe use this folder. Try again and allow access. If it keeps failing, ask IT " +
     'whether folder access is blocked.',
+  projectGone: (name: string) =>
+    `DeScribe can't find “${name}”. It may have been moved or deleted. If it was moved, open it from its new folder.`,
   unexpected: 'Something went wrong. Try again.',
 } as const;
 
@@ -325,6 +339,11 @@ export const useProjectStore = defineStore('project', () => {
   const chatProblems = shallowRef<FileProblem[]>([]);
   /** Whether the chats have been read since the project opened, so "No chats yet" isn't shown too soon. */
   const chatsLoaded = ref(false);
+  /** Project folders opened on this computer, most recent first (D49). Plain objects: IndexedDB can't clone proxies. */
+  const recent = shallowRef<RecentFolder[]>([]);
+  const recentProjects = computed<RecentProject[]>(() =>
+    recent.value.map((r) => ({ id: r.projectId, name: r.projectName })),
+  );
 
   /** The hash of the current brief; a summary made with another brief is out of date. */
   const currentBriefHash = computed(() => (project.value ? briefHash(project.value.brief) : ''));
@@ -333,6 +352,8 @@ export const useProjectStore = defineStore('project', () => {
 
   let handle: FileSystemDirectoryHandle | null = null;
   let folder: ProjectFolder | null = null;
+  /** `handle` was just adopted: it replaces the one in the recent list, in case the folder moved. */
+  let handleAdopted = false;
   /** The transcript and summary files in the last listing, updated by Describe's own writes. */
   let listing: SessionFileInfo[] = [];
   /** Transcript files read so far, by file name. */
@@ -372,6 +393,27 @@ export const useProjectStore = defineStore('project', () => {
     projectName.value = next.name;
     // A brief edit makes every summary made with the old brief out of date.
     if (currentBriefHash.value !== hashBefore && sessions.value.length > 0) rebuild();
+    rememberRecent(next);
+  }
+
+  function setRecent(next: RecentFolder[]): void {
+    recent.value = next;
+    void saveRecentFolders(next);
+  }
+
+  /** Puts the open project first in the recent list under its current name. Saves only when that changes the list. */
+  function rememberRecent(file: ProjectFile): void {
+    const h = handle;
+    if (!h) return;
+    const [first] = recent.value;
+    if (!handleAdopted && first?.projectId === file.id && first.projectName === file.name) return;
+    handleAdopted = false;
+    setRecent(
+      [
+        { handle: h, projectId: file.id, projectName: file.name },
+        ...recent.value.filter((r) => r.projectId !== file.id),
+      ].slice(0, MAX_RECENT_PROJECTS),
+    );
   }
 
   function clearSessions(): void {
@@ -688,7 +730,8 @@ export const useProjectStore = defineStore('project', () => {
       return;
     }
     const run = seq;
-    const stored = await loadFolderHandle();
+    const [stored, recentFolders] = await Promise.all([loadFolderHandle(), loadRecentFolders()]);
+    if (recent.value.length === 0) recent.value = recentFolders;
     if (run !== seq) return; // the user opened a project meanwhile
     if (!stored) {
       status.value = 'none';
@@ -711,6 +754,7 @@ export const useProjectStore = defineStore('project', () => {
     name: string,
   ): Promise<void> {
     handle = picked;
+    handleAdopted = true;
     folder = f;
     projectName.value = name;
     await saveFolderHandle(picked, name);
@@ -791,6 +835,36 @@ export const useProjectStore = defineStore('project', () => {
     notice.value = null;
     // Before any other await: the browser only shows its prompt during the click.
     if (await requestFolderPermission(h)) await load();
+    return status.value === 'ready';
+  }
+
+  /**
+   * Opens a project from the recent list, from a click (D49). If access is refused or the folder can't be read, `notice`
+   * says why and the open project stays; a folder that's gone also leaves the list. Resolves whether it's ready.
+   */
+  async function openRecent(id: string): Promise<boolean> {
+    notice.value = null;
+    const entry = recent.value.find((r) => r.projectId === id);
+    if (!entry) return false;
+    // Before any other await: the browser only shows its prompt during the click.
+    if (!(await requestFolderPermission(entry.handle))) {
+      notice.value = PROJECT_MESSAGES.accessRefused;
+      return false;
+    }
+    const f = openFolder(entry.handle);
+    let opened: ProjectFile;
+    try {
+      opened = (await readProject(f)).project;
+    } catch (err) {
+      if (err instanceof FolderError && err.kind === 'not_found') {
+        setRecent(recent.value.filter((r) => r.projectId !== id));
+        notice.value = PROJECT_MESSAGES.projectGone(entry.projectName);
+      } else {
+        notice.value = pickedFolderMessage(err);
+      }
+      return false;
+    }
+    await adopt(entry.handle, f, opened.name);
     return status.value === 'ready';
   }
 
@@ -1073,7 +1147,8 @@ export const useProjectStore = defineStore('project', () => {
     notice.value = null;
     progress.value = { done: 0, total: 0 };
     status.value = isFolderAccessSupported() ? 'none' : 'unsupported';
-    await Promise.all([forgetFolderHandle(), clearCorpusCache()]);
+    recent.value = [];
+    await Promise.all([forgetFolderHandle(), forgetRecentFolders(), clearCorpusCache()]);
   }
 
   return {
@@ -1090,6 +1165,7 @@ export const useProjectStore = defineStore('project', () => {
     chats,
     chatProblems,
     chatsLoaded,
+    recentProjects,
     themeVocabulary,
     init,
     load,
@@ -1097,6 +1173,7 @@ export const useProjectStore = defineStore('project', () => {
     scheduleRefresh,
     openProject,
     newProject,
+    openRecent,
     reconnect,
     retry,
     saveBrief,

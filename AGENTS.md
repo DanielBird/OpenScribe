@@ -81,8 +81,9 @@ explaining why. Dev dependencies are fine when needed.
    `@ts-expect-error` with a comment is acceptable.
 7. **Storage.** Keys are namespaced `describe.v1.<name>`. Every `localStorage`/`sessionStorage`/IndexedDB access is
    wrapped in try/catch (storage can be unavailable) and goes through `src/storage/*`. The IndexedDB databases are
-   `describe-v1` (the last transcript, its project link under `describe.v1.lastTranscriptLink`, and the project
-   folder's handle under `describe.v1.projectFolder`) and `describe-v1-corpus` (the project's session-text cache).
+   `describe-v1` (the last transcript, its project link under `describe.v1.lastTranscriptLink`, the project folder's
+   handle under `describe.v1.projectFolder`, and the recent folders under `describe.v1.recentProjects`) and
+   `describe-v1-corpus` (the projects' session-text cache).
 8. **Large data.** Hold `TranscriptDoc` in a `shallowRef` and replace it immutably; never make word arrays deeply
    reactive.
 9. **Accessibility.** Real `<button>`/`<input>`/`<label>` elements, keyboard reachable, visible focus, status changes

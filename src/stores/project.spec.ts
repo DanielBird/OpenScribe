@@ -11,6 +11,7 @@ import {
   folderMocks as mocks,
   handleFor,
   pickNext,
+  recentEntry,
   rememberFolder,
   resetFolderMocks,
 } from '../testing/folderMocks';
@@ -33,6 +34,7 @@ import {
 } from '../testing/projectSeed';
 import { makeDoc, withTranslation } from '../testing/transcriptDoc';
 import {
+  MAX_RECENT_PROJECTS,
   PROJECT_MESSAGES,
   REFRESH_DELAY_MS,
   RESCAN_INTERVAL_MS,
@@ -677,6 +679,142 @@ describe('search', () => {
       `"${turn.text.replace(/\s+/g, ' ').trim()}"`,
     );
     expect(project.citationFor(docAt(1).id, turn.id)).not.toContain('translated');
+  });
+});
+
+describe('recent projects', () => {
+  const B_ID = '99999999-0000-4000-8000-000000000000';
+  const A = { id: TEST_PROJECT_ID, name: 'Hearing at home 2026' };
+  const B = { id: B_ID, name: 'B' };
+  const folderA = () => memoryFolder('A', projectFiles([docAt(1), docAt(2)]));
+  const folderB = () => memoryFolder('B', projectFiles([docAt(3)], { id: B_ID, name: 'B' }));
+
+  /** A open, with B in the recent list. */
+  async function aOpenWithB(a = folderA(), b = folderB()) {
+    mocks.recent = [recentEntry(a, A.id, A.name), recentEntry(b, B.id, B.name)];
+    return { project: await readyStore(a), a, b };
+  }
+
+  it('lists each project opened, newest first, and saves the list', async () => {
+    const a = folderA();
+    const b = folderB();
+    const project = useProjectStore();
+    await project.init();
+    expect(project.recentProjects).toEqual([]);
+    pickNext(a);
+    await project.openProject();
+    pickNext(b);
+    await project.openProject();
+    expect(project.recentProjects).toEqual([B, A]);
+    expect(mocks.recent.map((r) => r.projectId)).toEqual([B.id, A.id]);
+  });
+
+  it('adds a folder remembered before there was a list, once it has loaded', async () => {
+    const project = await readyStore(folderA());
+    expect(project.recentProjects).toEqual([A]);
+  });
+
+  it('adds nothing until a remembered folder has access', async () => {
+    rememberFolder(folderA(), 'prompt');
+    const project = useProjectStore();
+    await project.init();
+    expect(project.status).toBe('reconnect');
+    expect(project.recentProjects).toEqual([]);
+  });
+
+  it('saves only when the list changes', async () => {
+    const { project, a } = await aOpenWithB();
+    expect(mocks.recentSaves).toBe(0);
+    await project.refresh();
+    expect(mocks.recentSaves).toBe(0);
+
+    // A colleague renames the project.
+    a.put(PROJECT_FILE, projectFileText({ name: 'Renamed' }));
+    await project.refresh();
+    expect(project.recentProjects).toEqual([{ id: A.id, name: 'Renamed' }, B]);
+    expect(mocks.recentSaves).toBe(1);
+  });
+
+  it('takes the new name when the brief is saved', async () => {
+    const { project } = await aOpenWithB();
+    await project.saveBrief('Better name', TEST_BRIEF, project.projectStat!);
+    expect(project.recentProjects[0]).toEqual({ id: A.id, name: 'Better name' });
+    expect(mocks.recent[0]?.projectName).toBe('Better name');
+  });
+
+  it(`keeps the ${MAX_RECENT_PROJECTS} most recent`, async () => {
+    mocks.recent = Array.from({ length: MAX_RECENT_PROJECTS }, (_, i) =>
+      recentEntry(memoryFolder(`F${i}`), `id-${i}`, `P${i}`),
+    );
+    const project = await readyStore(folderA());
+    expect(project.recentProjects).toHaveLength(MAX_RECENT_PROJECTS);
+    expect(project.recentProjects[0]).toEqual(A);
+    expect(project.recentProjects.at(-1)?.id).toBe(`id-${MAX_RECENT_PROJECTS - 2}`);
+  });
+
+  it('takes the new handle when a project is opened from another folder', async () => {
+    const { project } = await aOpenWithB();
+    const moved = folderA();
+    pickNext(moved);
+    await project.openProject();
+    expect(project.recentProjects).toEqual([A, B]);
+    expect((mocks.recent[0]?.handle as unknown as { folder: MemoryFolder }).folder).toBe(moved);
+  });
+
+  it('opens a recent project: it moves to the front and is remembered', async () => {
+    const { project } = await aOpenWithB();
+    await expect(project.openRecent(B.id)).resolves.toBe(true);
+    expect(mocks.requests).toBe(1);
+    expect(project.status).toBe('ready');
+    expect(project.project?.id).toBe(B.id);
+    expect(project.sessions.map((s) => s.sessionId)).toEqual([docAt(3).id]);
+    expect(project.recentProjects).toEqual([B, A]);
+    expect(mocks.stored).toMatchObject({ projectName: 'B' });
+  });
+
+  it('keeps the open project when access to a recent one is refused', async () => {
+    const { project } = await aOpenWithB();
+    mocks.grantOnRequest = false;
+    await expect(project.openRecent(B.id)).resolves.toBe(false);
+    expect(project.notice).toBe(PROJECT_MESSAGES.accessRefused);
+    expect(project.status).toBe('ready');
+    expect(project.project?.id).toBe(A.id);
+    expect(project.sessions).toHaveLength(2);
+    expect(project.recentProjects).toEqual([A, B]);
+    expect(mocks.stored).toMatchObject({ projectName: 'Remembered' });
+  });
+
+  it('drops a recent project whose folder is gone, and keeps the open one', async () => {
+    const { project } = await aOpenWithB(folderA(), memoryFolder('Emptied'));
+    await expect(project.openRecent(B.id)).resolves.toBe(false);
+    expect(project.notice).toBe(PROJECT_MESSAGES.projectGone('B'));
+    expect(project.status).toBe('ready');
+    expect(project.project?.id).toBe(A.id);
+    expect(project.recentProjects).toEqual([A]);
+    expect(mocks.recent.map((r) => r.projectId)).toEqual([A.id]);
+  });
+
+  it('keeps a recent project it can only not read for now', async () => {
+    const b = folderB();
+    b.failOn(PROJECT_FILE, 'invalid');
+    const { project } = await aOpenWithB(folderA(), b);
+    await expect(project.openRecent(B.id)).resolves.toBe(false);
+    expect(project.notice).toBe(PROJECT_MESSAGES.projectFileInvalid);
+    expect(project.project?.id).toBe(A.id);
+    expect(project.recentProjects).toEqual([A, B]);
+  });
+
+  it('does nothing for a project that is not in the list', async () => {
+    const { project } = await aOpenWithB();
+    await expect(project.openRecent('nope')).resolves.toBe(false);
+    expect(mocks.requests).toBe(0);
+  });
+
+  it('forgets the list with the saved data', async () => {
+    const { project } = await aOpenWithB();
+    await project.forget();
+    expect(project.recentProjects).toEqual([]);
+    expect(mocks.recent).toEqual([]);
   });
 });
 

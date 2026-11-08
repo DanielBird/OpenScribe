@@ -381,10 +381,14 @@ function installFakeFolder(): void {
     },
   });
 
-  // A handle comes back from IndexedDB as a plain object (the structured clone drops methods): revive it, alone or
-  // as a property of the stored value ({ handle, projectName }).
+  // A handle comes back from IndexedDB as a plain object (the structured clone drops methods): revive it, alone, as
+  // a property of the stored value ({ handle, projectName }), or in a list of those (the recent projects).
   function revive(value: unknown): unknown {
     if (typeof value !== 'object' || value === null) return value;
+    if (Array.isArray(value)) {
+      const list = value.map(revive);
+      return list.some((item, i) => item !== value[i]) ? list : value;
+    }
     const v = value as Record<string, unknown>;
     if (v.kind === 'directory' && typeof v.__fakeRoot === 'string') {
       return new FakeDirectoryHandle(v.__fakeRoot, String(v.__fakeDir ?? ''));
