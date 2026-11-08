@@ -72,7 +72,7 @@ describe('AddToProjectDialog', () => {
   it('names the open project, and adds once the key is there', async () => {
     useSettingsStore().claudeKey = 'test-key';
     await open('ready');
-    expect(wrapper!.get('h2').text()).toBe('Add to “Hearing at home 2026”');
+    expect(wrapper!.get('h2').text()).toBe('Add to Hearing at home 2026');
     expect(wrapper!.findComponent(ApiKeyField).exists()).toBe(false);
     expect(wrapper!.get('.data-notice').text()).toBe(
       'The transcript text is sent to Anthropic to translate and summarise.',
@@ -265,7 +265,7 @@ describe('AddToProjectDialog', () => {
     it('with one project known: names it, and offers another without a dropdown', async () => {
       const { project } = await connect({ only: true });
       await show();
-      expect(wrapper!.get('h2').text()).toBe('Add to “Prosthetics”');
+      expect(wrapper!.get('h2').text()).toBe('Add to Prosthetics');
       expect(projectSelect().exists()).toBe(false);
       const openProject = vi.spyOn(project, 'openProject').mockResolvedValue(false);
       await button('Open another project…')!.trigger('click');
@@ -371,7 +371,7 @@ describe('AddToProjectDialog', () => {
       expect(wrapper!.emitted('add')).toBeUndefined();
       // One project left: its name is back in the title, and Add adds to it.
       expect(projectSelect().exists()).toBe(false);
-      expect(wrapper!.get('h2').text()).toBe('Add to “Prosthetics”');
+      expect(wrapper!.get('h2').text()).toBe('Add to Prosthetics');
       await add().trigger('click');
       await flushPromises();
       expect(wrapper!.emitted('add')).toHaveLength(1);
@@ -449,7 +449,7 @@ describe('AddToProjectDialog', () => {
       await connect({ inA: [doc] });
       await show(doc);
       expect(useTranscriptStore().projectLink?.projectId).toBe(A.id);
-      expect(wrapper!.get('h2').text()).toBe('Add to “Prosthetics”');
+      expect(wrapper!.get('h2').text()).toBe('Add to Prosthetics');
       expect(projectSelect().exists()).toBe(false);
       expect(button('Open another project…')).toBeUndefined();
     });
@@ -460,7 +460,7 @@ describe('AddToProjectDialog', () => {
       await useTranscriptStore().setDoc(makeDoc());
       await usePipelineStore().addCurrentTranscript();
       await show();
-      expect(wrapper!.get('h2').text()).toBe('Add to “Prosthetics”');
+      expect(wrapper!.get('h2').text()).toBe('Add to Prosthetics');
       expect(projectSelect().exists()).toBe(false);
       expect(button('New project…')).toBeUndefined();
     });

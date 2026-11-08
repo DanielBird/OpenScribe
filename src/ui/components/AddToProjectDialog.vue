@@ -58,7 +58,7 @@ const canAdd = computed(() => {
 
 const title = computed(() =>
   !showSelect.value && ready.value && project.projectName
-    ? `Add to “${project.projectName}”`
+    ? `Add to ${project.projectName}`
     : 'Add to project',
 );
 const translates = computed(() => (transcript.doc ? needsTranslation(transcript.doc) : false));

@@ -79,7 +79,7 @@ test('Add to project on a new transcript: saved, translated, summarised, and its
   await brief.getByRole('button', { name: 'Save' }).click();
   // The dialog below is titled for the project already; its key field is usable once the Brief has closed.
   await expect(brief).toBeHidden();
-  const ready = page.getByRole('dialog', { name: `Add to “${ROOT}”` });
+  const ready = page.getByRole('dialog', { name: `Add to ${ROOT}` });
   await expect(ready).toBeVisible();
   await expect(ready).toContainText(
     'The transcript text is sent to Anthropic to translate and summarise.',
@@ -161,7 +161,7 @@ test('after Add to project, Open summary shows the new summary in Analyse mode, 
     .getByRole('dialog', { name: 'Add to project' })
     .getByRole('button', { name: 'Open project…' })
     .click();
-  const ready = page.getByRole('dialog', { name: /^Add to “/ });
+  const ready = page.getByRole('dialog', { name: /^Add to Hearing at home/ });
   await ready.getByLabel('Claude (Anthropic) API key').fill('test-key');
   await ready.getByRole('button', { name: 'Add', exact: true }).click();
 
@@ -188,7 +188,7 @@ test('a session whose files are deleted from the folder can be added to the proj
     .getByRole('dialog', { name: 'Add to project' })
     .getByRole('button', { name: 'Open project…' })
     .click();
-  const ready = page.getByRole('dialog', { name: /^Add to “/ });
+  const ready = page.getByRole('dialog', { name: /^Add to Hearing at home/ });
   await ready.getByLabel('Claude (Anthropic) API key').fill('test-key');
   await ready.getByRole('button', { name: 'Add', exact: true }).click();
   await expect(page.locator('.status-line')).toHaveCount(0);
@@ -207,7 +207,7 @@ test('a session whose files are deleted from the folder can be added to the proj
 
   await page.getByRole('button', { name: 'Add to project…' }).click();
   await page
-    .getByRole('dialog', { name: /^Add to “/ })
+    .getByRole('dialog', { name: /^Add to Hearing at home/ })
     .getByRole('button', { name: 'Add', exact: true })
     .click();
   await expect(page.getByRole('button', { name: 'Add to project…' })).toHaveCount(0);
@@ -229,7 +229,7 @@ test('Add to project can switch to a Gemini model in its dialog, which asks for 
     .getByRole('dialog', { name: 'Add to project' })
     .getByRole('button', { name: 'Open project…' })
     .click();
-  const ready = page.getByRole('dialog', { name: /^Add to “/ });
+  const ready = page.getByRole('dialog', { name: /^Add to Hearing at home/ });
   await expect(ready.getByLabel('Model')).toHaveValue('claude-sonnet-5-5');
   await ready.getByLabel('Model').selectOption({ label: 'Gemini 3.8 Flash' });
   await expect(ready).toContainText(
@@ -497,7 +497,7 @@ async function twoProjects(page: Page) {
   await transcribe(page);
   await page.getByRole('button', { name: 'Add to project…' }).click();
   await addDialog(page).getByRole('button', { name: 'Open project…' }).click();
-  const first = page.getByRole('dialog', { name: `Add to “${FIRST_NAME}”` });
+  const first = page.getByRole('dialog', { name: `Add to ${FIRST_NAME}` });
   await expect(first).toBeVisible();
   await folder.pickNext(OTHER);
   await first.getByRole('button', { name: 'Open another project…' }).click();
@@ -576,7 +576,7 @@ test('a recent project whose folder is gone leaves the list, and the open projec
   await confirmAdd(page).click();
 
   await expect(page.getByRole('alert')).toContainText(`can't find “${FIRST_NAME}”`);
-  const left = page.getByRole('dialog', { name: `Add to “${OTHER_PROJECT.name}”` });
+  const left = page.getByRole('dialog', { name: `Add to ${OTHER_PROJECT.name}` });
   await expect(left).toBeVisible();
   await expect(left.getByLabel('Project', { exact: true })).toHaveCount(0);
   await expect(page.locator('.status-line')).toHaveCount(0);
