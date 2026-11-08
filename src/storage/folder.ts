@@ -276,3 +276,53 @@ export async function forgetFolderHandle(): Promise<void> {
     // Nothing to do: storage is unavailable.
   }
 }
+
+// --- Recent projects (D49) -----------------------------------------------------------------------------
+
+/** A project folder opened on this computer. The list is stored most recent first. */
+export interface RecentFolder {
+  handle: FileSystemDirectoryHandle;
+  projectId: string;
+  projectName: string;
+}
+
+/** In the `describe-v1` database, beside the remembered folder, which older builds still read. */
+const RECENT_KEY = `${STORAGE_PREFIX}recentProjects`;
+
+function isRecentFolder(value: unknown): value is RecentFolder {
+  if (typeof value !== 'object' || value === null) return false;
+  const { handle, projectId, projectName } = value as Record<string, unknown>;
+  return (
+    isDirectoryHandle(handle) && typeof projectId === 'string' && typeof projectName === 'string'
+  );
+}
+
+export async function saveRecentFolders(folders: readonly RecentFolder[]): Promise<void> {
+  try {
+    const store = keyvalStore();
+    if (store) await set(RECENT_KEY, folders, store);
+  } catch {
+    // Not remembered: the list starts again from the next project opened.
+  }
+}
+
+/** The recent projects, leaving out any entry that isn't one. */
+export async function loadRecentFolders(): Promise<RecentFolder[]> {
+  try {
+    const store = keyvalStore();
+    if (!store) return [];
+    const value: unknown = await get(RECENT_KEY, store);
+    return Array.isArray(value) ? value.filter(isRecentFolder) : [];
+  } catch {
+    return [];
+  }
+}
+
+export async function forgetRecentFolders(): Promise<void> {
+  try {
+    const store = keyvalStore();
+    if (store) await del(RECENT_KEY, store);
+  } catch {
+    // Nothing to do: storage is unavailable.
+  }
+}

@@ -108,8 +108,15 @@ async function focusFirstButton(): Promise<void> {
   root.value?.querySelector<HTMLButtonElement>('.connect button')?.focus();
 }
 
+/** The recent projects **Change** offers (D49): the first in the list is the one open. */
+const otherProjects = computed(() => (ui.choosing ? project.recentProjects.slice(1) : []));
+
 async function open(): Promise<void> {
   if (await project.openProject()) ui.choosing = false;
+}
+
+async function openRecent(id: string): Promise<void> {
+  if (await project.openRecent(id)) ui.choosing = false;
 }
 
 async function create(): Promise<void> {
@@ -158,6 +165,17 @@ onMounted(() => {
     </p>
 
     <div v-else-if="showChooser" class="connect">
+      <div v-if="otherProjects.length > 0" class="recent" role="group" aria-label="Recent projects">
+        <button
+          v-for="p in otherProjects"
+          :key="p.id"
+          type="button"
+          class="button"
+          @click="openRecent(p.id)"
+        >
+          {{ p.name }}
+        </button>
+      </div>
       <div class="actions">
         <button type="button" class="button button-primary" @click="open">Open project…</button>
         <button type="button" class="button" @click="create">New project…</button>
@@ -295,6 +313,13 @@ onMounted(() => {
 
 .actions > .button {
   justify-content: center;
+}
+
+/* One project per row, the width of the chooser. */
+.recent {
+  display: grid;
+  gap: var(--space-2);
+  justify-self: stretch;
 }
 
 .notice {

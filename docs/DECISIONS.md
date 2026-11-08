@@ -885,3 +885,23 @@ summarise them.
     (D47). A High reading level would otherwise pass 600k within a single question and set it off every time.
   - High with High can come near the 1M context window. Claude then ends with "Stopped at a limit"; Gemini may return
     an error. Live check A3 covers it; lowering High reading to 30 h is one line in `READING_LEVELS`.
+
+### D49 — Recent projects: Add to project chooses where, and Change lists them (2026-11-08; Phase 31)
+- **Decision** (maintainer): DeScribe remembers the last 10 project folders on each computer, most recent first. Once
+  two are known, the Add to project dialog offers them in a **Project** dropdown, with **Open another project…** and
+  **New project…** beside it. **Change** in Analyse lists the ones that aren't open as buttons.
+- **Why:** with a project connected, the dialog only named it, so a transcript couldn't go anywhere else. A folder
+  picker alone would mean browsing to the folder every time.
+- **Consequences:**
+  - One project is still open at a time: autosave, **Open summary**, the theme list and the pipeline all work through
+    it. Adding to another project makes that the one open in Analyse.
+  - Choosing in the dropdown changes nothing until **Add**, so **Cancel** really cancels. **Add** is also the click the
+    browser needs to ask for access (T14), which a dropdown's `change` event can't be relied on for.
+  - If access is refused or the folder can't be read, the open project stays. A folder that's gone leaves the list.
+  - The dropdown and both buttons are disabled while the pipeline or a chat is running, because changing project
+    cancels that work and neither is on screen on Output. **Change** isn't, as it's in the same view as the work.
+  - Projects are told apart by the id in `describe-project.json`, as the text cache does, so a folder that moved
+    replaces its old entry when it's opened again.
+  - `describe.v1.recentProjects` is a new key with a default, not a change of shape, so D18 doesn't apply. The
+    remembered folder stays under `describe.v1.projectFolder`, which older builds still read. **Clear saved data**
+    clears both.

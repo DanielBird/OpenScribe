@@ -5,6 +5,9 @@ import {
   FolderError,
   folderPermission,
   forgetFolderHandle,
+  forgetRecentFolders,
+  loadRecentFolders,
+  saveRecentFolders,
   isFolderAccessSupported,
   loadFolderHandle,
   openFolder,
@@ -354,6 +357,61 @@ describe('the remembered folder', () => {
     await folder.saveFolderHandle(asHandle(new FakeDirectoryHandle('x')), 'x');
     await expect(folder.loadFolderHandle()).resolves.toBeNull();
     await expect(folder.forgetFolderHandle()).resolves.toBeUndefined();
+    vi.resetModules();
+  });
+});
+
+describe('the recent projects', () => {
+  const entry = (name: string) => ({
+    handle: asHandle(new FakeDirectoryHandle(name)),
+    projectId: `id-${name}`,
+    projectName: `Project ${name}`,
+  });
+
+  afterEach(async () => {
+    await forgetRecentFolders();
+  });
+
+  it('keeps the list in order, and forgets it', async () => {
+    await expect(loadRecentFolders()).resolves.toEqual([]);
+    await saveRecentFolders([entry('B'), entry('A')]);
+    const loaded = await loadRecentFolders();
+    expect(loaded.map((r) => r.projectId)).toEqual(['id-B', 'id-A']);
+    expect(loaded[0]).toMatchObject({
+      projectName: 'Project B',
+      handle: { kind: 'directory', name: 'B' },
+    });
+    await forgetRecentFolders();
+    await expect(loadRecentFolders()).resolves.toEqual([]);
+  });
+
+  it('leaves out entries of the wrong shape, and ignores anything but a list', async () => {
+    const { createStore, set } = await import('idb-keyval');
+    const store = createStore('describe-v1', 'keyval');
+    const good = { handle: { kind: 'directory', name: 'A' }, projectId: 'a', projectName: 'A' };
+    await set(
+      'describe.v1.recentProjects',
+      [
+        'x',
+        good,
+        { ...good, handle: { kind: 'file', name: 'f' } },
+        { ...good, projectId: 1 },
+        { handle: good.handle, projectId: 'b' },
+      ],
+      store,
+    );
+    expect((await loadRecentFolders()).map((r) => r.projectId)).toEqual(['a']);
+    await set('describe.v1.recentProjects', { not: 'a list' }, store);
+    await expect(loadRecentFolders()).resolves.toEqual([]);
+  });
+
+  it('works quietly without IndexedDB', async () => {
+    vi.resetModules();
+    vi.stubGlobal('indexedDB', undefined);
+    const folder = await import('./folder');
+    await folder.saveRecentFolders([entry('x')]);
+    await expect(folder.loadRecentFolders()).resolves.toEqual([]);
+    await expect(folder.forgetRecentFolders()).resolves.toBeUndefined();
     vi.resetModules();
   });
 });

@@ -82,9 +82,9 @@ src/
     playback.ts                 audio object URL, attach + source match, current time, active turn, follow
     export.ts                   builds the .docx (busy + error state) and starts the download
     savedData.ts                "Clear saved data" (About): glossary, prefs, last transcript, project folder + text cache
-    project.ts                  project folder: connect / reconnect, project file + brief, sessions (cached text) and
-                                their summaries, the saved chats, rescan on focus, keyword search, Copy text, the
-                                session-file and chat-file writes
+    project.ts                  project folder: connect / reconnect, the recent projects (D49), project file + brief,
+                                sessions (cached text) and their summaries, the saved chats, rescan on focus, keyword
+                                search, Copy text, the session-file and chat-file writes
     pipeline.ts                 Add to project / Summarise / Regenerate: a queue of save → translate → summarise,
                                 Resume, Cancel, the statuses it adds (queued, running, failed)
     chat.ts                     the project chat: the conversation, its frozen snapshot, streaming (parsed once a
@@ -139,7 +139,7 @@ src/
     idb.ts                      last transcript autosave and its project link (idb-keyval), the `describe-v1` store
     schemas.ts                  TranscriptDocSchema, SessionTextSchema
     folder.ts                   File System Access (the only code that calls it): ProjectFolder, FolderError,
-                                picker, permission, the remembered handle (+ fileSystemAccess.d.ts)
+                                picker, permission, the remembered handle and the recent ones (+ fileSystemAccess.d.ts)
     projectFiles.ts             describe-project.json and sessions/*.transcript.json: schemas, read, write, list
     corpusCache.ts              SessionText cache per file (IndexedDB `describe-v1-corpus`)
     chatFiles.ts                chats/*.chat.json: schema, list, read, write with the change check
@@ -338,6 +338,7 @@ MVP = Phases 0–5. Each phase is sized for one agent session (or a few) and end
 | 28 | [The agent sees its budget left](phases/28-budget-left.md) | 16, 20 | 23, 25 | ☑ Done (live checks A1–A3 open) |
 | 29 | [Follow-up questions start from the text](phases/29-follow-ups-from-text.md) | 17, 21, 22 | 23, 25 | ☑ Done (live checks A2, H1 and H2 open) |
 | 30 | [Chat settings: effort, tool calls and reading](phases/30-chat-settings.md) | 16, 20, 28, 29 | 23, 25 | ☑ Done (live check A3 open) |
+| 31 | [Choose the project in Add to project](phases/31-choose-project.md) | 14, 15 | 23, 25 | ☑ Done (manual row 22 open) |
 
 Status values: ☐ Not started · ◐ In progress · ☑ Done.
 

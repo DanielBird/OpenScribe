@@ -303,6 +303,41 @@ test('Project in a browser without folder access', async ({ page }, testInfo) =>
   await expectAccessible(page, testInfo, 'Project, unsupported');
 });
 
+test('the Project dropdown in Add to project, and the recent projects under Change', async ({
+  page,
+}, testInfo) => {
+  const folder = await useProjectFolder(
+    page,
+    {
+      'Hearing at home': projectFiles([]),
+      'Field study': projectFiles([], {
+        id: '99999999-0000-4000-8000-000000000000',
+        name: 'Field study Lyon',
+      }),
+    },
+    { pick: 'Hearing at home' },
+  );
+  await transcribe(page);
+
+  await page.getByRole('button', { name: 'Add to project…' }).click();
+  await page.getByRole('button', { name: 'Open project…' }).click();
+  const one = page.getByRole('dialog', { name: 'Add to “Hearing at home 2026”' });
+  await expect(one).toBeVisible();
+  await expectAccessible(page, testInfo, 'Add to project, one project known');
+  await folder.pickNext('Field study');
+  await one.getByRole('button', { name: 'Open another project…' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Add to project' });
+  await expect(dialog.getByLabel('Project', { exact: true })).toBeVisible();
+  await expectAccessible(page, testInfo, 'Add to project, Project dropdown');
+  await dialog.getByRole('button', { name: 'Cancel' }).click();
+
+  await clickInHeader(page, 'Home');
+  await page.getByRole('button', { name: /^Analyse/ }).click();
+  await page.getByRole('button', { name: 'Change' }).click();
+  await expect(page.getByRole('group', { name: 'Recent projects' })).toBeVisible();
+  await expectAccessible(page, testInfo, 'Project, Change with recent projects');
+});
+
 test('Add to project, its progress and error, the folder notice, and a summary', async ({
   page,
   consoleErrors,

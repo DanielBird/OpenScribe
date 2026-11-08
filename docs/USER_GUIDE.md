@@ -141,6 +141,8 @@ and search them together.
 - **Open project…**: choose the project folder, the one with `describe-project.json` in it.
 - **New project…**: choose an empty folder. To share the project, put the folder in your OneDrive (or a SharePoint
   library you sync). DeScribe writes `describe-project.json` there and opens the **Brief**.
+- **Change**, at the top once a project is open: lists the other projects you've used on this computer, so one click
+  opens any of them.
 - The browser doesn't let you choose Documents, Desktop or Downloads themselves. Use a folder inside them.
 
 **Reconnect.** DeScribe remembers the project, and Home shows its name. Each time you start the browser again,
@@ -183,9 +185,10 @@ the recording's name. **Esc** clears the box.
 ### Add a session to a project
 
 On the Output step, click **Add to project…**. The dialog names the project, or lets you open, create or reconnect
-one, shows the project's **Model** (change it there if you like), and asks for that model's key (Claude or Gemini) if
-it's missing. Click **Add**. DeScribe then,
-in the actions row:
+one. Once you've used more than one project on this computer, a **Project** list offers the last ten: choose one, and
+**Add** opens it and adds the transcript there. That project is then the one open in Analyse. The dialog also shows
+the project's **Model** (change it there if you like), and asks for that model's key (Claude or Gemini) if it's
+missing. Click **Add**. DeScribe then, in the actions row:
 1. saves the transcript in the project folder (the recording itself stays on your computer);
 2. translates it to English with the project's model, if it's in another language and has no English yet, or only
    the turns changed since it was translated;

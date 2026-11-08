@@ -1,4 +1,5 @@
 import type { Page } from '@playwright/test';
+import { PROJECT_FILE } from '../../src/domain/sessionFiles';
 import type { SessionSummaryFile } from '../../src/domain/summary';
 import type { TranscriptDoc } from '../../src/domain/transcript';
 import {
@@ -469,4 +470,142 @@ test("before Reconnect, Clear saved data and Run warn that the change isn't in t
   await clickInHeader(page, 'Output');
   await expect(page.getByLabel('Name for Speaker 1')).toHaveValue('Interviewer');
   await expect(page.getByText('DeScribe no longer has access')).toBeVisible();
+});
+
+// Phase 31 (D49): choosing the project in Add to project, and the recent projects under Change.
+
+const FIRST_NAME = 'Hearing at home 2026';
+const OTHER = 'Field study';
+const OTHER_PROJECT = { id: '99999999-0000-4000-8000-000000000000', name: 'Field study Lyon' };
+
+const addDialog = (page: Page) => page.getByRole('dialog', { name: 'Add to project' });
+const projectSelect = (page: Page) => addDialog(page).getByLabel('Project', { exact: true });
+const confirmAdd = (page: Page) =>
+  addDialog(page).getByRole('button', { name: 'Add', exact: true });
+
+/** Transcribes, then opens both folders from the dialog, which stays open on `Field study Lyon`, the second opened. */
+async function twoProjects(page: Page) {
+  await page.addInitScript(() =>
+    sessionStorage.setItem('describe.v1.key.claude', JSON.stringify('test-key')),
+  );
+  const folder = await useProjectFolder(
+    page,
+    { [ROOT]: projectFiles([]), [OTHER]: projectFiles([], OTHER_PROJECT) },
+    { pick: ROOT },
+  );
+  await mockAnthropic(page, projectAnswer);
+  await transcribe(page);
+  await page.getByRole('button', { name: 'Add to project…' }).click();
+  await addDialog(page).getByRole('button', { name: 'Open project…' }).click();
+  const first = page.getByRole('dialog', { name: `Add to “${FIRST_NAME}”` });
+  await expect(first).toBeVisible();
+  await folder.pickNext(OTHER);
+  await first.getByRole('button', { name: 'Open another project…' }).click();
+  await expect(projectSelect(page)).toBeVisible();
+  return folder;
+}
+
+test('Add to project sends the transcript to the project chosen in the dropdown', async ({
+  page,
+}) => {
+  const folder = await twoProjects(page);
+  await expect(projectSelect(page).getByRole('option')).toHaveText([
+    OTHER_PROJECT.name,
+    FIRST_NAME,
+  ]);
+  await expect(projectSelect(page)).toHaveValue(OTHER_PROJECT.id);
+
+  await projectSelect(page).selectOption({ label: FIRST_NAME });
+  await confirmAdd(page).click();
+
+  await expect(page.getByText(`In ${FIRST_NAME}`)).toBeVisible();
+  await expect(page.locator('.status-line')).toHaveCount(0);
+  expect(sessionsDir(folder.files(ROOT), '.transcript.json')).toHaveLength(1);
+  expect(sessionsDir(folder.files(ROOT), '.summary.json')).toHaveLength(1);
+  expect(sessionsDir(folder.files(OTHER), '.json')).toEqual([]);
+
+  // It's the project open in Analyse now, so Open summary finds it there.
+  await page.getByRole('button', { name: 'Open summary' }).click();
+  await expect(page.locator('.themes .quote-card').first()).toBeVisible();
+  await expect(sessions(page)).toHaveCount(1);
+});
+
+test('after a reload, Add asks for access to the chosen project; Cancel leaves the open one', async ({
+  page,
+}) => {
+  const folder = await twoProjects(page);
+  await addDialog(page).getByRole('button', { name: 'Cancel' }).click();
+
+  // A new browser session: access has to be asked for again (file://).
+  await folder.setPermission('prompt');
+  await page.reload();
+  await openHome(page);
+  await page.getByRole('button', { name: 'Transcribe' }).click();
+  await page.getByRole('button', { name: 'Open', exact: true }).click();
+  await page.getByRole('button', { name: 'Add to project…' }).click();
+
+  await expect(
+    addDialog(page).getByRole('button', { name: `Reconnect “${OTHER_PROJECT.name}”` }),
+  ).toBeVisible();
+  await expect(confirmAdd(page)).toBeDisabled();
+
+  // Choosing asks for nothing, and Cancel undoes it.
+  await projectSelect(page).selectOption({ label: FIRST_NAME });
+  await expect(addDialog(page).getByRole('button', { name: /^Reconnect/ })).toHaveCount(0);
+  await expect(confirmAdd(page)).toBeEnabled();
+  await addDialog(page).getByRole('button', { name: 'Cancel' }).click();
+  await page.getByRole('button', { name: 'Add to project…' }).click();
+  await expect(projectSelect(page)).toHaveValue(OTHER_PROJECT.id);
+
+  // Add asks for access, opens the project, and goes on to add to it.
+  await projectSelect(page).selectOption({ label: FIRST_NAME });
+  await confirmAdd(page).click();
+  await expect(page.getByText(`In ${FIRST_NAME}`)).toBeVisible();
+  await expect(page.locator('.status-line')).toHaveCount(0);
+  expect(sessionsDir(folder.files(ROOT), '.transcript.json')).toHaveLength(1);
+  expect(sessionsDir(folder.files(OTHER), '.json')).toEqual([]);
+});
+
+test('a recent project whose folder is gone leaves the list, and the open project stays', async ({
+  page,
+}) => {
+  const folder = await twoProjects(page);
+  await folder.remove(ROOT, PROJECT_FILE);
+
+  await projectSelect(page).selectOption({ label: FIRST_NAME });
+  await confirmAdd(page).click();
+
+  await expect(page.getByRole('alert')).toContainText(`can't find “${FIRST_NAME}”`);
+  const left = page.getByRole('dialog', { name: `Add to “${OTHER_PROJECT.name}”` });
+  await expect(left).toBeVisible();
+  await expect(left.getByLabel('Project', { exact: true })).toHaveCount(0);
+  await expect(page.locator('.status-line')).toHaveCount(0);
+});
+
+test('Change in Analyse lists the recent projects, and one click switches', async ({ page }) => {
+  const folder = await useProjectFolder(
+    page,
+    {
+      [ROOT]: projectFiles([germanSession(1)]),
+      [OTHER]: projectFiles([germanSession(2)], OTHER_PROJECT),
+    },
+    { pick: ROOT },
+  );
+  await openProject(page);
+  await expect(sessions(page).first()).toContainText('P01 Hamburg');
+
+  // With one project known, Change has nothing to list.
+  await page.getByRole('button', { name: 'Change' }).click();
+  const recent = page.getByRole('group', { name: 'Recent projects' });
+  await expect(recent).toHaveCount(0);
+  await folder.pickNext(OTHER);
+  await page.getByRole('button', { name: 'Open project…' }).click();
+  await expect(sessions(page).first()).toContainText('P02 Hamburg');
+
+  await page.getByRole('button', { name: 'Change' }).click();
+  await expect(recent.getByRole('button')).toHaveText([FIRST_NAME]);
+  await recent.getByRole('button', { name: FIRST_NAME }).click();
+  await expect(recent).toHaveCount(0);
+  await expect(sessions(page).first()).toContainText('P01 Hamburg');
+  await expect(sessions(page)).toHaveCount(1);
 });
