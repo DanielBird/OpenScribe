@@ -24,13 +24,12 @@ describe('ProjectHeader', () => {
     expect(wrapper.findAll('button').map((b) => b.text())).toEqual(['Brief', 'Change']);
     const select = wrapper.get('select');
     expect(wrapper.get(`label[for="${select.attributes('id')}"]`).text()).toBe('Model');
-    expect(
-      select
-        .findAll('optgroup')
-        .map((g) => [g.attributes('label'), g.findAll('option').map((o) => o.text())]),
-    ).toEqual([
-      ['Claude', ['Sonnet 5.5', 'Opus 5.5']],
-      ['Gemini', ['Gemini 3.8 Flash', 'Gemini 4 Argon']],
+    expect(select.find('optgroup').exists()).toBe(false);
+    expect(select.findAll('option').map((o) => o.text())).toEqual([
+      'Sonnet 5.5',
+      'Opus 5.5',
+      'Gemini 3.8 Flash',
+      'Gemini 4 Argon',
     ]);
   });
 

@@ -95,19 +95,18 @@ describe('AddToProjectDialog', () => {
     expect(add().attributes('disabled')).toBeUndefined();
   });
 
-  it('shows the project model, grouped by provider, as the Analyse header does', async () => {
+  it('shows the project model, as the Analyse header does', async () => {
     useSettingsStore().claudeKey = 'test-key';
     await open('ready');
     const select = wrapper!.get<HTMLSelectElement>('select');
     expect(wrapper!.get(`label[for="${select.attributes('id')}"]`).text()).toBe('Model');
     expect(select.element.value).toBe('claude-sonnet-5-5');
-    expect(
-      select
-        .findAll('optgroup')
-        .map((g) => [g.attributes('label'), g.findAll('option').map((o) => o.text())]),
-    ).toEqual([
-      ['Claude', ['Sonnet 5.5', 'Opus 5.5']],
-      ['Gemini', ['Gemini 3.8 Flash', 'Gemini 4 Argon']],
+    expect(select.find('optgroup').exists()).toBe(false);
+    expect(select.findAll('option').map((o) => o.text())).toEqual([
+      'Sonnet 5.5',
+      'Opus 5.5',
+      'Gemini 3.8 Flash',
+      'Gemini 4 Argon',
     ]);
   });
 
