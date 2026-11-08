@@ -45,14 +45,14 @@ watch(
 
 // --- The sidebar's tabs: Sessions and Chats (D29) ------------------------------------------------
 
-const tabs = computed(() => [
-  { id: 'sessions' as const, label: 'Sessions', count: project.sessions.length },
-  { id: 'chats' as const, label: 'Chats', count: project.chats.length },
-]);
+const tabs = [
+  { id: 'sessions' as const, label: 'Sessions' },
+  { id: 'chats' as const, label: 'Chats' },
+];
 
 /** The arrow keys, Home and End move between the tabs and show the one they reach. */
 async function onTabKeydown(event: KeyboardEvent, index: number): Promise<void> {
-  const last = tabs.value.length - 1;
+  const last = tabs.length - 1;
   const next =
     event.key === 'ArrowRight'
       ? (index + 1) % (last + 1)
@@ -63,7 +63,7 @@ async function onTabKeydown(event: KeyboardEvent, index: number): Promise<void> 
           : event.key === 'End'
             ? last
             : null;
-  const tab = next === null ? undefined : tabs.value[next];
+  const tab = next === null ? undefined : tabs[next];
   if (!tab) return;
   event.preventDefault();
   ui.sidebarTab = tab.id;
@@ -218,7 +218,7 @@ onMounted(() => {
             @click="ui.sidebarTab = tab.id"
             @keydown="onTabKeydown($event, index)"
           >
-            {{ tab.label }} <span class="count">{{ tab.count }}</span>
+            {{ tab.label }}
           </button>
         </div>
         <!-- Both stay mounted, so the lists' places survive a change of tab. -->
@@ -278,6 +278,7 @@ onMounted(() => {
   padding: var(--space-6);
   border-radius: var(--radius-md);
   background: var(--color-surface);
+  --color-button: var(--color-bg);
 }
 
 .connect > p {
@@ -376,6 +377,7 @@ onMounted(() => {
   padding: var(--space-2);
   border-radius: var(--radius-md);
   background: var(--color-surface);
+  --color-button: var(--color-bg);
 }
 
 .tab-panel {
@@ -394,9 +396,7 @@ onMounted(() => {
 
 .tab {
   display: flex;
-  align-items: baseline;
   justify-content: center;
-  gap: var(--space-1);
   padding: 0.3125rem var(--space-2);
   border: 0;
   border-radius: calc(var(--radius-md) - 3px);
@@ -425,12 +425,6 @@ onMounted(() => {
 
 .tab:focus-visible {
   outline-offset: 1px;
-}
-
-.count {
-  color: var(--color-text-muted);
-  font-weight: 400;
-  font-variant-numeric: tabular-nums;
 }
 
 @media (prefers-reduced-motion: reduce) {

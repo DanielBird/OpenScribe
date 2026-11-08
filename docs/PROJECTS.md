@@ -36,7 +36,7 @@ session is useful as soon as it has been added.
 | A15 | People are named **by their speaker labels**. There is no automatic pseudonymisation. | The team's own data rules apply. The prompt tells the agent to use the labels. |
 | A16 | Researchers get their **own keyword search box** in Project mode, using the agent's search engine. | An exact search across all transcripts, with **Copy** on each hit. It also lets researchers check what the agent found. |
 | A17 | **Claude Sonnet 5.5 is the default** for project work, with **Opus 5.5 as the option**. The choice is saved on each computer. *From Phase 19 (D26), Gemini models are options too.* | One select in Project mode, used for the pipeline's translation, for summaries and for chat. A change takes effect on the next chat. The Translate dialog keeps its own choice (T7). |
-| A18 | **Caps per question:** 250k tokens of transcript text and 30 tool calls. *Changed 2026-11-07 (D45): summaries have their own budget, about 30 per question.* | Kept in one file (§5.5) and tuned after the live checks. |
+| A18 | **Caps per question:** 250k tokens of transcript text and 30 tool calls. *Changed 2026-11-07 (D45): summaries have their own budget, about 30 per question. Changed 2026-11-08 (D48): these are the Medium level of what the user sets.* | Kept in one file (§5.5) and tuned after the live checks. |
 
 ## 3. Scale
 
@@ -349,7 +349,8 @@ All the tools only read. None of them can write files or reach the network. Tran
 but a prompt injection hidden in a transcript can at worst mislead an answer, and the quote check limits even
 that.
 
-**Caps,** kept in one place (`features/agent/limits.ts`):
+**Caps,** kept in one place (`features/agent/limits.ts`). These are the Medium level; the Analyse header sets the tool
+calls and the reading to half or double (D48):
 - **Transcript text per question:** 250k tokens, about 20 hours. After that, `read_transcript` replies "Reading
   budget reached. Answer from what you have."
 - **Summary text per question** (D45): 75k tokens, about 30 summaries. After that, `get_summaries` says the budget
@@ -359,7 +360,7 @@ that.
   instead of being cut off part-way.
 
 Two notices cover the rest:
-- Once a chat passes about 600k tokens: "This chat is long. Type /compact to summarise it, or start a new chat."
+- Once a question starts with a chat of about 600k tokens: "This chat is long. Type /compact to summarise it, or start a new chat."
   `/compact` has the agent summarise the chat and go on from the summary (Phase 22, D33).
 - When sessions are added during a chat: "3 new sessions since this chat started.", with a **New chat** button.
   Changing the frozen context would invalidate the cache.
@@ -405,7 +406,7 @@ DeScribe                                                    Hearing at home 2026
 
 - **Sessions list:** each session shows its title (the file name until it's summarised), its language and its
   status. The statuses are: summarised ✓, summarising ◐, out of date ⟳, failed, and no summary.
-- **Sidebar tabs** (Phase 21, D29): **Sessions N** and **Chats N** above the list. The Chats tab lists the saved chats,
+- **Sidebar tabs** (Phase 21, D29): **Sessions** and **Chats** above the list. The Chats tab lists the saved chats,
   the last one added to first, each with its title, "You" or the colleague's name, and the time. Selecting one opens
   it in the chat pane; the pane opens on a new chat.
 - **Search** in the chat pane (A16, D30): **Chat | Search** under the question box switches the pane to the search box,

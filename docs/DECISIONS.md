@@ -212,14 +212,19 @@ is slower, but our payloads (one transcript, a few translation batches) are smal
   - Fields a reader doesn't know: D38.
   - The project folder's files, since 1.1.0: D40.
 
-### T10 — The `braces` npm-audit advisory is accepted
-`npm audit` reports 5 high-severity advisories for `braces` (GHSA-vfj7-8cjw-p6xm, a denial of service through
-deeply nested patterns), via `micromatch`/`fast-glob` in `vite-plugin-singlefile` and
-`@vue/eslint-config-typescript`.
-- **Accepted** (checked 2026-10-14): these are build-time dev dependencies that only ever see the project's own
-  globs, and nothing from them ships in the HTML.
-- There is no fixed `braces` version. npm's only fix downgrades `vite-plugin-singlefile` to 0.9, a breaking change.
-- Check again when either package updates.
+### T10 — The dev-only npm-audit advisories are accepted
+`npm audit` reports 15 moderate findings from two advisories, reached through ESLint, typescript-eslint and
+`@vue/test-utils`. `npm audit --omit=dev` is clean.
+- **Accepted** (checked 2026-11-08): neither is reachable here, and nothing from them ships.
+  - `minimatch` below 11.0.1 (GHSA-g3hv-75wg-m249, a denial of service through crafted patterns): ESLint only ever
+    sees the project's own globs.
+  - `glob` 9.0.0 to 14.0.1 (GHSA-3g3m-2fjr-6pw4, a cancelled walk keeps running): only js-beautify's command-line
+    tool imports it, and `@vue/test-utils` uses js-beautify as a library.
+- npm's only fix is a set of downgrades, such as ESLint 10 to 9.39.5 and `@vue/test-utils` to 2.4.11. The latest
+  ESLint still requires `minimatch` 10, and the latest js-beautify requires `glob` 13.
+- Check again when either package updates. Once they accept `minimatch` 11 and `glob` 14, `npm update` should clear
+  these.
+- The `braces` advisory (GHSA-vfj7-8cjw-p6xm) accepted here on 2026-10-14 is no longer reported.
 
 ### D19 — Turn text is editable
 - **Decision** (agreed with the product owner, 2026-10-14): an **Edit text** button on the Output tab turns each
@@ -850,3 +855,33 @@ summarise them.
   - The long-chat notice and `/compact` stay, for chats with many questions. Live check A2 measures the cost.
   - Not in this decision: changing model between questions, which the text history would now allow but which would
     lose the cache.
+
+### D48 — The chat's effort and budgets are the user's to set (2026-11-08; Phase 30)
+- **Decision** (maintainer): a button beside the model in the Analyse header opens a panel with **Effort**, **Tool
+  calls** and **Reading**, three levels each. Medium is what was fixed before (T9, T15, A18, D45):
+
+  | | Low | Medium | High |
+  |---|---|---|---|
+  | Effort (Claude `output_config.effort`, Gemini `thinkingLevel`) | low | medium | high |
+  | Tool calls per question | 15 | 30 | 60 |
+  | Reading per question | 10 h (162.5k tokens) | 20 h (325k) | 40 h (650k) |
+
+  Reading is one amount: summaries are always 3 parts in 13 of it, the rest transcripts, so 75k beside 250k at Medium.
+  The replies backstop is the tool calls plus 5. Saved on this computer with the other preferences
+  (`describe.v1.prefs`), per browser, not per project.
+- **Why:** a quick check and a thorough search want different things, and the person asking pays for it. How reading
+  divides between summaries and transcripts is a detail of how the agent works, so it isn't a choice.
+- **Consequences:**
+  - Only the chat and `/compact` use these. Translation and summaries keep `CLAUDE_EFFORT` and `GEMINI_THINKING`, and
+    the Add to project dialog shows only the model.
+  - Low, Medium and High for every model: Gemini has nothing above high (Claude's `xhigh` and `max` aren't offered),
+    and changing model never changes what's selected.
+  - A question takes the settings when it starts. Changing them while it runs affects the next one.
+  - The cached prefix doesn't change: the tool descriptions and the instructions name no budget, and the budget note
+    (D46) is in the tool results. Changing the effort between questions can drop Claude's cache once: the messages
+    always, and the tools and system on models that render effort ahead of them (the `claude-api` skill's
+    "Invalidation hierarchy"). A deliberate change is worth that; the effort stays the same through a question.
+  - The long-chat notice now measures the first request of the latest question: the context and the text history
+    (D47). A High reading level would otherwise pass 600k within a single question and set it off every time.
+  - High with High can come near the 1M context window. Claude then ends with "Stopped at a limit"; Gemini may return
+    an error. Live check A3 covers it; lowering High reading to 30 h is one line in `READING_LEVELS`.

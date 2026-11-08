@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { ProviderError } from '../../providers/errors';
 import { createClaudeAgent } from '../../providers/llm/claudeAgent';
 import { createGeminiAgent } from '../../providers/llm/geminiAgent';
-import type { AgentConversation, AgentProvider } from '../../providers/llm/types';
+import type { AgentConversation, AgentEffort, AgentProvider } from '../../providers/llm/types';
 import {
   agentMessage,
   scriptedFetch,
@@ -21,6 +21,7 @@ import {
   compactedHistory,
   compactPrompt,
 } from './compact';
+import { DEFAULT_AGENT_LIMITS } from './limits';
 import { TOOL_BUDGET_REACHED } from './tools';
 
 const corpus = makeAgentCorpus();
@@ -48,17 +49,25 @@ const ask = (provider: AgentProvider, conversation: AgentConversation | null, qu
     context: CONTEXT,
     conversation,
     question,
+    effort: 'medium',
+    limits: DEFAULT_AGENT_LIMITS,
     signal: new AbortController().signal,
     onEvent: () => {},
   });
 
-const compact = (provider: AgentProvider, conversation: AgentConversation, focus = '') =>
+const compact = (
+  provider: AgentProvider,
+  conversation: AgentConversation,
+  focus = '',
+  effort: AgentEffort = 'medium',
+) =>
   compactChat({
     provider,
     corpus,
     context: CONTEXT,
     conversation,
     focus,
+    effort,
     signal: new AbortController().signal,
     onEvent: () => {},
   });
@@ -118,6 +127,16 @@ describe('compactChat', () => {
     ]);
     expect(requests[2]!.body.system).toEqual(asked!.system);
     expect(requests[2]!.body.tools).toEqual(asked!.tools);
+  });
+
+  it('sends the effort it is given (D48)', async () => {
+    const { provider, requests } = claude([
+      { message: agentMessage([textBlock('Mary.')]) },
+      { message: agentMessage([textBlock(SUMMARY)]) },
+    ]);
+    const first = await ask(provider, null, 'Who?');
+    await compact(provider, first.conversation, '', 'high');
+    expect(requests[1]!.body).toMatchObject({ output_config: { effort: 'high' } });
   });
 
   it('answers a tool call with the budget reply, then takes the summary', async () => {

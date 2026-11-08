@@ -1,6 +1,6 @@
 // The selectable translation models and the defaults (DECISIONS.md T7). Changing a model is a one-line edit.
 import type { LlmProviderId } from '../../domain/transcript';
-import type { AgentUsage } from './types';
+import type { AgentEffort, AgentUsage } from './types';
 
 export const LLM_MODELS = {
   claude: {
@@ -39,9 +39,23 @@ export function isKnownModel(provider: LlmProviderId, id: string): boolean {
 export const GEMINI_THINKING = 'MEDIUM' as const;
 
 /**
+ * The project agent's effort, as the user sets it (DECISIONS.md D48). `CLAUDE_EFFORT` and `GEMINI_THINKING` stay for
+ * translation and summaries. Claude takes these names as they are; every project model supports all three.
+ */
+export const AGENT_EFFORTS = ['low', 'medium', 'high'] as const satisfies readonly AgentEffort[];
+export const DEFAULT_AGENT_EFFORT: AgentEffort = 'medium';
+
+/** Gemini's name for each effort: values of the SDK's `ThinkingLevel`, as for `GEMINI_THINKING`. */
+export const GEMINI_THINKING_FOR = {
+  low: 'LOW',
+  medium: 'MEDIUM',
+  high: 'HIGH',
+} as const satisfies Record<AgentEffort, string>;
+
+/**
  * The model for project work: the pipeline's translation, summaries and chat (DECISIONS.md D23, D26). Sonnet 5.5 by
- * default, for cost. Claude models use `CLAUDE_EFFORT`, Gemini models `GEMINI_THINKING`. The Translate dialog keeps
- * `LLM_MODELS`.
+ * default, for cost. Claude models use `CLAUDE_EFFORT`, Gemini models `GEMINI_THINKING`, except in the chat, which
+ * uses the effort the user set (D48). The Translate dialog keeps `LLM_MODELS`.
  */
 export const PROJECT_MODELS = {
   default: 'claude-sonnet-5-5',

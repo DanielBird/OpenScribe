@@ -447,7 +447,54 @@ describe('chat store', () => {
     expect(chat.modelChanged).toBe(false);
   });
 
-  it('notices a long chat from the size of the latest request', async () => {
+  it('runs each question with the chat settings as they were when it started (D48)', async () => {
+    seedProject();
+    let finish = () => {};
+    const { requests } = fakeAgent([
+      () =>
+        new Promise((resolve) => {
+          finish = () =>
+            resolve({
+              text: 'One.',
+              conversation: conversationOf(1),
+              usage: USAGE,
+              stopped: 'done',
+            });
+        }),
+      answers('Two.'),
+    ]);
+    const settings = useSettingsStore();
+    settings.agentEffort = 'high';
+    settings.agentToolBudget = 'low';
+    const chat = useChatStore();
+
+    const first = chat.ask('One');
+    settings.agentEffort = 'low';
+    settings.agentToolBudget = 'high';
+    finish();
+    await first;
+    await chat.ask('Two');
+
+    expect(requests[0]).toMatchObject({ effort: 'high', maxIterations: 20 });
+    expect(requests[1]).toMatchObject({ effort: 'low', maxIterations: 65 });
+  });
+
+  it("doesn't count a question's own reading as a long chat", async () => {
+    seedProject();
+    const usage = (inputTokens: number) => ({ ...USAGE, inputTokens });
+    fakeAgent([
+      async (req) => {
+        req.onEvent({ type: 'usage', usage: usage(1_000) });
+        req.onEvent({ type: 'usage', usage: usage(AGENT_LIMITS.longChatTokens + 1) });
+        return { text: 'Ok.', conversation: conversationOf(1), usage: USAGE, stopped: 'done' };
+      },
+    ]);
+    const chat = useChatStore();
+    await chat.ask('One');
+    expect(chat.isLong).toBe(false);
+  });
+
+  it("notices a long chat from the size of the latest question's first request", async () => {
     seedProject();
     const big =
       (inputTokens: number): Run =>
@@ -992,6 +1039,7 @@ describe('/compact (D33)', () => {
     expect(summary.instructions).toBe(requests[0]!.instructions);
     expect(summary.tools.map((t) => t.name)).toEqual(requests[0]!.tools.map((t) => t.name));
     expect(summary.maxIterations).toBe(AGENT_LIMITS.compactIterations);
+    expect(summary.effort).toBe('medium');
     expect((summary.conversation as unknown as { n: number }).n).toBe(1);
 
     expect(chat.running).toBe(false);

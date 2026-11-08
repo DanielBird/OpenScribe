@@ -78,6 +78,7 @@ function request(
     conversation: null,
     userMessage: 'Quotes about charging at night?',
     maxIterations: 35,
+    effort: 'medium',
     signal: new AbortController().signal,
     onEvent: (event) => events.push(event),
     events,
@@ -121,6 +122,18 @@ const contentsOf = (body: Record<string, unknown>) => body.contents as Contents;
 const lastContent = (body: Record<string, unknown>) => contentsOf(body).at(-1)!;
 
 describe('createGeminiAgent', () => {
+  it.each([
+    ['low', 'LOW'],
+    ['medium', 'MEDIUM'],
+    ['high', 'HIGH'],
+  ] as const)('sends the thinking level for effort %s', async (effort, thinkingLevel) => {
+    const { agent, requests } = setup([{ response: geminiTurn([textPart('Hello.')]) }]);
+    await agent.run(request({ effort }));
+    expect(requests[0]!.body.generationConfig).toMatchObject({
+      thinkingConfig: { thinkingLevel },
+    });
+  });
+
   it('sends the instructions then the context, the tools in order, the thinking level and the output limit', async () => {
     const { agent, requests } = setup([{ response: geminiTurn([textPart('Hello.')]) }]);
     await agent.run(request());

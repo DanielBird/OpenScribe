@@ -385,6 +385,7 @@ watch(
   padding: var(--space-2) var(--space-3);
   border-radius: var(--radius-sm);
   background: var(--color-surface);
+  --color-button: var(--color-bg);
 }
 
 .status-failed p {

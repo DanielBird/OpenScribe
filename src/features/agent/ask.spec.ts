@@ -17,7 +17,7 @@ import {
 import { makeAgentCorpus } from '../../testing/agentCorpus';
 import { askProject } from './ask';
 import { AGENT_INSTRUCTIONS } from './instructions';
-import { AGENT_LIMITS } from './limits';
+import { agentBudgetLimits, DEFAULT_AGENT_LIMITS } from './limits';
 import { TOOL_BUDGET_REACHED } from './tools';
 
 const corpus = makeAgentCorpus();
@@ -64,6 +64,8 @@ const ask = (provider: AgentProvider, events: AgentEvent[] = []) =>
     context: CONTEXT,
     conversation: null,
     question: 'Who charges at night?',
+    effort: 'medium',
+    limits: DEFAULT_AGENT_LIMITS,
     signal: new AbortController().signal,
     onEvent: (e) => events.push(e),
   });
@@ -79,7 +81,8 @@ describe('askProject', () => {
       context: CONTEXT,
       conversation: null,
       userMessage: 'Who charges at night?',
-      maxIterations: AGENT_LIMITS.maxIterations,
+      maxIterations: DEFAULT_AGENT_LIMITS.maxIterations,
+      effort: 'medium',
     });
     expect(requests[0]!.tools.map((t) => t.name)).toEqual([
       'search_transcripts',
@@ -99,8 +102,27 @@ describe('askProject', () => {
     });
   });
 
+  it('runs with the effort and the budgets it is given (D48)', async () => {
+    const { provider, requests, results } = fakeProvider(1);
+    await askProject({
+      provider,
+      corpus,
+      context: CONTEXT,
+      conversation: null,
+      question: 'Who charges at night?',
+      effort: 'high',
+      limits: agentBudgetLimits('low', 'high'),
+      signal: new AbortController().signal,
+      onEvent: () => {},
+    });
+    expect(requests[0]).toMatchObject({ effort: 'high', maxIterations: 20 });
+    expect(results[0]![0]).toMatch(
+      /Left for this question: 14 of 15 tool calls · reading budget 500k of 500k tokens · summary budget 150k of 150k tokens$/,
+    );
+  });
+
   it('gives each question a fresh tool budget', async () => {
-    const { provider, results } = fakeProvider(AGENT_LIMITS.toolCallsPerQuestion + 1);
+    const { provider, results } = fakeProvider(DEFAULT_AGENT_LIMITS.toolCalls + 1);
     await ask(provider);
     await ask(provider);
     for (const contents of results) {
@@ -166,6 +188,8 @@ describe('askProject', () => {
       context: CONTEXT,
       conversation: first.conversation,
       question: 'Who helps?',
+      effort: 'medium',
+      limits: DEFAULT_AGENT_LIMITS,
       signal: new AbortController().signal,
       onEvent: () => {},
     });

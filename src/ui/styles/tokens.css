@@ -17,6 +17,8 @@
   /* Colours */
   --color-bg: #ffffff;
   --color-surface: #f6f8fa;
+  --color-button: var(--color-surface); /* default buttons; a grey panel sets it to --color-bg */
+  --color-button-hover: #e3eefa;
   --color-text: #1f2328;
   --color-text-muted: #59636e;
   --color-border: #d1d9e0;

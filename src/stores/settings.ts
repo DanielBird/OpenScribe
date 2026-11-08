@@ -3,16 +3,25 @@ import { computed, ref, shallowRef, watch, type Ref } from 'vue';
 import { randomAuthorName, type ChatAuthor } from '../domain/chat';
 import { checkFile, type FileCheck } from '../domain/filecheck';
 import { languageName, type LanguageHint, type LlmProviderId } from '../domain/transcript';
+import {
+  agentBudgetLimits,
+  BUDGET_LEVELS,
+  type AgentBudgetLimits,
+  type BudgetLevel,
+} from '../features/agent/limits';
 import { z } from '../lib/zod';
 import { probeDuration } from '../media/probeDuration';
 import { getTranscriptionProvider, verifyLlmKey } from '../providers/index';
 import {
+  AGENT_EFFORTS,
+  DEFAULT_AGENT_EFFORT,
   isKnownModel,
   isProjectModel,
   LLM_MODELS,
   PROJECT_MODELS,
   projectProviderOf,
 } from '../providers/llm/models';
+import type { AgentEffort } from '../providers/llm/types';
 import type { KeyCheckResult } from '../providers/transcription/types';
 import { readJson, removeKey, writeJson } from '../storage/local';
 import * as secrets from '../storage/secrets';
@@ -43,6 +52,10 @@ const PrefsSchema = z.object({
   followPlayback: z.boolean().catch(true),
   /** The model for project work (DECISIONS.md D23). */
   projectModel: z.string().optional().catch(undefined),
+  /** The chat's effort and budgets per question (D48). */
+  agentEffort: z.enum(AGENT_EFFORTS).catch(DEFAULT_AGENT_EFFORT),
+  agentToolBudget: z.enum(BUDGET_LEVELS).catch('medium'),
+  agentReadingBudget: z.enum(BUDGET_LEVELS).catch('medium'),
   /** The name saved with your chats (D29); empty for the one made up for this browser. */
   userName: z.string().catch(''),
 });
@@ -232,6 +245,22 @@ export const useSettingsStore = defineStore('settings', () => {
   /** Whose key the pipeline and the summaries use (DECISIONS.md D26). */
   const projectProvider = computed<LlmProviderId>(() => projectProviderOf(projectModel.value));
 
+  // --- Chat settings (D48) ------------------------------------------------------------------------
+
+  const agentEffort = ref<AgentEffort>(prefs.agentEffort);
+  const agentToolBudget = ref<BudgetLevel>(prefs.agentToolBudget);
+  const agentReadingBudget = ref<BudgetLevel>(prefs.agentReadingBudget);
+  watch(
+    [agentEffort, agentToolBudget, agentReadingBudget],
+    ([effort, tools, reading]) =>
+      savePrefs({ agentEffort: effort, agentToolBudget: tools, agentReadingBudget: reading }),
+    { flush: 'sync' },
+  );
+  /** What a question may use, from the two budget levels. */
+  const agentLimits = computed<AgentBudgetLimits>(() =>
+    agentBudgetLimits(agentToolBudget.value, agentReadingBudget.value),
+  );
+
   // --- Chat author (D29) --------------------------------------------------------------------------
 
   const userName = ref(prefs.userName);
@@ -260,6 +289,9 @@ export const useSettingsStore = defineStore('settings', () => {
     hideTranslationNotice.value = defaults.hideTranslationNotice;
     followPlayback.value = defaults.followPlayback;
     projectModel.value = PROJECT_MODELS.default;
+    agentEffort.value = defaults.agentEffort;
+    agentToolBudget.value = defaults.agentToolBudget;
+    agentReadingBudget.value = defaults.agentReadingBudget;
     userName.value = defaults.userName;
     // The watchers above have just saved the defaults (flush: 'sync'); remove them instead.
     removeKey('local', PREFS_KEY);
@@ -360,6 +392,10 @@ export const useSettingsStore = defineStore('settings', () => {
     followPlayback,
     projectModel,
     projectProvider,
+    agentEffort,
+    agentToolBudget,
+    agentReadingBudget,
+    agentLimits,
     userName,
     generatedName,
     chatAuthor,

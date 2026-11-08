@@ -12,30 +12,37 @@ import type { AgentTool } from '../../providers/llm/types';
 import { themeKey, themeVocabulary } from '../summary/themes';
 import type { CorpusReader, CorpusSession } from './corpus';
 import { sessionLanguage, speakerLabel, turnLine } from './format';
-import { AGENT_LIMITS, estimateTokens } from './limits';
+import {
+  AGENT_LIMITS,
+  DEFAULT_AGENT_LIMITS,
+  estimateTokens,
+  type AgentBudgetLimits,
+} from './limits';
 
 export const TOOL_BUDGET_REACHED = 'Tool budget reached. Answer now.';
 export const READING_BUDGET_REACHED = 'Reading budget reached. Answer from what you have.';
 export const SUMMARY_BUDGET_REACHED =
   'Summary budget reached. Search or read the transcripts, or answer from what you have.';
 
-/** What a question has used so far. Make a fresh one per question. */
+/** What a question may use, and what it has used so far. Make a fresh one per question. */
 export interface AgentBudget {
+  limits: AgentBudgetLimits;
   toolCalls: number;
   transcriptTokens: number;
   summaryTokens: number;
 }
 
-export function createBudget(): AgentBudget {
-  return { toolCalls: 0, transcriptTokens: 0, summaryTokens: 0 };
+export function createBudget(limits: AgentBudgetLimits = DEFAULT_AGENT_LIMITS): AgentBudget {
+  return { limits, toolCalls: 0, transcriptTokens: 0, summaryTokens: 0 };
 }
 
 /** A budget with nothing left, so every tool says to answer: for the summary of `/compact` (Phase 22). */
-export function spentBudget(): AgentBudget {
+export function spentBudget(limits: AgentBudgetLimits = DEFAULT_AGENT_LIMITS): AgentBudget {
   return {
-    toolCalls: AGENT_LIMITS.toolCallsPerQuestion,
-    transcriptTokens: AGENT_LIMITS.transcriptTokensPerQuestion,
-    summaryTokens: AGENT_LIMITS.summaryTokensPerQuestion,
+    limits,
+    toolCalls: limits.toolCalls,
+    transcriptTokens: limits.transcriptTokens,
+    summaryTokens: limits.summaryTokens,
   };
 }
 
@@ -207,7 +214,7 @@ function summariesTool(corpus: CorpusReader, budget: AgentBudget): AgentTool {
       for (const session of sessions) {
         const text = summaryText(session);
         const tokens = estimateTokens(text);
-        if (budget.summaryTokens + tokens > AGENT_LIMITS.summaryTokensPerQuestion) break;
+        if (budget.summaryTokens + tokens > budget.limits.summaryTokens) break;
         budget.summaryTokens += tokens;
         shown.push(session);
         texts.push(text);
@@ -295,7 +302,7 @@ function readTool(corpus: CorpusReader, budget: AgentBudget): AgentTool {
         if (!turn) break;
         const line = lineOf(turn);
         const tokens = estimateTokens(line);
-        if (budget.transcriptTokens + tokens > AGENT_LIMITS.transcriptTokensPerQuestion) {
+        if (budget.transcriptTokens + tokens > budget.limits.transcriptTokens) {
           spent = true;
           break;
         }
@@ -381,14 +388,14 @@ const tokensLeft = (name: string, used: number, limit: number) =>
  * instructions and the tool descriptions don't mention it, so it has to make sense on its own.
  */
 export function budgetNote(budget: AgentBudget): string {
-  const limits = AGENT_LIMITS;
-  const calls = Math.max(0, limits.toolCallsPerQuestion - budget.toolCalls);
-  const head = `Left for this question: ${calls} of ${limits.toolCallsPerQuestion} tool calls`;
+  const { limits } = budget;
+  const calls = Math.max(0, limits.toolCalls - budget.toolCalls);
+  const head = `Left for this question: ${calls} of ${limits.toolCalls} tool calls`;
   if (calls === 0) return `${head}. Answer now.`;
   return [
     head,
-    tokensLeft('reading budget', budget.transcriptTokens, limits.transcriptTokensPerQuestion),
-    tokensLeft('summary budget', budget.summaryTokens, limits.summaryTokensPerQuestion),
+    tokensLeft('reading budget', budget.transcriptTokens, limits.transcriptTokens),
+    tokensLeft('summary budget', budget.summaryTokens, limits.summaryTokens),
   ].join(' · ');
 }
 
@@ -402,7 +409,7 @@ function counted(tool: AgentTool, budget: AgentBudget): AgentTool {
     ...tool,
     async run(input, signal) {
       budget.toolCalls++;
-      if (budget.toolCalls > AGENT_LIMITS.toolCallsPerQuestion) {
+      if (budget.toolCalls > budget.limits.toolCalls) {
         return { content: TOOL_BUDGET_REACHED, activity: 'Tool budget reached' };
       }
       const result = await tool.run(input, signal);

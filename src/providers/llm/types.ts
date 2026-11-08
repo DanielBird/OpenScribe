@@ -60,6 +60,9 @@ export type AgentEvent =
   | { type: 'tool'; name: string; activity: string; isError: boolean }
   | { type: 'usage'; usage: AgentUsage };
 
+/** How hard the agent thinks, whichever provider runs it (DECISIONS.md D48). */
+export type AgentEffort = 'low' | 'medium' | 'high';
+
 export interface AgentRunRequest {
   instructions: string; // fixed; cached
   context: string; // frozen for the conversation; cached
@@ -67,6 +70,7 @@ export interface AgentRunRequest {
   conversation: AgentConversation | null;
   userMessage: string;
   maxIterations: number; // requests per run; a backstop behind the tools' own budgets
+  effort: AgentEffort; // the same for every request of a run, so the run's cache holds
   signal: AbortSignal;
   onEvent(event: AgentEvent): void;
 }

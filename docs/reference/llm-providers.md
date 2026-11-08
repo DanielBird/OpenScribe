@@ -271,7 +271,7 @@ its reply (`AgentAdapter`).
     tools,                                   // the 4 tools, always in this order, eager_input_streaming: true
     messages,                                // the conversation, append-only
     thinking: { type: 'adaptive' },
-    output_config: { effort: CLAUDE_EFFORT },// 'medium'
+    output_config: { effort: req.effort },   // low, medium (default) or high: the user's (D48)
     cache_control: { type: 'ephemeral' },    // automatic caching of the conversation tail
     betas: ['server-side-fallback-2026-07-01'],
     fallbacks: 'default',
@@ -337,7 +337,7 @@ tools, the caps, the instructions and `parseAnswer` are shared and unchanged.
       systemInstruction: { parts: [{ text: instructions }, { text: context }] },  // least-changing first
       tools: [{ functionDeclarations }],          // the 4 tools, always in this order
       automaticFunctionCalling: { disable: true },
-      thinkingConfig: { thinkingLevel: ThinkingLevel.MEDIUM },  // GEMINI_THINKING
+      thinkingConfig: { thinkingLevel: ThinkingLevel[GEMINI_THINKING_FOR[req.effort]] },  // LOW, MEDIUM (default) or HIGH: the user's (D48)
       maxOutputTokens: 64000,                     // AGENT_MAX_OUTPUT_TOKENS (Argon's limit is 65,536)
       abortSignal,
     },
@@ -479,7 +479,7 @@ browser. Phase 21 (D29) changed "Chats aren't kept" to say where chats are saved
 | L3 | Translation quality and cost for a 30 min German transcript with each default model (rough tokens and €) | **Accepted for 1.0 as a known limitation** until [TESTING.md](../TESTING.md) scenario 7 is run on the release file with the maintainer's keys; the result goes here. That run also confirms that the real APIs accept the browser's CORS preflight for every SDK header (`x-stainless-*`, `anthropic-beta`); the e2e mocks allow all headers. Until then: the defaults in `models.ts`, effort `medium` (T9). | 2026-10-14 (accepted) |
 | A1 | Project agent: quote recall on 10 questions with known answers, with Sonnet 5.5 and Opus 5.5 (planted quotes found, quotes verified, and how many good quotes the omission rules of D44 reject) | *Pending* (no real API calls until the maintainer asks). Assumption: the instructions and tools as built in Phase 16, with D46's budget note at the end of each tool result. | – |
 | A2 | Project agent: cost per question, and the share of input read from the cache; whether D46's budget note makes questions use more tool calls; D47 on three heavy questions in a row with Sonnet 5.5, one of them asked more than 5 minutes after the last answer: each request's `input_tokens`, `cache_read_input_tokens` and `cache_creation_input_tokens`, and each question's cost | *Pending*. Estimate (PROJECTS.md §3): $0.25–1 per question with Sonnet 5.5; most input cached after the first request. With D47, a follow-up should cost about what the first question did: its first request writes only the text history to the cache, and reads the tools, instructions and context from it. | – |
-| A3 | Project agent: effort `medium` against `high` (answer quality, tool calls, cost) | *Pending*. Until then `medium` (T9). | – |
+| A3 | Project agent: effort `low`, `medium` and `high`, and the tool and reading levels (answer quality, tool calls, cost; does High with High stay inside the context window?) | *Pending*. The default stays `medium` (T9, D48). | – |
 | A4 | Project agent: the real API accepts the browser's CORS preflight with the agent's headers (`anthropic-beta`, `x-stainless-*`) from `Origin: null` | *Pending*. The agent sends the same headers as translation (no tool-runner helper header), so L3's check covers it once run. | – |
 | G1 | Gemini accepts `responseJsonSchema` for the summary schema (with the nullable `speakerId` as a type array), and the streamed reply parses: the same request as the unit tests. Also closes L3 for Gemini translation. | *Pending* (no real API calls until the maintainer asks). Assumption: the request as built in Phase 19. | – |
 | G2 | Gemini summary quality on the S1–S3 sessions (a real German one and a real English one), with 3.8 Flash and 4 Argon: the dropped-quote rate, tokens, time and cost per hour, against Sonnet 5.5 | *Pending*. Prices are above. | – |

@@ -101,6 +101,8 @@ describe('AddToProjectDialog', () => {
     const select = wrapper!.get<HTMLSelectElement>('select');
     expect(wrapper!.get(`label[for="${select.attributes('id')}"]`).text()).toBe('Model');
     expect(select.element.value).toBe('claude-sonnet-5-5');
+    // The chat's settings are in the Analyse header only (D48).
+    expect(wrapper!.find('[popover]').exists()).toBe(false);
     expect(select.find('optgroup').exists()).toBe(false);
     expect(select.findAll('option').map((o) => o.text())).toEqual([
       'Sonnet 5.5',

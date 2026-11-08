@@ -46,6 +46,12 @@ describe('design tokens', () => {
     },
   );
 
+  it('accent text on a hovered button has >= 4.5:1 contrast', () => {
+    expect(
+      contrast(readColor('color-accent'), readColor('color-button-hover')),
+    ).toBeGreaterThanOrEqual(4.5);
+  });
+
   it('warning text on the warning background has >= 4.5:1 contrast', () => {
     expect(
       contrast(readColor('color-warning'), readColor('color-warning-bg')),

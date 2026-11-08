@@ -18,7 +18,6 @@ import { z } from '../../lib/zod';
 import { ProviderError, withoutSecret } from '../errors';
 import { createConversations, runAgentLoop, shortMessage, type AgentAttempt } from './agentLoop';
 import { CLAUDE_FALLBACK_BETA, CLAUDE_MESSAGES, toProviderError } from './claude';
-import { CLAUDE_EFFORT } from './models';
 import {
   AGENT_MAX_OUTPUT_TOKENS,
   type AgentConversation,
@@ -164,7 +163,7 @@ export function createClaudeAgent(opts: ClaudeAgentOptions): AgentProvider {
             tools,
             messages: [...messages],
             thinking: { type: 'adaptive' },
-            output_config: { effort: CLAUDE_EFFORT },
+            output_config: { effort: req.effort },
             // Automatic caching: a breakpoint at the end of the conversation, moved on with every request.
             cache_control: { type: 'ephemeral' },
             betas: [CLAUDE_FALLBACK_BETA],

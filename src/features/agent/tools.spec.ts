@@ -4,7 +4,7 @@ import type { AgentTool } from '../../providers/llm/types';
 import { makeAgentCorpus } from '../../testing/agentCorpus';
 import { makeSessionText } from '../../testing/projectSessions';
 import { createCorpusReader } from './corpus';
-import { AGENT_LIMITS, estimateTokens } from './limits';
+import { AGENT_LIMITS, agentBudgetLimits, DEFAULT_AGENT_LIMITS, estimateTokens } from './limits';
 import {
   budgetNote,
   createAgentTools,
@@ -177,7 +177,7 @@ describe('createAgentTools', () => {
       const s1 = (await tools().call('get_summaries', { sessions: ['s1'] })).content;
       const budget = createBudget();
       // Room for s1 exactly.
-      budget.summaryTokens = AGENT_LIMITS.summaryTokensPerQuestion - estimateTokens(s1);
+      budget.summaryTokens = DEFAULT_AGENT_LIMITS.summaryTokens - estimateTokens(s1);
       const { call } = tools(makeAgentCorpus(), budget);
 
       const partial = await call('get_summaries', { sessions: ['s1', 's2', 's3'] });
@@ -185,7 +185,7 @@ describe('createAgentTools', () => {
         content: `${s1}\n\n${SUMMARY_BUDGET_REACHED} Not shown: s2, s3.`,
         activity: 'Read the summaries of P01 – kitchen interview, Leeds',
       });
-      expect(budget.summaryTokens).toBe(AGENT_LIMITS.summaryTokensPerQuestion);
+      expect(budget.summaryTokens).toBe(DEFAULT_AGENT_LIMITS.summaryTokens);
 
       const refused = await call('get_summaries', { sessions: ['s2'] });
       expect(refused).toEqual({
@@ -205,7 +205,7 @@ describe('createAgentTools', () => {
       expect(budget.summaryTokens).toBe(summaryTokens);
 
       const noReading = createBudget();
-      noReading.transcriptTokens = AGENT_LIMITS.transcriptTokensPerQuestion;
+      noReading.transcriptTokens = DEFAULT_AGENT_LIMITS.transcriptTokens;
       const summaries = await tools(makeAgentCorpus(), noReading).call('get_summaries', {
         sessions: ['s1'],
       });
@@ -333,7 +333,7 @@ describe('createAgentTools', () => {
       const budget = createBudget();
       // Room for 3 more lines of about this size.
       budget.transcriptTokens =
-        AGENT_LIMITS.transcriptTokensPerQuestion - 3 * estimateTokens(line) - 1;
+        DEFAULT_AGENT_LIMITS.transcriptTokens - 3 * estimateTokens(line) - 1;
       const { call } = tools(createCorpusReader([session], new Map()), budget);
 
       const partial = await call('read_transcript', { session: 's1' });
@@ -373,7 +373,7 @@ describe('createAgentTools', () => {
 
   it('answers every call after the 30th with the tool budget message', async () => {
     const { call, budget } = tools();
-    for (let i = 0; i < AGENT_LIMITS.toolCallsPerQuestion; i++) {
+    for (let i = 0; i < DEFAULT_AGENT_LIMITS.toolCalls; i++) {
       expect((await call('list_themes', {})).content).not.toBe(TOOL_BUDGET_REACHED);
     }
     expect(await call('search_transcripts', { query: 'bed' })).toEqual({
@@ -381,6 +381,49 @@ describe('createAgentTools', () => {
       activity: 'Tool budget reached',
     });
     expect(budget.toolCalls).toBe(31);
+  });
+
+  describe('chosen budgets (D48)', () => {
+    const low = agentBudgetLimits('low', 'low');
+
+    it('stops at the chosen number of tool calls', async () => {
+      const { call } = tools(makeAgentCorpus(), createBudget(low));
+      for (let i = 0; i < low.toolCalls; i++) {
+        expect((await call('list_themes', {})).content).not.toBe(TOOL_BUDGET_REACHED);
+      }
+      expect((await call('list_themes', {})).content).toBe(TOOL_BUDGET_REACHED);
+    });
+
+    it('stops reading and summaries at the chosen amounts', async () => {
+      const reading = createBudget(low);
+      reading.transcriptTokens = low.transcriptTokens;
+      const read = await tools(makeAgentCorpus(), reading).run('read_transcript', {
+        session: 's1',
+      });
+      expect(read.activity).toBe('Reading budget reached');
+
+      const summaries = createBudget(low);
+      summaries.summaryTokens = low.summaryTokens;
+      const got = await tools(makeAgentCorpus(), summaries).run('get_summaries', {
+        sessions: ['s1'],
+      });
+      expect(got.activity).toBe('Summary budget reached');
+    });
+
+    it('shows the chosen budgets in the note', () => {
+      expect(budgetNote(createBudget(low))).toBe(
+        'Left for this question: 15 of 15 tool calls · reading budget 125k of 125k tokens · summary budget 37k of 37k tokens',
+      );
+    });
+
+    it('spends whichever budgets it is given', () => {
+      expect(spentBudget(low)).toEqual({
+        limits: low,
+        toolCalls: 15,
+        transcriptTokens: 125_000,
+        summaryTokens: 37_500,
+      });
+    });
   });
 
   describe('budget note (D46)', () => {
@@ -406,7 +449,14 @@ describe('createAgentTools', () => {
     });
 
     it('rounds tokens down to thousands, and never below 0', () => {
-      expect(budgetNote({ toolCalls: 3, transcriptTokens: 37_600, summaryTokens: 80_000 })).toBe(
+      expect(
+        budgetNote({
+          ...createBudget(),
+          toolCalls: 3,
+          transcriptTokens: 37_600,
+          summaryTokens: 80_000,
+        }),
+      ).toBe(
         'Left for this question: 27 of 30 tool calls · reading budget 212k of 250k tokens · summary budget 0k of 75k tokens',
       );
     });

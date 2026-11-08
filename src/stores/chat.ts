@@ -202,7 +202,7 @@ export const useChatStore = defineStore('chat', () => {
   /** Frozen at the first question; `null` before it. */
   const model = ref<string | null>(null);
   const snapshot = shallowRef<Snapshot | null>(null);
-  /** The size of the latest request, in tokens, for the long-chat notice. */
+  /** The size of the latest question's first request, in tokens, for the long-chat notice. */
   const lastRequestTokens = ref(0);
   /** The open chat's id, once it has been saved or was opened; `null` for a new chat. */
   const chatId = ref<string | null>(null);
@@ -432,6 +432,7 @@ export const useChatStore = defineStore('chat', () => {
     let draft = '';
     let activity: ChatActivity[] = [];
     let usage: AgentUsage = NO_USAGE;
+    let measured = false;
     let frame: number | null = null;
 
     const flush = () => {
@@ -476,8 +477,12 @@ export const useChatStore = defineStore('chat', () => {
         ];
       else {
         usage = addUsage(usage, event.usage);
-        const u = event.usage;
-        lastRequestTokens.value = u.inputTokens + u.cacheReadTokens + u.cacheWriteTokens;
+        // Only the question's first request: the chat so far, without this question's own reading (D47, D48).
+        if (!measured) {
+          measured = true;
+          const u = event.usage;
+          lastRequestTokens.value = u.inputTokens + u.cacheReadTokens + u.cacheWriteTokens;
+        }
       }
       schedule();
     };
@@ -492,6 +497,8 @@ export const useChatStore = defineStore('chat', () => {
         context,
         conversation: past.length > 0 ? agent.resume(past) : null,
         question: text,
+        effort: settings.agentEffort,
+        limits: settings.agentLimits,
         signal: ctrl.signal,
         onEvent,
       });
@@ -592,6 +599,7 @@ export const useChatStore = defineStore('chat', () => {
         context,
         conversation,
         focus,
+        effort: settings.agentEffort,
         signal: ctrl.signal,
         // The summary isn't shown as it streams; only its cost is kept.
         onEvent: (event) => {

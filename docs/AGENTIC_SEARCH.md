@@ -308,7 +308,14 @@ summary), the result is "No session has a summary yet, so there are no themes."
 ## Budgets and limits
 
 All caps are in [limits.ts](../src/features/agent/limits.ts). The budgets are per question: each question starts
-fresh (A18).
+fresh (A18). The tool calls and the reading are the user's to set, at three levels (D48); the figures here and below
+are Medium, the default.
+
+| Level | Tool calls | Replies | Reading: transcripts + summaries |
+|---|---|---|---|
+| Low | 15 | 20 | 125k + 37.5k tokens (about 10 hours) |
+| Medium | 30 | 35 | 250k + 75k tokens (about 20 hours) |
+| High | 60 | 65 | 500k + 150k tokens (about 40 hours) |
 
 | Limit | Value | What happens |
 |---|---|---|
@@ -320,7 +327,7 @@ fresh (A18).
 | Sessions per `get_summaries` call | 10 | More is an error |
 | Turns either side of `around` | 8 | Change with `before` / `after` |
 | Output tokens per request | 64,000 | Room for thinking and a long answer (`AGENT_MAX_OUTPUT_TOKENS`) |
-| Long chat | 600,000 tokens in one request | Input, cache reads and cache writes of the latest request. The chat suggests `/compact` or a new chat |
+| Long chat | 600,000 tokens in one request | Input, cache reads and cache writes of the latest question's first request, so a question's own reading doesn't count (D48). The chat suggests `/compact` or a new chat |
 | Replies for a `/compact` summary | 3 | `compactIterations`: the tools only say to answer, so one is usually enough |
 
 - **Token estimate** (`estimateTokens`): 3.5 characters per token, and one token per Chinese, Japanese or Korean
@@ -352,8 +359,8 @@ Argon ([models.ts](../src/providers/llm/models.ts)). The request details are in
 
 - **Manual, streamed loops,** not the SDKs' tool runners or automatic function calling. For Claude, this is what
   lets the loop apply the API's rule for a turn after a mid-output refusal fallback (`echoContent`).
-- **Thinking:** Claude uses adaptive thinking with effort `medium`; Gemini uses thinking level `MEDIUM`. Thinking
-  never reaches the chat; only answer text streams.
+- **Thinking:** Claude uses adaptive thinking, with the effort the user set (`medium` by default, D48); Gemini uses
+  the matching thinking level. Thinking never reaches the chat; only answer text streams.
 - **Caching:** Claude marks the end of the instructions and of the context, plus automatic caching of the
   conversation tail. Gemini's caching is implicit, which is why the request order and bytes must stay the same.
 - **Parallel calls:** the model may make several calls in one reply. They run together, and all their results go

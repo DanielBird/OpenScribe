@@ -6,8 +6,12 @@ All notable changes to DeScribe are recorded here. The format follows
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-11-08
+
 ### Added
 
+- **Chat settings:** the button beside the model in Analyse sets the chat's effort, how many tool calls a question may
+  use, and how much it may read: Low, Medium (as before) or High. Higher settings can find more and cost more.
 - **English that is out of date:** after a turn is edited, the English view marks it "Changed since translation",
   **Translate** becomes **Update English…**, which translates only the changed turns, and the export dialog says how
   many turns of the English are out of date. Summaries, the project chat and search use only English that is up to
@@ -148,6 +152,7 @@ The first release: one HTML file that colleagues open in Edge or Chrome.
 - On a slow laptop, renaming a speaker in a 3-hour transcript takes about 0.1–0.2 s per keystroke.
 - Firefox is not supported.
 
-[Unreleased]: https://github.com/DanielBird/Describe/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/DanielBird/Describe/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/DanielBird/Describe/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/DanielBird/Describe/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/DanielBird/Describe/releases/tag/v1.0.0

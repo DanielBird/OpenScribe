@@ -337,6 +337,7 @@ MVP = Phases 0–5. Each phase is sized for one agent session (or a few) and end
 | 27 | [Rescan the project every two minutes](phases/27-background-rescan.md) | 14 | 23, 25 | ☑ Done (manual row 15's two-minute step open) |
 | 28 | [The agent sees its budget left](phases/28-budget-left.md) | 16, 20 | 23, 25 | ☑ Done (live checks A1–A3 open) |
 | 29 | [Follow-up questions start from the text](phases/29-follow-ups-from-text.md) | 17, 21, 22 | 23, 25 | ☑ Done (live checks A2, H1 and H2 open) |
+| 30 | [Chat settings: effort, tool calls and reading](phases/30-chat-settings.md) | 16, 20, 28, 29 | 23, 25 | ☑ Done (live check A3 open) |
 
 Status values: ☐ Not started · ◐ In progress · ☑ Done.
 

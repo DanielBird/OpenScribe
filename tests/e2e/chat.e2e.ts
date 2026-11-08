@@ -476,3 +476,89 @@ test('a long chat suggests /compact, which summarises it; the next question carr
   expect(after[2]).toEqual({ role: 'user', content: 'Who helps?' });
   expect(JSON.stringify(after)).not.toContain('Where do people charge?');
 });
+
+test("the chat settings set the next question's effort and budgets, and are remembered (D48)", async ({
+  page,
+}) => {
+  await useProjectFolder(page, SEEDED);
+  const calls = await mockAgent(page, (n) => (n === 0 ? search('charg*') : says('By the bed.')));
+  await openChat(page);
+
+  // By keyboard: the button opens the panel, Tab reaches the checked Effort, an arrow key moves it.
+  const button = page.getByRole('button', { name: 'Chat settings' });
+  const panel = page.getByRole('group', { name: 'Chat settings' });
+  await button.focus();
+  await page.keyboard.press('Enter');
+  await expect(panel).toBeVisible();
+  const effort = panel.getByRole('group', { name: 'Effort' });
+  await expect(effort.getByRole('radio', { name: 'Medium' })).toBeChecked();
+  await page.keyboard.press('Tab');
+  await expect(effort.getByRole('radio', { name: 'Medium' })).toBeFocused();
+  await page.keyboard.press('ArrowRight');
+  await expect(effort.getByRole('radio', { name: 'High' })).toBeChecked();
+
+  await panel
+    .getByRole('group', { name: 'Tool calls' })
+    .locator('label', { hasText: '60' })
+    .click();
+  await panel.getByRole('group', { name: 'Reading' }).locator('label', { hasText: '40 h' }).click();
+  await page.keyboard.press('Escape');
+  await expect(panel).toBeHidden();
+  await expect(button).toBeFocused();
+
+  await ask(page, 'Where do people charge?');
+  await expect(answers(page).first()).toContainText('By the bed.');
+  expect(calls[0]!.body).toMatchObject({ output_config: { effort: 'high' } });
+  expect(JSON.stringify(calls[1]!.body.messages)).toContain(
+    'Left for this question: 59 of 60 tool calls · reading budget 500k of 500k tokens · summary budget 150k of 150k tokens',
+  );
+
+  // A reload opens the project again by itself.
+  await page.reload();
+  await enterProject(page);
+  await expect(page.getByRole('heading', { name: /^Sessions/ })).toBeVisible();
+  await page.getByRole('button', { name: 'Chat settings' }).click();
+  await expect(effort.getByRole('radio', { name: 'High' })).toBeChecked();
+  await expect(
+    panel.getByRole('group', { name: 'Tool calls' }).getByRole('radio', { name: '60' }),
+  ).toBeChecked();
+  await expect(
+    panel
+      .getByRole('group', { name: 'Reading' })
+      .getByRole('radio', { name: '40 h of transcript' }),
+  ).toBeChecked();
+});
+
+test('each chat setting explains itself on hover and on keyboard focus', async ({ page }) => {
+  await useProjectFolder(page, SEEDED);
+  await openChat(page);
+  await page.getByRole('button', { name: 'Chat settings' }).click();
+  const panel = page.getByRole('group', { name: 'Chat settings' });
+  const tip = panel.getByRole('tooltip');
+  await expect(tip).toHaveCount(0);
+  // The last one stays a moment after the pointer leaves its label.
+  const shows = async (text: string) => {
+    await expect(tip).toHaveCount(1);
+    await expect(tip).toHaveText(text);
+  };
+
+  await panel.locator('legend', { hasText: 'Tool calls' }).hover();
+  await shows('How many searches and reads the model can make.');
+  await panel.locator('legend', { hasText: 'Reading' }).hover();
+  await shows('How many hours of transcript the model can read.');
+  await page.mouse.move(0, 0);
+  await expect(tip).toHaveCount(0);
+
+  await page.keyboard.press('Tab');
+  await expect(panel.getByRole('radio', { name: 'Medium' })).toBeFocused();
+  await shows('How hard the model thinks at each step.');
+  await page.keyboard.press('Escape');
+
+  // In a narrow window it's above its group, never over the label: hover fails if something covers the label.
+  await page.setViewportSize({ width: 375, height: 700 });
+  await page.getByRole('button', { name: 'Chat settings' }).click();
+  for (const name of ['Effort', 'Tool calls', 'Reading']) {
+    await panel.locator('legend', { hasText: name }).hover();
+  }
+  await shows('How many hours of transcript the model can read.');
+});

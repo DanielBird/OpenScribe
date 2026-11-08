@@ -108,6 +108,7 @@ const canRetry = computed(
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   background: var(--color-surface);
+  --color-button: var(--color-bg);
 }
 
 .job-status.is-error {

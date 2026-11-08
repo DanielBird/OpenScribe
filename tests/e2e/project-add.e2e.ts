@@ -71,7 +71,10 @@ test('Add to project on a new transcript: saved, translated, summarised, and its
   // A new project opens its Brief over the dialog.
   const brief = page.getByRole('dialog', { name: 'Brief' });
   await expect(brief).toBeVisible();
-  await brief.getByLabel('Research questions').fill('How do people charge?');
+  await brief.getByRole('tab', { name: 'Research questions' }).click();
+  await brief
+    .getByRole('textbox', { name: 'Key research questions' })
+    .fill('How do people charge?');
   await brief.getByRole('button', { name: 'Save' }).click();
   // The dialog below is titled for the project already; its key field is usable once the Brief has closed.
   await expect(brief).toBeHidden();

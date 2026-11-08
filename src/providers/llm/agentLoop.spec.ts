@@ -68,6 +68,7 @@ function request(overrides: Partial<AgentRunRequest> = {}) {
     conversation: null,
     userMessage: 'What did Anna say?',
     maxIterations: 10,
+    effort: 'medium',
     signal: new AbortController().signal,
     onEvent: (event) => events.push(event),
     ...overrides,

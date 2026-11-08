@@ -395,6 +395,46 @@ describe('settings store', () => {
       expect(settings.projectProvider).toBe('claude');
     });
 
+    it('defaults the chat settings to medium, and saves and loads them (D48)', () => {
+      const settings = useSettingsStore();
+      expect([settings.agentEffort, settings.agentToolBudget, settings.agentReadingBudget]).toEqual(
+        ['medium', 'medium', 'medium'],
+      );
+      expect(settings.agentLimits).toMatchObject({ toolCalls: 30, transcriptTokens: 250_000 });
+
+      settings.agentEffort = 'high';
+      settings.agentToolBudget = 'low';
+      settings.agentReadingBudget = 'high';
+      expect(storedPrefs()).toMatchObject({
+        agentEffort: 'high',
+        agentToolBudget: 'low',
+        agentReadingBudget: 'high',
+      });
+      expect(settings.agentLimits).toEqual({
+        toolCalls: 15,
+        transcriptTokens: 500_000,
+        summaryTokens: 150_000,
+        maxIterations: 20,
+      });
+
+      setActivePinia(createPinia());
+      const reloaded = useSettingsStore();
+      expect(reloaded.agentEffort).toBe('high');
+      expect(reloaded.agentToolBudget).toBe('low');
+      expect(reloaded.agentReadingBudget).toBe('high');
+    });
+
+    it('falls back to medium for a chat setting it does not know', () => {
+      localStorage.setItem(
+        'describe.v1.prefs',
+        JSON.stringify({ agentEffort: 'max', agentToolBudget: 5, agentReadingBudget: null }),
+      );
+      const settings = useSettingsStore();
+      expect(settings.agentEffort).toBe('medium');
+      expect(settings.agentToolBudget).toBe('medium');
+      expect(settings.agentReadingBudget).toBe('medium');
+    });
+
     it('falls back to Claude for an unknown provider', () => {
       localStorage.setItem(
         'describe.v1.prefs',
@@ -417,6 +457,9 @@ describe('settings store', () => {
       settings.hideTranslationNotice = true;
       settings.followPlayback = false;
       settings.projectModel = 'claude-opus-5-5';
+      settings.agentEffort = 'high';
+      settings.agentToolBudget = 'high';
+      settings.agentReadingBudget = 'low';
 
       settings.resetPrefs();
       expect(settings.languageHint).toBe('auto');
@@ -426,6 +469,9 @@ describe('settings store', () => {
       expect(settings.hideTranslationNotice).toBe(false);
       expect(settings.followPlayback).toBe(true);
       expect(settings.projectModel).toBe('claude-sonnet-5-5');
+      expect(settings.agentEffort).toBe('medium');
+      expect(settings.agentToolBudget).toBe('medium');
+      expect(settings.agentReadingBudget).toBe('medium');
       expect(storedPrefs()).toBeNull();
       expect(localKey('elevenlabs')).toBe('"test-key"');
     });

@@ -10,7 +10,7 @@ import { useRovingListbox } from '../composables/useRovingListbox';
 
 // The project's saved chats (DECISIONS.md D29), yours and colleagues', the last one added to first. Selecting one
 // opens it in the chat pane, in place of a summary. One Tab stop (`useRovingListbox`), as in SessionList. The
-// sidebar's Chats tab shows the count, so the heading is for screen readers only. **New chat** at the top clears the
+// sidebar's Chats tab names the list, so the heading is for screen readers only. **New chat** at the top clears the
 // chat pane, closing a summary or a search, and ProjectView puts focus in its question box.
 const emit = defineEmits<{ new: [] }>();
 const project = useProjectStore();

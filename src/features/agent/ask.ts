@@ -1,6 +1,7 @@
 // One question to the project agent (PROJECTS.md §5.5): what the chat store (Phase 17) calls.
 import type {
   AgentConversation,
+  AgentEffort,
   AgentEvent,
   AgentProvider,
   AgentUsage,
@@ -8,7 +9,7 @@ import type {
 import { parseAnswer, type AnswerBlock } from './answer';
 import type { CorpusReader } from './corpus';
 import { AGENT_INSTRUCTIONS } from './instructions';
-import { AGENT_LIMITS } from './limits';
+import type { AgentBudgetLimits } from './limits';
 import { createAgentTools, createBudget } from './tools';
 
 export interface AskOptions {
@@ -17,6 +18,8 @@ export interface AskOptions {
   context: string; // renderContext(...), made once per conversation
   conversation: AgentConversation | null;
   question: string;
+  effort: AgentEffort;
+  limits: AgentBudgetLimits;
   signal: AbortSignal;
   onEvent(event: AgentEvent): void;
 }
@@ -36,10 +39,11 @@ export async function askProject(opts: AskOptions): Promise<AskResult> {
   const result = await opts.provider.run({
     instructions: AGENT_INSTRUCTIONS,
     context: opts.context,
-    tools: createAgentTools(opts.corpus, createBudget()),
+    tools: createAgentTools(opts.corpus, createBudget(opts.limits)),
     conversation: opts.conversation,
     userMessage: opts.question,
-    maxIterations: AGENT_LIMITS.maxIterations,
+    maxIterations: opts.limits.maxIterations,
+    effort: opts.effort,
     signal: opts.signal,
     onEvent: (event) => {
       if (event.type === 'tool') activity.push(event.activity);
