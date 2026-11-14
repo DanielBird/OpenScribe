@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>DeScribe STT probe</title>
+    <style>
+      body {
+        font:
+          14px/1.5 system-ui,
+          sans-serif;
+        margin: 16px;
+        color: #222;
+        background: #fff;
+      }
+      section {
+        border: 1px solid #ccc;
+        border-radius: 6px;
+        padding: 8px 12px;
+        margin-bottom: 12px;
+      }
+      h2 {
+        font-size: 15px;
+        margin: 4px 0;
+      }
+      pre {
+        background: #f5f5f5;
+        padding: 8px;
+        max-height: 260px;
+        overflow: auto;
+        white-space: pre-wrap;
+      }
+      button {
+        margin: 4px 4px 4px 0;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>DeScribe STT probe (Phase 33)</h1>
+    <section>
+      <h2>1. The page streams the file to Rust (raw request bodies)</h2>
+      <label>Recording <input id="file" type="file" /></label>
+      <button id="upload">Run at 1, 4 and 16 MB per chunk</button>
+      <div id="upload-status" aria-live="polite"></div>
+    </section>
+    <section>
+      <h2>2. Rust gets a path</h2>
+      <button id="dialog">Open dialog</button>
+      <span>or drop a file anywhere on this window.</span>
+      <div id="path-status" aria-live="polite"></div>
+    </section>
+    <section>
+      <h2>3. The temporary copy after a crash</h2>
+      <button id="leftovers">Show leftovers</button>
+      <button id="clean">Clean up</button>
+      <button id="crash">Start an upload and crash</button>
+    </section>
+    <section>
+      <h2>Results</h2>
+      <button id="copy">Copy results</button>
+      <pre id="log"></pre>
+    </section>
+    <script src="probe.js"></script>
+  </body>
+</html>

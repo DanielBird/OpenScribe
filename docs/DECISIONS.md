@@ -918,3 +918,118 @@ summarise them.
 - **Consequences:** no IPC, commands, plugins or permissions, so `capabilities/default.json` still grants nothing. The
   mark's geometry is in `splash.rs` as well as `icons/source.svg`, so a new mark means changing both. The HTML build is
   unchanged.
+
+### D50 — Transcribing on the computer, with NVIDIA models the app downloads (2026-11-14; Phases 33–36)
+- **Decision** (maintainer): the desktop app can transcribe with speaker labels on the computer, as an alternative to
+  ElevenLabs.
+  - The models are NVIDIA's open speech models. They are **optional**: the app stays small, and a colleague who
+    wants local transcription clicks **Download** in Settings.
+  - **The app downloads them itself, from Hugging Face** (about a gigabyte). Rust makes the requests, only when the
+    user asks, only for URLs compiled into the app and pinned to a commit, and it accepts a file only if its size and
+    SHA-256 match. Checked on the work laptop: `curl.exe` downloads model files from Hugging Face there.
+  - With the models downloaded, the user chooses ElevenLabs or the computer. One model writes the words and another
+    labels the speakers; the user sees one thing.
+  - The benchmark is the work laptop: AMD Ryzen 5 PRO 215 with Radeon 740M graphics and 32 GB of RAM, with no NPU.
+    Install size, memory and what the models can do are traded off for that machine.
+  - Speed on that laptop: the target is an hour of audio in 10 minutes, and the floor is 15 minutes, with speaker
+    labels, start to finish.
+  - That laptop can't run benchmarks. They run on the maintainer's PC (an i7-13700K desktop with a dedicated RTX
+    2070 SUPER), held back to behave like it: a CPU-only build using only instructions the laptop has, pinned to six
+    cores and twelve threads, with the clock capped until Cinebench matches the laptop's published scores, and a
+    margin on top. The laptop's own GPU can't be measured, so the first release runs on the CPU only. The real
+    numbers come from the app itself, installed on the laptop from the Store, which may transcribe real recordings
+    there (Phase 36).
+  - About names the models and their licences, and says where they are downloaded from.
+  - The HTML file doesn't transcribe locally. It still opens transcripts that were made locally.
+- **Why:** recordings that mustn't leave the computer, and transcription without an ElevenLabs account or its cost.
+- **Not chosen, for delivering the models:**
+  - **An optional package in the Microsoft Store,** the first plan. Submitting one needs Microsoft's permission, and
+    nothing recent shows an app that isn't a game getting it; the answer could have taken weeks and been no.
+  - **The models as their own Store product:** the Store might not certify an app that only carries content for
+    another, and it would sit in the Start menu as an app.
+  - **A second listing of the whole app with the models inside:** two apps with separate saved data, and two
+    listings to maintain.
+- **Open, for Phase 33 to settle** (a DECISIONS entry of its own then completes this one):
+  - which models (to test first: Parakeet TDT 0.6B v3, CC-BY-4.0, with Nemotron 3 Diarization, OpenMDW-1.1) and
+    which runtime (to test first: NVIDIA's NeMo-Speech.cpp);
+  - whether NVIDIA publishes each file in the form the runtime reads, ungated, or Dtype has to host a copy.
+- **Consequences, already clear:**
+  - Locally there are fewer languages (25 against ElevenLabs' list) and fewer speakers (8 against 32), no glossary
+    for transcription, and it is slower. D2's "no chunking" is about ElevenLabs: local models need long recordings
+    in pieces.
+  - The web view gets its first commands, and one module in `src/` talks to Rust (Phase 34 changes hard rules 1
+    and 4 to say so). The web build still contains no Tauri code.
+  - `TranscriptDoc.request.provider` gains a value. By D38 and D40 that is a shape change: older builds refuse the
+    file. Phase 34's first task widens the reader, and the maintainer decides whether that reaches colleagues ahead
+    of the rest.
+  - **A fourth network host, `huggingface.co`,** and the delivery hosts it redirects to. The web view's CSP and its
+    three hosts don't change, because the page never talks to it. Phase 35 rewords hard rule 2, and Phase 36 adds
+    it to About and to the privacy statement. Hugging Face sees the request and the computer's IP address, and
+    nothing about the user or their recordings.
+  - A network that filters Hugging Face blocks the download. It works on the maintainer's work laptop; a colleague
+    elsewhere gets a message that says so. Installing from files they already have is a possible follow-up.
+  - The download depends on those files staying where they are. A URL pinned to a commit keeps working unless the
+    repository is removed or gated; then the app needs an update with new URLs.
+  - The app ships each model's licence text and credit, and Settings shows them (D36).
+
+### D51 — Local transcription: the models, the engine and the download; a provisional go (2026-11-15; Phase 33)
+- **Decision:** Phase 33's spike gives a **provisional go, at the target** (reference/local-stt.md, *Go/no-go*):
+  an hour of audio in 5.6 minutes (10.8×) and three hours in 16.6 in the emulated laptop's profile, 9.5 minutes an
+  hour throttled, against a target of 10 and a floor of 15. The maintainer judged the transcripts sufficient
+  (2026-11-15) and **agreed to the provisional go** (2026-11-15). It completes D50, and holds until Phase 36's run
+  on the work laptop.
+- **What the app uses:**
+  - **Models:**
+    - words: **Parakeet TDT 0.6B v3** (CC-BY-4.0);
+    - speakers: **Nemotron 3 Diarization** (OpenMDW-1.1);
+    - both NVIDIA's own q8_0 GGUF files from NVIDIA's own Hugging Face repositories, unchanged, ungated, pinned to
+      a commit: 821 MB in all.
+  - **The engine:** NVIDIA's **NeMo-Speech.cpp v0.3.0**, through its C API, built CPU-only with ggml for AVX2, FMA,
+    F16C and BMI2 (no AVX-512, AVX-VNNI, native tuning or GPU), about 7 MB.
+    - It runs **in a worker process** started by the app. The C API has no cancel, no thread setting and no
+      progress, so cancelling means ending the worker (50 ms), which also frees everything. A crash in native code
+      can't take the user's edits with it.
+    - The app checks AVX2 before starting it.
+  - **The work:**
+    - the words in 30-second pieces with 2 s overlap, each piece keeping the words whose middle falls in its own
+      part, on the C API's default of 8 threads;
+    - the speakers over the whole recording through the C API's stream (`diar.h`), pushed in pieces, with the
+      `v3-offline` geometry, on its fixed 4 threads;
+    - both at once. Words and speakers are joined in TypeScript (Phase 34's `mapper.ts`).
+  - **Decoding:** Media Foundation's source reader, to 16 kHz mono, in constant memory (no code to ship or licence).
+  - **The recording reaches Rust as a path**, from Tauri's drag-and-drop or a native Open dialog. Streaming the
+    `File` through IPC fails past about 100 MB (WebView2 retains it).
+  - **The download** (Phase 35):
+    - WinHTTP, with Windows' proxy settings and certificate store;
+    - **no hard revocation check**, since the company network inspects Hugging Face's delivery host with Cisco
+      Umbrella and the revocation status can't be checked there;
+    - accepted on size and SHA-256 only;
+    - resumed with a range where the network honours it (the company network doesn't);
+    - kept in the package's **LocalCache**.
+- **Why:**
+  - **Words:** Nemotron 3.5 ASR was 4–10× slower on a CPU.
+  - **Speakers:** Sortformer v2 was 3× slower for the same labels.
+  - **Long files:** the runtime's own long-file pass (full attention) is 2.5× slower than the caller's pieces.
+  - **The speakers' preset:** the default geometry is 10× slower than `v3-offline`.
+  - **Memory:** the CLI's whole-file diarization grows to 3.3 GB at three hours, while the stream stays at 162 MB.
+- **Limits users see:**
+  - English is tested; Parakeet's card lists 25 European languages.
+  - Up to 8 speakers (two tested).
+  - No length limit up to three hours.
+  - No glossary, and nothing for Setup's number of speakers to set (the C API ignores it).
+  - Ogg Opus files can't be read.
+  - The text is verbatim ("um", repeats), and has no digits.
+- **The emulation as run:**
+  - six P-cores and their hyper-threads (`0xfff0`), capped at 3,375 MHz (*Laptop*) or 1,950 MHz (*Throttled*);
+  - Cinebench R23 matched to the laptop, but 2024 below it: the two benchmarks disagree about this PC by 18 %, so
+    the cap errs on the slow side (a change from "both within 5 %").
+- **Consequences:**
+  - Phases 34–36 are updated to match (their *Phase 33's findings* parts).
+  - **The 4 GB threshold is read as the working set:** committed memory runs about 3× higher (3.4 GB for the words
+    worker, all of it under a 4 GB commit limit).
+  - **If the laptop is slower,** the order to try is: an AVX-512 build, then threads (a C API patch), then a smaller
+    precision (converted and hosted by Dtype, D2), then steering long recordings to ElevenLabs.
+  - **Not settled:** D8's network and sleep interruptions, and the C API's words speed against the CLI's
+    (Phase 34 checks it).
+- **The maintainer's follow-up (2026-11-15):** clean up the verbatim text, removing repeats ("Yeah Yeah") and fillers
+  ("um um"). It is a task in Phase 34's mapper; whether it is on by default is for the maintainer to decide there.

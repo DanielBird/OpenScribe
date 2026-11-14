@@ -1,0 +1,40 @@
+[package]
+name = "describe-stt-probe"
+version = "0.1.0"
+description = "Phase 33 spike: the recording from the page to Rust (Task 5) and the package folders (D7). Not part of the app."
+edition = "2024"
+license = "MIT"
+publish = false
+
+# A workspace of its own, apart from src-tauri's.
+[workspace]
+
+[build-dependencies]
+tauri-build = { version = "2.7.4", features = [] }
+
+[features]
+# Embeds page/ in the exe (what `tauri build` turns on); build with --features custom-protocol.
+custom-protocol = ["tauri/custom-protocol"]
+
+[dependencies]
+tauri = { version = "2.12.5", features = [] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[dependencies.windows]
+version = "0.62.2"
+features = [
+  "ApplicationModel",
+  "Storage",
+  "Storage_Search",
+  "Win32_Foundation",
+  "Win32_Security",
+  "Win32_Storage_FileSystem",
+  "Win32_System_Com",
+  "Win32_System_Diagnostics_ToolHelp",
+  "Win32_System_Memory",
+  "Win32_System_ProcessStatus",
+  "Win32_System_Threading",
+  "Win32_UI_Shell",
+  "Win32_UI_Shell_Common",
+]

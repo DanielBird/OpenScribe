@@ -33,6 +33,12 @@ export default withVueTs(
     // Local agent and design tooling (gitignored); ESLint doesn't read .gitignore.
     '.claude/**',
     '.impeccable/**',
+    // Phase 33's spike: model files, the runtime's source, builds and results (gitignored).
+    'scripts/spikes/local-stt/models/**',
+    'scripts/spikes/local-stt/vendor/**',
+    'scripts/spikes/local-stt/out/**',
+    'scripts/spikes/local-stt/**/target/**',
+    'scripts/spikes/local-stt/ipc-probe/gen/**',
   ]),
   pluginVue.configs['flat/recommended'],
   vueTsConfigs.recommended,

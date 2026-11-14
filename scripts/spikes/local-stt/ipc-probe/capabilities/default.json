@@ -1,0 +1,6 @@
+{
+  "identifier": "default",
+  "description": "The probe's page listens for Tauri's drag-and-drop event; its own commands are allowed by default.",
+  "windows": ["main"],
+  "permissions": ["core:default"]
+}
