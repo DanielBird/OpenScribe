@@ -26,6 +26,9 @@ speaker misattributions). The user accepts or rejects each suggestion.
 
 ## F2 — More transcription providers
 
+*A local provider for the desktop app is planned as Phases 33–36 (DECISIONS D50). It adds the provider id and the
+provider choice on Setup that the steps below describe.*
+
 **Hooks:** the `TranscriptionProvider` interface, the `NormalizedTranscription` tokens, provider-agnostic
 segmentation (T3), and `getTranscriptionProvider()`.
 

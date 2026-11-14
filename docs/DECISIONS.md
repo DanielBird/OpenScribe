@@ -918,3 +918,56 @@ summarise them.
 - **Consequences:** no IPC, commands, plugins or permissions, so `capabilities/default.json` still grants nothing. The
   mark's geometry is in `splash.rs` as well as `icons/source.svg`, so a new mark means changing both. The HTML build is
   unchanged.
+
+### D50 — Transcribing on the computer, with NVIDIA models the app downloads (2026-11-14; Phases 33–36)
+- **Decision** (maintainer): the desktop app can transcribe with speaker labels on the computer, as an alternative to
+  ElevenLabs.
+  - The models are NVIDIA's open speech models. They are **optional**: the app stays small, and a colleague who
+    wants local transcription clicks **Download** in Settings.
+  - **The app downloads them itself, from Hugging Face** (about a gigabyte). Rust makes the requests, only when the
+    user asks, only for URLs compiled into the app and pinned to a commit, and it accepts a file only if its size and
+    SHA-256 match. Checked on the work laptop: `curl.exe` downloads model files from Hugging Face there.
+  - With the models downloaded, the user chooses ElevenLabs or the computer. One model writes the words and another
+    labels the speakers; the user sees one thing.
+  - The benchmark is the work laptop: AMD Ryzen 5 PRO 215 with Radeon 740M graphics and 32 GB of RAM, with no NPU.
+    Install size, memory and what the models can do are traded off for that machine.
+  - Speed on that laptop: the target is an hour of audio in 10 minutes, and the floor is 15 minutes, with speaker
+    labels, start to finish.
+  - That laptop can't run benchmarks. They run on the maintainer's PC (an i7-13700K desktop with a dedicated RTX
+    2070 SUPER), held back to behave like it: a CPU-only build using only instructions the laptop has, pinned to six
+    cores and twelve threads, with the clock capped until Cinebench matches the laptop's published scores, and a
+    margin on top. The laptop's own GPU can't be measured, so the first release runs on the CPU only. The real
+    numbers come from the app itself, installed on the laptop from the Store, which may transcribe real recordings
+    there (Phase 36).
+  - About names the models and their licences, and says where they are downloaded from.
+  - The HTML file doesn't transcribe locally. It still opens transcripts that were made locally.
+- **Why:** recordings that mustn't leave the computer, and transcription without an ElevenLabs account or its cost.
+- **Not chosen, for delivering the models:**
+  - **An optional package in the Microsoft Store,** the first plan. Submitting one needs Microsoft's permission, and
+    nothing recent shows an app that isn't a game getting it; the answer could have taken weeks and been no.
+  - **The models as their own Store product:** the Store might not certify an app that only carries content for
+    another, and it would sit in the Start menu as an app.
+  - **A second listing of the whole app with the models inside:** two apps with separate saved data, and two
+    listings to maintain.
+- **Open, for Phase 33 to settle** (a DECISIONS entry of its own then completes this one):
+  - which models (to test first: Parakeet TDT 0.6B v3, CC-BY-4.0, with Nemotron 3 Diarization, OpenMDW-1.1) and
+    which runtime (to test first: NVIDIA's NeMo-Speech.cpp);
+  - whether NVIDIA publishes each file in the form the runtime reads, ungated, or Dtype has to host a copy.
+- **Consequences, already clear:**
+  - Locally there are fewer languages (25 against ElevenLabs' list) and fewer speakers (8 against 32), no glossary
+    for transcription, and it is slower. D2's "no chunking" is about ElevenLabs: local models need long recordings
+    in pieces.
+  - The web view gets its first commands, and one module in `src/` talks to Rust (Phase 34 changes hard rules 1
+    and 4 to say so). The web build still contains no Tauri code.
+  - `TranscriptDoc.request.provider` gains a value. By D38 and D40 that is a shape change: older builds refuse the
+    file. Phase 34's first task widens the reader, and the maintainer decides whether that reaches colleagues ahead
+    of the rest.
+  - **A fourth network host, `huggingface.co`,** and the delivery hosts it redirects to. The web view's CSP and its
+    three hosts don't change, because the page never talks to it. Phase 35 rewords hard rule 2, and Phase 36 adds
+    it to About and to the privacy statement. Hugging Face sees the request and the computer's IP address, and
+    nothing about the user or their recordings.
+  - A network that filters Hugging Face blocks the download. It works on the maintainer's work laptop; a colleague
+    elsewhere gets a message that says so. Installing from files they already have is a possible follow-up.
+  - The download depends on those files staying where they are. A URL pinned to a commit keeps working unless the
+    repository is removed or gated; then the app needs an update with new URLs.
+  - The app ships each model's licence text and credit, and Settings shows them (D36).
