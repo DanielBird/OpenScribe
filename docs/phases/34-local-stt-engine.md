@@ -361,8 +361,9 @@ built). The checks are in reference/desktop.md (E1–E9) and reference/local-stt
 - **The *Laptop* profile (E6):** an hour in 328.3 s and three hours in 972.6 s, against the harness's 334.1 s and
   998.2 s, with word times holding at the end. Phase 33's two emulation schemes had been removed, so
   `setup-emulation.ps1` made them again with the calibrated caps; their GUIDs changed.
+- **The Windows App Certification Kit** on `release/DeScribe-v1.2.0-x64.msix`, with the engine: **passed** (the
+  maintainer, 2026-11-15).
 - **Open:**
-  - **The Windows App Certification Kit** on `release/DeScribe-v1.2.0-x64.msix`, as administrator.
   - **By hand:** Translate on Output with a local transcript, and Rust's connections during a run. Passed by the
     maintainer: rename, edit, a real drop (on the zone, and ignored elsewhere), the close dialog during a run.
   - **Add to project translated an English local transcript** before summarising (the maintainer): see *For Phase 36*.

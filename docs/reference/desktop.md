@@ -249,6 +249,7 @@ DECISIONS.md D50, D51, D53; the engine and models in [local-stt.md](local-stt.md
 
 - **The engine pref:** until Phase 36 there is no UI. In DevTools, set `localStorage['describe.v1.prefs']` to include
   `"transcriptionEngine": "local"` and reload. `"localTextCleanUp": false` keeps the text verbatim.
+- **The certification kit:** `release/DeScribe-v1.2.0-x64.msix` with the engine **passed** (the maintainer, 2026-11-15).
 - **Size:** the MSIX is **5.3 MB** with the engine (version 1.2.0, 2026-11-15), against 3.0 MB without. The engine's
   DLLs are 6.7 MB uncompressed.
 

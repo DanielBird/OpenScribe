@@ -359,7 +359,7 @@ MVP = Phases 0–5. Each phase is sized for one agent session (or a few) and end
 | 31 | [Choose the project in Add to project](phases/31-choose-project.md) | 14, 15 | 23, 25 | ☑ Done (manual row 22 open) |
 | 32 | [Launch splash and hidden start](phases/32-launch-splash.md) | 24 | 23, 25 | ☑ Done (manual check W16 open) |
 | 33 | [Spike: local speech models, and downloading them](phases/33-local-stt-spike.md) | 24 | 23, 25 | ☑ Done: provisional go at the target (D51); D8's network and sleep steps open, and the real check on the work laptop is Phase 36's |
-| 34 | [Local transcription engine](phases/34-local-stt-engine.md) | 33 | – | ◐ Built and timed; the certification kit open |
+| 34 | [Local transcription engine](phases/34-local-stt-engine.md) | 33 | – | ☑ Done (Translate on Output with a local transcript by hand, and a local transcript's language for Phase 36, open) |
 | 35 | [The speech pack: downloading the models](phases/35-speech-pack.md) | 33, 34 | – | ☐ Not started |
 | 36 | [Transcribe on this computer: the choice, progress and About](phases/36-local-stt-ui.md) | 34, 35 | – | ☐ Not started |
 
