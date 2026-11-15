@@ -19,6 +19,15 @@ const NO_ZOD_SUBPATHS = { group: ['zod/*'], message: ZOD_MESSAGE };
 const FOLDER_ACCESS = 'Use src/storage/folder.ts (AGENTS.md rule 4).';
 const NO_FOLDER_PICKER = { name: 'showDirectoryPicker', message: FOLDER_ACCESS };
 
+// Only src/desktop/ipc.ts talks to the desktop app's Rust side (AGENTS.md rule 4, DECISIONS.md D53): it alone imports
+// @tauri-apps/api and touches WebView2's chrome.webview. Every no-restricted-imports block repeats the pattern.
+const DESKTOP_IPC = 'Use src/desktop/ipc.ts (AGENTS.md rule 4).';
+const NO_TAURI = { group: ['@tauri-apps/*'], message: DESKTOP_IPC };
+const NO_TAURI_GLOBALS = ['__TAURI__', '__TAURI_INTERNALS__', 'chrome'].map((name) => ({
+  name,
+  message: DESKTOP_IPC,
+}));
+
 export default withVueTs(
   globalIgnores([
     'dist/**',
@@ -30,6 +39,9 @@ export default withVueTs(
     'dist-desktop/**',
     'src-tauri/target/**',
     'src-tauri/gen/**',
+    'src-tauri/stt-runtime/**',
+    '.speech-pack/**',
+    '.stt-runtime-build/**',
     // Local agent and design tooling (gitignored); ESLint doesn't read .gitignore.
     '.claude/**',
     '.impeccable/**',
@@ -60,7 +72,10 @@ export default withVueTs(
     files: ['src/**/*.ts', 'src/**/*.vue'],
     ignores: ['src/lib/zod.ts'],
     rules: {
-      'no-restricted-imports': ['error', { paths: [NO_DIRECT_ZOD], patterns: [NO_ZOD_SUBPATHS] }],
+      'no-restricted-imports': [
+        'error',
+        { paths: [NO_DIRECT_ZOD], patterns: [NO_ZOD_SUBPATHS, NO_TAURI] },
+      ],
     },
   },
   {
@@ -86,6 +101,7 @@ export default withVueTs(
               message: `src/domain is pure TypeScript. ${LAYERING}`,
             },
             NO_ZOD_SUBPATHS,
+            NO_TAURI,
           ],
         },
       ],
@@ -100,12 +116,18 @@ export default withVueTs(
         'fetch',
         'XMLHttpRequest',
         NO_FOLDER_PICKER,
+        ...NO_TAURI_GLOBALS,
       ],
     },
   },
   {
     name: 'describe/layering-providers-features-media',
-    files: ['src/providers/**/*.ts', 'src/features/**/*.ts', 'src/media/**/*.ts'],
+    files: [
+      'src/providers/**/*.ts',
+      'src/features/**/*.ts',
+      'src/media/**/*.ts',
+      'src/desktop/**/*.ts',
+    ],
     rules: {
       'no-restricted-imports': [
         'error',
@@ -117,6 +139,7 @@ export default withVueTs(
               message: LAYERING,
             },
             NO_ZOD_SUBPATHS,
+            NO_TAURI,
           ],
         },
       ],
@@ -133,6 +156,7 @@ export default withVueTs(
           patterns: [
             { group: ['**/ui/**', '*.vue'], message: `Stores don't import the UI. ${LAYERING}` },
             NO_ZOD_SUBPATHS,
+            NO_TAURI,
           ],
         },
       ],
@@ -144,12 +168,33 @@ export default withVueTs(
     files: ['src/**/*.ts', 'src/**/*.vue'],
     ignores: ['src/domain/**', 'src/storage/folder.ts', 'src/storage/folder.spec.ts'],
     rules: {
-      'no-restricted-globals': ['error', NO_FOLDER_PICKER],
+      'no-restricted-globals': ['error', NO_FOLDER_PICKER, ...NO_TAURI_GLOBALS],
       'no-restricted-properties': [
         'error',
         { object: 'window', property: 'showDirectoryPicker', message: FOLDER_ACCESS },
         { object: 'globalThis', property: 'showDirectoryPicker', message: FOLDER_ACCESS },
       ],
+    },
+  },
+  {
+    // The one module that may: the blocks above restrict @tauri-apps/* for every other file.
+    name: 'describe/desktop-ipc',
+    files: ['src/desktop/ipc.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [...NO_VUE_OR_PINIA, NO_DIRECT_ZOD],
+          patterns: [
+            {
+              group: ['@vue/*', '**/stores/**', '**/storage/**', '**/ui/**', '*.vue'],
+              message: LAYERING,
+            },
+            NO_ZOD_SUBPATHS,
+          ],
+        },
+      ],
+      'no-restricted-globals': ['error', NO_FOLDER_PICKER],
     },
   },
   {

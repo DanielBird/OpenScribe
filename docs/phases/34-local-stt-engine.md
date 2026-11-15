@@ -337,3 +337,45 @@ export interface LocalSttBridge {
 
 **Phase 33 (2026-11-15):** updated this file with *Phase 33's findings* above, which
 override the tasks where they differ (DECISIONS.md D51). Nothing in this phase has been built.
+
+**Phase 34 (2026-11-15).** Built on `phase-34-local-stt-engine`. DECISIONS D52 (the reader) and D53 (the engine as
+built). The checks are in reference/desktop.md (E1–E9) and reference/local-stt.md (*As built*).
+- **Decided with the maintainer:**
+  - the wider reader lands as its own commit, with no release of its own (the app isn't in use yet);
+  - the clean-up is on by default;
+  - the WebView2 route for the recording was probed first.
+- **Different from this file:**
+  - **The recording comes from Rust, which hands the page a real File.** The page-to-Rust route fails (D53).
+    FileDrop in the desktop build uses Windows' Open dialog and Tauri's native drop. Playback and ElevenLabs uploads
+    are unchanged.
+  - **The worker is `describe.exe --stt-worker`,** not a second exe. Both models run in one worker.
+  - **`src/desktop/ipc.ts` is the one module that imports `@tauri-apps/api`,** not `bridge.ts`, because the close
+    guard needs it too.
+  - **`supports` gained `numSpeakers`,** and `TranscriptionInput` gained `cleanUp`.
+  - **The limits and languages come from `pack.json` at build time;** `stt_status` reports the same pack.
+  - **No temporary files exist,** so decision 4's clean-up and its Rust test don't arise.
+  - **The last local run's timings** are under their own key, `describe.v1.lastLocalRun`. **Clear saved data**
+    clears them.
+  - **Task 1's "header and session list":** neither names the engine, so only the export changed.
+- **Sizes:** the MSIX is 5.3 MB (from 3.0 MB); the engine's DLLs are 6.7 MB.
+- **The *Laptop* profile (E6):** an hour in 328.3 s and three hours in 972.6 s, against the harness's 334.1 s and
+  998.2 s, with word times holding at the end. Phase 33's two emulation schemes had been removed, so
+  `setup-emulation.ps1` made them again with the calibrated caps; their GUIDs changed.
+- **The Windows App Certification Kit** on `release/DeScribe-v1.2.0-x64.msix`, with the engine: **passed** (the
+  maintainer, 2026-11-15).
+- **Open:**
+  - **By hand:** Translate on Output with a local transcript, and Rust's connections during a run. Passed by the
+    maintainer: rename, edit, a real drop (on the zone, and ignored elsewhere), the close dialog during a run.
+  - **Add to project translated an English local transcript** before summarising (the maintainer): see *For Phase 36*.
+  - The smoothing's agreement on the Andrew recording.
+- **For Phase 35:**
+  - The pack folder is `<root>/<pack id>/` with `receipt.json` (`stt/pack.rs`). Add LocalCache as the root, and the
+    `downloading` state.
+  - The close guard (`set_close_guard`) can hold a download open too.
+  - `stt_status` hashes 821 MB the first time (about a second here).
+- **For Phase 36:**
+  - **Parakeet reports no language.** With Auto-detect a local transcript's language is '', so Translate is offered
+    and Add to project translates even English. Decide, for example by asking for a language with This computer.
+  - Whether the clean-up ran isn't recorded in the doc.
+  - `job.localProgress` and `job.lastLocalRun` are ready for Setup, Output and Settings.
+  - FileDrop's desktop drop highlights the zone whenever a file is over the window.

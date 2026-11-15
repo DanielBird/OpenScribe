@@ -20,12 +20,12 @@ The same source also builds a **Windows desktop app** (Tauri 2, packed as MSIX f
 | UI | Vue 3, Composition API, `<script setup lang="ts">` single-file components |
 | Language | TypeScript 6.0 (`~6.0`; `typescript-eslint` does not support 6.1+/7 yet), `strict: true`. Node ≥ 22.12. |
 | Build | Vite + `vite-plugin-singlefile` → `dist/describe.html` |
-| Desktop | Tauri 2 (`src-tauri/`, WebView2) embedding `vite build --mode desktop` → `dist-desktop/`; MSIX via Microsoft's `winapp` CLI. `__DESKTOP__` is the only switch in `src/`. |
+| Desktop | Tauri 2 (`src-tauri/`, WebView2) embedding `vite build --mode desktop` → `dist-desktop/`; MSIX via Microsoft's `winapp` CLI. `__DESKTOP__` is the only switch in `src/`. Transcription on the computer (D50, D53): NVIDIA's NeMo-Speech.cpp in a worker process (`src-tauri/src/stt/`). |
 | State | Pinia |
 | Styling | Plain scoped CSS + design tokens in `src/ui/styles/tokens.css`. No UI kit, no CSS framework. |
 | Unit / component tests | Vitest + `@vue/test-utils` + `happy-dom` (+ `fake-indexeddb` where needed) |
 | E2E tests | Playwright, run against the **built** `dist/describe.html` over `file://`, with API calls mocked by `page.route()` |
-| Runtime deps (allowed) | `vue`, `pinia`, `zod`, `idb-keyval`, `docx`, `@anthropic-ai/sdk`, `@google/genai` |
+| Runtime deps (allowed) | `vue`, `pinia`, `zod`, `idb-keyval`, `docx`, `@anthropic-ai/sdk`, `@google/genai`; in the desktop build only, `@tauri-apps/api` (D53) |
 
 Adding any other runtime dependency requires a one-line entry in [docs/DECISIONS.md](docs/DECISIONS.md)
 explaining why. Dev dependencies are fine when needed.
@@ -48,15 +48,20 @@ explaining why. Dev dependencies are fine when needed.
 | `npm run desktop:dev` | The desktop window on the Vite dev server in desktop mode, with hot reload |
 | `npm run build:desktop` | `vue-tsc -b && vite build --mode desktop` → `dist-desktop/` (Tauri's `beforeBuildCommand`) |
 | `npm run desktop:build` | `tauri build --no-bundle` → `src-tauri/target/release/describe.exe` |
-| `npm run desktop:pack` | The release exe as an unsigned x64 MSIX in `release/`, for the Store; `-- --sign` signs it for this PC |
+| `npm run desktop:pack` | The release exe and the speech engine's DLLs as an unsigned x64 MSIX in `release/`, for the Store; `-- --sign` signs it for this PC |
+| `npm run desktop:stt-runtime` | Builds the speech engine (NeMo-Speech.cpp, `src-tauri/stt-runtime.json`) into `src-tauri/stt-runtime/` (gitignored); `-- -From <bin>` copies an existing build |
+| `npm run desktop:fetch-models` | Puts the speech models `src-tauri/speech-pack/pack.json` lists into `.speech-pack/` (gitignored) for debug builds; `-- --from <folder>` copies verified files |
+| `npm run desktop:test` | `cargo test` for `src-tauri/` |
 
 ## Hard rules
 
 1. **Single file.** The web build (`npm run build`) must emit exactly one HTML file with all JS/CSS inlined. No
    code-split chunks, no separately loaded workers (use `?worker&inline` if a worker is ever needed), no fonts,
    images or icons from the network (inline SVG only). `npm run verify:single-file` must pass, and it fails on any
-   Tauri code in the web build. The desktop build (`dist-desktop/`) is a normal multi-file build; nothing in `src/`
-   imports Tauri.
+   Tauri code in the web build. The desktop build (`dist-desktop/`) is a normal multi-file build. Only
+   `src/desktop/ipc.ts` imports Tauri (rule 4), and everything that reaches it sits behind `__DESKTOP__`. A module only
+   the desktop build uses does no work at import (no top-level zod schemas or parsing: make them when first used), so
+   the web build can leave it out.
 2. **Allowed network hosts only:** `https://api.elevenlabs.io`, `https://api.anthropic.com`,
    `https://generativelanguage.googleapis.com`. These are enforced by the CSP injected at build time, and in the
    desktop app by the CSP in `src-tauri/tauri.conf.json`. Adding a host means updating the CSP (`API_HOSTS` in
@@ -69,12 +74,18 @@ explaining why. Dev dependencies are fine when needed.
    - `src/providers/**` implements the interfaces in `providers/*/types.ts` and never imports Vue or stores.
    - `src/features/**` (translation, export) may use domain + provider interfaces, never Vue or stores.
    - `src/media/**` (browser media helpers such as `probeDuration`) never imports Vue, stores or UI.
+   - `src/desktop/**` (the desktop app's Rust side: the recording handed over, the close guard) never imports Vue,
+     stores, storage or UI. `src/desktop/ipc.ts` is the only code that imports `@tauri-apps/api` or touches
+     WebView2's `chrome.webview` (D53).
    - Stores (`src/stores/**`) orchestrate providers, features, media and storage, and never import from `src/ui/`.
      Components talk to stores. Only stores use `src/storage/`.
    - `src/storage/folder.ts` is the only code that calls the File System Access API (`showDirectoryPicker` and
      the handles it returns).
    - ESLint enforces the import side of these rules (`no-restricted-imports` in `eslint.config.js`), and
-     `no-restricted-globals` / `no-restricted-properties` keep `showDirectoryPicker` in `folder.ts`.
+     `no-restricted-globals` / `no-restricted-properties` keep `showDirectoryPicker` in `folder.ts` and Tauri's
+     globals in `ipc.ts`.
+   - The desktop app's commands are listed in `src-tauri/build.rs` (`AppManifest::commands`), so each needs a
+     permission, and `src-tauri/capabilities/default.json` grants exactly those, nothing from Tauri's plugins.
 5. **One canonical model.** UI, export and translation consume `TranscriptDoc` from `src/domain/transcript.ts`.
    Provider-specific response shapes never leave their provider folder.
 6. **TypeScript.** No `any` (use `unknown` + narrowing or zod). No `@ts-ignore`; a justified
@@ -96,6 +107,7 @@ explaining why. Dev dependencies are fine when needed.
 - [ ] `npm run typecheck`, `npm run lint`, `npm test` pass
 - [ ] `npm run build && npm run verify:single-file` pass
 - [ ] `npm run test:e2e` passes (all existing specs, plus the new ones the phase requires)
+- [ ] `npm run desktop:test` (`cargo test`) passes
 - [ ] Every acceptance criterion in the phase file is met
 - [ ] New UI reviewed against D13: no repeated wording, detail only when needed
 - [ ] Status updated in the table in `docs/ROADMAP.md`; new API findings written to `docs/reference/*`

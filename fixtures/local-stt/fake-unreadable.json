@@ -1,0 +1,7 @@
+{
+  "durationSec": 5.0,
+  "failure": {
+    "kind": "unreadable",
+    "detail": "opening the file (MFCreateSourceReaderFromURL) failed: 0xC00D36C4 The byte stream type of the given URL is unsupported."
+  }
+}

@@ -2,6 +2,8 @@ import { createPinia, setActivePinia } from 'pinia';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { setTranscriptionProviderForTests } from '../providers/index';
 import { createElevenLabsProvider } from '../providers/transcription/elevenlabs/provider';
+import type { LocalSttBridge } from '../providers/transcription/local/bridge';
+import { createLocalProvider } from '../providers/transcription/local/provider';
 import type { KeyCheckResult } from '../providers/transcription/types';
 import { useSettingsStore } from './settings';
 
@@ -667,6 +669,62 @@ describe('settings store', () => {
       const settings = await readyStore();
       settings.numSpeakers = n;
       expect(settings.isReady).toBe(true);
+    });
+  });
+
+  describe('the engine (DECISIONS.md D53)', () => {
+    const unusedBridge: LocalSttBridge = {
+      status: () => Promise.reject(new Error('unused')),
+      transcribe: () => Promise.reject(new Error('unused')),
+    };
+
+    beforeEach(() => setTranscriptionProviderForTests(createLocalProvider(unusedBridge), 'local'));
+    afterEach(() => {
+      setTranscriptionProviderForTests(null, 'local');
+      vi.unstubAllGlobals();
+    });
+
+    it('is ElevenLabs in the web build, whatever the saved pref says', () => {
+      localStorage.setItem('describe.v1.prefs', JSON.stringify({ transcriptionEngine: 'local' }));
+      expect(useSettingsStore().transcriptionEngine).toBe('elevenlabs');
+    });
+
+    it('reads the pref in the desktop app, and falls back to ElevenLabs for a value it does not know', () => {
+      vi.stubGlobal('__DESKTOP__', true);
+      localStorage.setItem('describe.v1.prefs', JSON.stringify({ transcriptionEngine: 'local' }));
+      expect(useSettingsStore().transcriptionEngine).toBe('local');
+      setActivePinia(createPinia());
+      localStorage.setItem('describe.v1.prefs', JSON.stringify({ transcriptionEngine: 'mars' }));
+      expect(useSettingsStore().transcriptionEngine).toBe('elevenlabs');
+    });
+
+    it('needs no ElevenLabs key on this computer', async () => {
+      const settings = await readyStore();
+      settings.elevenLabsKey = '';
+      settings.transcriptionEngine = 'local';
+      expect(settings.keyRequired).toBe(false);
+      expect(settings.missingRequirements).toEqual([]);
+      settings.transcriptionEngine = 'elevenlabs';
+      expect(settings.missingRequirements).toEqual(['Add your ElevenLabs API key in Settings.']);
+    });
+
+    it('takes the pack’s languages and limits on this computer', () => {
+      const settings = useSettingsStore();
+      settings.transcriptionEngine = 'local';
+      expect(settings.languages).toHaveLength(25);
+      expect(settings.languages.map((l) => l.code)).toContain('uk');
+      settings.file = new File(['x'], 'long.m4a', { type: 'audio/mp4' });
+      settings.fileDurationSec = 11 * 3600; // past ElevenLabs' 10 hours
+      expect(settings.fileCheck?.ok).toBe(true);
+      settings.transcriptionEngine = 'elevenlabs';
+      expect(settings.fileCheck?.ok).toBe(false);
+    });
+
+    it('cleans up local transcripts unless told not to', () => {
+      expect(useSettingsStore().localTextCleanUp).toBe(true);
+      setActivePinia(createPinia());
+      localStorage.setItem('describe.v1.prefs', JSON.stringify({ localTextCleanUp: false }));
+      expect(useSettingsStore().localTextCleanUp).toBe(false);
     });
   });
 });

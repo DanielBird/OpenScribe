@@ -20,7 +20,7 @@ const ids = {
 
 const optionsOpen = ref(false);
 // The keys are on Settings (D27); Setup only points there while the required one is missing.
-const keyMissing = computed(() => settings.elevenLabsKey.trim() === '');
+const keyMissing = computed(() => settings.keyRequired && settings.elevenLabsKey.trim() === '');
 
 const languages = [{ code: 'auto', label: 'Auto-detect' }, ...settings.languages];
 

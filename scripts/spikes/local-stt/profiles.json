@@ -20,7 +20,6 @@
       "scheme": "DeScribe laptop emulation",
       "targetCinebench2024Multi": 557,
       "targetCinebenchR23Multi": 10036,
-      "schemeGuid": "9589d08a-f1fa-4ac5-a58b-054c7b850953",
       "calibratedAt": "2026-11-15T11:42:32.4921012+01:00",
       "dryRun": false,
       "policy": "neither benchmark more than 5 % faster than the laptop",
@@ -50,13 +49,13 @@
           "error2024": -0.2812,
           "errorR23": 0.0082
         }
-      ]
+      ],
+      "schemeGuid": "f9653af1-6523-4a95-adae-a5072f3ae83f"
     },
     "throttled": {
       "scheme": "DeScribe laptop emulation (throttled)",
       "targetCinebench2024Multi": 334,
       "targetCinebenchR23Multi": 6022,
-      "schemeGuid": "951023bb-4e1a-473f-bb3a-829e8fe9edd1",
       "calibratedAt": "2026-11-15T14:35:14.6295372+01:00",
       "dryRun": false,
       "policy": "neither benchmark more than 5 % faster than the laptop",
@@ -78,7 +77,8 @@
           "error2024": -0.0397,
           "errorR23": -0.0433
         }
-      ]
+      ],
+      "schemeGuid": "c70a135e-c44c-40f7-ac2c-6cb72b3d7662"
     }
   }
 }

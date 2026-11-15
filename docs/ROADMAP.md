@@ -65,17 +65,23 @@ with WebView2, packed as MSIX. The HTML file stays.
 index.html                      Vite entry (CSP injected at build time only)
 vite.config.ts                  a function of mode: vue() + viteSingleFile() + csp plugin + defines; `desktop` mode
                                 drops the single file and the CSP meta and writes dist-desktop/
-src-tauri/                      the desktop app (D35): tauri.conf.json (window, CSP), capabilities/ (none granted),
-                                src/ (a bare Tauri app and its launch splash), icons/ (from source.svg), msix/
-                                (Package.appxmanifest + Assets, for winapp)
+src-tauri/                      the desktop app (D35): tauri.conf.json (window, CSP), capabilities/ (the app's own
+                                commands only), src/ (the app, its launch splash, the close guard), icons/ (from
+                                source.svg), msix/ (Package.appxmanifest + Assets, for winapp)
+  src/stt/                      transcribing on the computer (D50, D51, D53): the recording chosen and handed to the
+                                page, the commands, the speech pack's check, and the worker (`describe.exe
+                                --stt-worker`): Media Foundation decoding, NeMo-Speech.cpp's C API, the 30 s pieces
+  speech-pack/pack.json         the model files this build works with: pinned URLs, sizes, SHA-256, licences
+  stt-runtime.json              the engine's version, commit, build flags and DLLs (built into stt-runtime/)
 src/
   main.ts, App.vue              shell: AppHeader (top row), current view, footer (the Settings link)
   env.d.ts                      types for the build-time defines (__APP_VERSION__, __BUILD_DATE__, __DESKTOP__)
   stores/                       Pinia stores (orchestration; the only place that wires providers ↔ UI)
     nav.ts                      mode (Home · Transcribe · Project · Settings), Transcribe's step + guards
+    desktopRecording.ts         the desktop app's Choose file (Windows' dialog) and native drops (D53)
     settings.ts                 keys (via storage/secrets) + Verify key, prefs, selected File + file check
     glossary.ts                 term list, persisted on every change
-    job.ts                      transcription job state machine
+    job.ts                      transcription job state machine; the last local run's timings
     transcript.ts               current TranscriptDoc (shallowRef), view version, speaker renames, text edits,
                                 autosave; its project link: saving back to the folder with the change check (D25)
     translation.ts              translation job state machine
@@ -90,7 +96,8 @@ src/
     chat.ts                     the project chat: the conversation, its frozen snapshot, streaming (parsed once a
                                 frame), Stop, Try again, New chat, the notices; saving it to chats/, opening a saved
                                 one and resuming it, a copy of a colleague's (D29); /compact (D33)
-    unloadGuard.ts              the "Leave site?" confirmation while a job, translation or pipeline runs (one each)
+    unloadGuard.ts              the "Leave site?" confirmation while a job, translation or pipeline runs (one each);
+                                in the desktop app, closing the window asks first (D53)
   domain/                       PURE TS — no Vue, no DOM, no I/O
     transcript.ts               canonical types + formatTimestamp, formatDateTime, normalizeLanguage, languageName,
                                 defaultSpeakerLabel, cleanTurnText / joinLines (edited turn text), isoDate
@@ -114,6 +121,9 @@ src/
     errors.ts                   ProviderError (kind, status, userMessage, retryable), redactSecret, withoutSecret
     transcription/types.ts      TranscriptionProvider, NormalizedTranscription
     transcription/elevenlabs/   limits.ts, types.ts, request.ts, transport.ts (XHR), mapper.ts, errors.ts, provider.ts
+    transcription/local/        on the computer, desktop only (D53): bridge.ts (the commands, zod schemas), mapper.ts
+                                (words + speaker segments → tokens, the clean-up), limits.ts (from pack.json),
+                                errors.ts, provider.ts
     llm/types.ts                LlmProvider.generateStructured; the agent contract (AgentProvider, AgentTool, …)
     llm/models.ts               selectable models + defaults (one place to update), PROJECT_MODELS (Claude and
                                 Gemini, projectProviderOf, projectModelLabel), GEMINI_THINKING, MODEL_PRICES
@@ -129,6 +139,8 @@ src/
     agent/                      limits.ts, corpus.ts, context.ts, instructions.ts, tools.ts, answer.ts, ask.ts,
                                 compact.ts (the project agent: caps, session cards, tools, checked answers, askProject,
                                 compactChat)
+  desktop/                      the desktop app's Rust side, behind __DESKTOP__ (D53): ipc.ts (the only importer of
+                                @tauri-apps/api), recordings.ts (files handed over by Rust), closeGuard.ts
   lib/
     zod.ts                      the only `zod` import: jitless config for the CSP + re-export (DECISIONS T8)
   media/
@@ -215,6 +227,9 @@ graph TD
    `NormalizedTranscription`.
 4. `buildTranscriptDoc()` segments the tokens into turns and adds source and request metadata, producing a
    `TranscriptDoc`.
+   On the computer (desktop app, D53), the local provider calls `stt_start` with the recording's token instead; Rust
+   runs the worker, which decodes the file and runs both models, and `local/mapper.ts` joins words and speakers into
+   the same tokens.
 5. `transcript` store holds the doc (`shallowRef`) and autosaves it to IndexedDB. `OutputView` renders it.
 6. Optional steps: translation adds `doc.translations.en`, the export builds a `.docx` from the doc, and playback
    seeks an `<audio>` element.
@@ -239,9 +254,11 @@ export interface SourceInfo {
   durationSec: number | null;  // probed in the browser; null if unknown
 }
 
+export type TranscriptionProviderId = 'elevenlabs' | 'local';
+
 export interface TranscriptionRequestInfo {
-  provider: 'elevenlabs';
-  model: string;               // 'scribe_v2'
+  provider: TranscriptionProviderId | (string & {}); // any non-empty string a newer build wrote (D52)
+  model: string;               // 'scribe_v2', or the speech pack's id for 'local'
   languageHint: LanguageHint;
   numSpeakers: number | null;  // null = auto
   zeroRetention: boolean;
@@ -342,7 +359,7 @@ MVP = Phases 0–5. Each phase is sized for one agent session (or a few) and end
 | 31 | [Choose the project in Add to project](phases/31-choose-project.md) | 14, 15 | 23, 25 | ☑ Done (manual row 22 open) |
 | 32 | [Launch splash and hidden start](phases/32-launch-splash.md) | 24 | 23, 25 | ☑ Done (manual check W16 open) |
 | 33 | [Spike: local speech models, and downloading them](phases/33-local-stt-spike.md) | 24 | 23, 25 | ☑ Done: provisional go at the target (D51); D8's network and sleep steps open, and the real check on the work laptop is Phase 36's |
-| 34 | [Local transcription engine](phases/34-local-stt-engine.md) | 33 | – | ☐ Not started |
+| 34 | [Local transcription engine](phases/34-local-stt-engine.md) | 33 | – | ☑ Done (Translate on Output with a local transcript by hand, and a local transcript's language for Phase 36, open) |
 | 35 | [The speech pack: downloading the models](phases/35-speech-pack.md) | 33, 34 | – | ☐ Not started |
 | 36 | [Transcribe on this computer: the choice, progress and About](phases/36-local-stt-ui.md) | 34, 35 | – | ☐ Not started |
 

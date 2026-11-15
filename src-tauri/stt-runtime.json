@@ -1,0 +1,34 @@
+{
+  "note": "The speech engine the desktop app ships (DECISIONS.md D51, D53): NVIDIA's NeMo-Speech.cpp, built CPU-only for the work laptop's instruction sets, as Phase 33 benchmarked it. scripts/build-stt-runtime.ps1 builds it into src-tauri/stt-runtime/ (gitignored); pack-desktop.mjs stages those files beside describe.exe; make-notices.mjs lists them.",
+  "name": "NeMo-Speech.cpp",
+  "version": "0.3.0",
+  "repository": "https://github.com/NVIDIA/NeMo-Speech.cpp",
+  "tag": "v0.3.0",
+  "commit": "20999cc921d2b14aa58708f61756a8b2e787ba20",
+  "llamaCppCommit": "bd4f514db14d87fded667787a7a963bfbaa98e89",
+  "build": "scripts/windows/build.ps1 -Backend cpu -Profile asr -Compiler msvc -Config Release",
+  "cmakeArgs": [
+    "-DGGML_NATIVE=OFF",
+    "-DGGML_SSE42=ON",
+    "-DGGML_AVX=ON",
+    "-DGGML_AVX2=ON",
+    "-DGGML_FMA=ON",
+    "-DGGML_F16C=ON",
+    "-DGGML_BMI2=ON",
+    "-DGGML_AVX_VNNI=OFF",
+    "-DGGML_AVX512=OFF",
+    "-DGGML_CUDA=OFF",
+    "-DGGML_VULKAN=OFF"
+  ],
+  "engineFiles": [
+    "nemo_speech_asr_c.dll",
+    "nemo_speech_asr.dll",
+    "ggml.dll",
+    "ggml-base.dll",
+    "ggml-cpu.dll"
+  ],
+  "msvcRuntime": {
+    "minimumVersion": "14.44",
+    "files": ["msvcp140.dll", "vcruntime140.dll", "vcruntime140_1.dll", "vcomp140.dll"]
+  }
+}

@@ -1,0 +1,415 @@
+//! NVIDIA's NeMo-Speech.cpp v0.3.0 through its C API (`nemo_speech/asr.h`, `diar.h`; DECISIONS.md D51), loaded from
+//! the runtime folder at run time with `LoadLibraryExW`, so nothing links against it and the app starts without it.
+//! Used only in the worker process.
+//!
+//! Settings the C API leaves to the caller, from the NeMo source (the spike drove only `diar.h`):
+//! - `gpu: -1` explicitly: the C++ default is GPU 0. The engine is built without a GPU backend anyway.
+//! - word times and punctuation must be asked for (`recognition_options_default()` is zeroed): without punctuation
+//!   the text comes back lower-case and unpunctuated. As the CLI does (`app/transcribe.cpp`).
+//! - word times are int32 milliseconds; segments are seconds.
+//! - threads can't be set: words use min(8, hardware threads), the diarizer 4 (`ggml_runtime::Params`).
+
+use std::ffi::{CStr, CString, c_char, c_void};
+use std::path::Path;
+
+/// 0 is OK. 2 is out of memory.
+pub type Status = i32;
+pub const STATUS_OUT_OF_MEMORY: Status = 2;
+
+/// A failed call, with the engine's own message.
+#[derive(Debug, Clone)]
+pub struct EngineError {
+  pub status: Status,
+  pub message: String,
+}
+
+impl EngineError {
+  pub fn is_out_of_memory(&self) -> bool {
+    self.status == STATUS_OUT_OF_MEMORY || self.message.to_ascii_lowercase().contains("out of memory")
+  }
+}
+
+impl std::fmt::Display for EngineError {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    write!(f, "{} (status {})", self.message, self.status)
+  }
+}
+
+#[repr(C)]
+struct BackendConfig {
+  size: usize,
+  gpu: i32,
+}
+
+#[repr(C)]
+struct ModelConfig {
+  size: usize,
+  path: *const c_char,
+  name: *const c_char,
+}
+
+#[repr(C)]
+struct RecognizerConfig {
+  size: usize,
+  backend: *const BackendConfig,
+  model: *const ModelConfig,
+  streaming: *const c_void,
+  decoder: *const c_void,
+  vad: *const c_void,
+  endpointing: *const c_void,
+  postproc: *const c_void,
+  diar: *const c_void,
+  batching: *const c_void,
+  salm: *const c_void,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy)]
+struct RecognitionOptions {
+  size: usize,
+  request_id: *const c_char,
+  language_code: *const c_char,
+  interim_results: bool,
+  enable_word_time_offsets: bool,
+  enable_automatic_punctuation: bool,
+  verbatim_transcripts: bool,
+  profanity_filter: bool,
+  stop_history_eou_ms: i32,
+  speech_contexts: *const c_void,
+  speech_context_count: usize,
+  max_alternatives: i32,
+  enable_speaker_diarization: bool,
+  max_speaker_count: i32,
+}
+
+#[repr(C)]
+struct DiarModelConfig {
+  size: usize,
+  model_path: *const c_char,
+  gpu: i32,
+  preset: *const c_char,
+  chunk_frames: i32,
+  right_context_frames: i32,
+  left_context_frames: i32,
+  fifo_frames: i32,
+  spkcache_frames: i32,
+  update_period_frames: i32,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Default)]
+struct DiarSegment {
+  start_time: f64,
+  end_time: f64,
+  speaker: i32,
+}
+
+type Opaque = *mut c_void;
+
+/// The C API's functions, from `nemo_speech_asr_c.dll`.
+#[allow(clippy::type_complexity)]
+pub struct Api {
+  last_error: unsafe extern "C" fn() -> *const c_char,
+  options_default: unsafe extern "C" fn() -> RecognitionOptions,
+  asr_create: unsafe extern "C" fn(*const RecognizerConfig, *mut Opaque) -> Status,
+  asr_destroy: unsafe extern "C" fn(Opaque),
+  recognize: unsafe extern "C" fn(Opaque, *const RecognitionOptions, *const f32, usize, i32, *mut Opaque) -> Status,
+  word_count: unsafe extern "C" fn(Opaque, usize) -> usize,
+  word_text: unsafe extern "C" fn(Opaque, usize, usize) -> *const c_char,
+  word_start: unsafe extern "C" fn(Opaque, usize, usize) -> i32,
+  word_end: unsafe extern "C" fn(Opaque, usize, usize) -> i32,
+  word_confidence: unsafe extern "C" fn(Opaque, usize, usize) -> f32,
+  language_count: unsafe extern "C" fn(Opaque, usize) -> usize,
+  language_code: unsafe extern "C" fn(Opaque, usize, usize) -> *const c_char,
+  result_destroy: unsafe extern "C" fn(Opaque),
+  diar_create: unsafe extern "C" fn(*const DiarModelConfig, *mut Opaque) -> Status,
+  diar_destroy: unsafe extern "C" fn(Opaque),
+  diar_open: unsafe extern "C" fn(Opaque, *mut Opaque) -> Status,
+  diar_push: unsafe extern "C" fn(Opaque, *const f32, usize, i32) -> Status,
+  diar_finish: unsafe extern "C" fn(Opaque) -> Status,
+  diar_close: unsafe extern "C" fn(Opaque),
+  diar_segments: unsafe extern "C" fn(Opaque, *const c_void, *mut DiarSegment, usize, *mut usize) -> Status,
+}
+
+// SAFETY: the functions are plain C entry points; which thread calls them is the C API's business (it keeps its last
+// error per thread, and each recognizer and stream is used from one thread here).
+unsafe impl Send for Api {}
+unsafe impl Sync for Api {}
+
+impl Api {
+  /// Loads `nemo_speech_asr_c.dll` from `dir`, which also holds its dependencies (the ggml libraries, the MSVC and
+  /// OpenMP runtimes): they are found there, then in System32, and nowhere else.
+  #[cfg(windows)]
+  pub fn load(dir: &Path) -> Result<Self, String> {
+    use windows::Win32::System::LibraryLoader::{
+      GetProcAddress, LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR, LOAD_LIBRARY_SEARCH_SYSTEM32, LoadLibraryExW,
+    };
+    use windows::core::{HSTRING, PCSTR};
+    let dll = dir.join("nemo_speech_asr_c.dll");
+    // SAFETY: loading a library and reading its exports; the module is never freed (the worker exits instead).
+    let module = unsafe {
+      LoadLibraryExW(&HSTRING::from(dll.as_os_str()), None, LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR | LOAD_LIBRARY_SEARCH_SYSTEM32)
+    }
+    .map_err(|e| format!("loading the engine (nemo_speech_asr_c.dll): {e}"))?;
+    macro_rules! sym {
+      ($name:literal) => {{
+        // SAFETY: the export's type is the one asr.h / diar.h declare for it.
+        let p = unsafe { GetProcAddress(module, PCSTR(concat!($name, "\0").as_ptr())) }
+          .ok_or(concat!("the engine has no ", $name))?;
+        unsafe { std::mem::transmute::<unsafe extern "system" fn() -> isize, _>(p) }
+      }};
+    }
+    Ok(Self {
+      last_error: sym!("nemo_speech_asr_last_error"),
+      options_default: sym!("nemo_speech_asr_recognition_options_default"),
+      asr_create: sym!("nemo_speech_asr_create"),
+      asr_destroy: sym!("nemo_speech_asr_destroy"),
+      recognize: sym!("nemo_speech_asr_recognize_f32"),
+      word_count: sym!("nemo_speech_asr_result_word_count"),
+      word_text: sym!("nemo_speech_asr_result_word_text"),
+      word_start: sym!("nemo_speech_asr_result_word_start_time"),
+      word_end: sym!("nemo_speech_asr_result_word_end_time"),
+      word_confidence: sym!("nemo_speech_asr_result_word_confidence"),
+      language_count: sym!("nemo_speech_asr_result_language_count"),
+      language_code: sym!("nemo_speech_asr_result_language_code"),
+      result_destroy: sym!("nemo_speech_asr_result_destroy"),
+      diar_create: sym!("nemo_speech_diar_create"),
+      diar_destroy: sym!("nemo_speech_diar_destroy"),
+      diar_open: sym!("nemo_speech_diar_stream_open"),
+      diar_push: sym!("nemo_speech_diar_stream_push_f32"),
+      diar_finish: sym!("nemo_speech_diar_stream_finish"),
+      diar_close: sym!("nemo_speech_diar_stream_close"),
+      diar_segments: sym!("nemo_speech_diar_segments"),
+    })
+  }
+
+  #[cfg(not(windows))]
+  pub fn load(_dir: &Path) -> Result<Self, String> {
+    Err("the engine runs on Windows only".into())
+  }
+
+  fn error(&self, what: &str, status: Status) -> EngineError {
+    // SAFETY: the engine's thread-local message, copied at once.
+    let message = unsafe {
+      let p = (self.last_error)();
+      if p.is_null() { String::new() } else { CStr::from_ptr(p).to_string_lossy().into_owned() }
+    };
+    EngineError { status, message: format!("{what}: {message}") }
+  }
+}
+
+fn c_path(path: &Path) -> Result<CString, EngineError> {
+  CString::new(path.to_string_lossy().into_owned())
+    .map_err(|_| EngineError { status: 1, message: "a model path holds a NUL".into() })
+}
+
+/// One recognised word, in seconds from the start of the audio given.
+#[derive(Debug, Clone, PartialEq)]
+pub struct RawWord {
+  pub text: String,
+  pub start: f64,
+  pub end: f64,
+  pub confidence: f32,
+}
+
+/// The words model, loaded once and used from one thread.
+pub struct Words<'a> {
+  api: &'a Api,
+  handle: Opaque,
+  options: RecognitionOptions,
+  /// Languages the model reported, if any (Parakeet reports none).
+  pub languages: Vec<String>,
+}
+
+impl<'a> Words<'a> {
+  pub fn load(api: &'a Api, model: &Path) -> Result<Self, EngineError> {
+    let path = c_path(model)?;
+    let backend = BackendConfig { size: size_of::<BackendConfig>(), gpu: -1 };
+    let model = ModelConfig { size: size_of::<ModelConfig>(), path: path.as_ptr(), name: std::ptr::null() };
+    let config = RecognizerConfig {
+      size: size_of::<RecognizerConfig>(),
+      backend: &backend,
+      model: &model,
+      streaming: std::ptr::null(),
+      decoder: std::ptr::null(),
+      vad: std::ptr::null(),
+      endpointing: std::ptr::null(),
+      postproc: std::ptr::null(),
+      diar: std::ptr::null(),
+      batching: std::ptr::null(),
+      salm: std::ptr::null(),
+    };
+    // SAFETY: the configs outlive the call; the options are a plain struct the engine fills.
+    let mut options = unsafe { (api.options_default)() };
+    if options.size != size_of::<RecognitionOptions>() {
+      return Err(EngineError {
+        status: 1,
+        message: format!("the engine's options are {} bytes, this build expects {}", options.size, size_of::<RecognitionOptions>()),
+      });
+    }
+    options.enable_word_time_offsets = true;
+    options.enable_automatic_punctuation = true;
+    options.verbatim_transcripts = false;
+    let mut handle: Opaque = std::ptr::null_mut();
+    // SAFETY: as above.
+    let status = unsafe { (api.asr_create)(&config, &mut handle) };
+    if status != 0 || handle.is_null() {
+      return Err(api.error("loading the words model", status));
+    }
+    Ok(Self { api, handle, options, languages: Vec::new() })
+  }
+
+  /// Recognises one piece of mono audio at `rate` samples a second. Times are seconds from the piece's start.
+  pub fn recognize(&mut self, samples: &[f32], rate: u32) -> Result<Vec<RawWord>, EngineError> {
+    if samples.is_empty() {
+      return Ok(Vec::new());
+    }
+    let api = self.api;
+    let mut result: Opaque = std::ptr::null_mut();
+    // SAFETY: the samples and options outlive the call; the result is read, then destroyed.
+    unsafe {
+      let status = (api.recognize)(self.handle, &self.options, samples.as_ptr(), samples.len(), rate as i32, &mut result);
+      if status != 0 || result.is_null() {
+        return Err(api.error("recognising words", status));
+      }
+      let count = (api.word_count)(result, 0);
+      let mut words = Vec::with_capacity(count);
+      for i in 0..count {
+        let text = (api.word_text)(result, 0, i);
+        let text = if text.is_null() { String::new() } else { CStr::from_ptr(text).to_string_lossy().into_owned() };
+        words.push(RawWord {
+          text,
+          start: (api.word_start)(result, 0, i) as f64 / 1000.0,
+          end: (api.word_end)(result, 0, i) as f64 / 1000.0,
+          confidence: (api.word_confidence)(result, 0, i),
+        });
+      }
+      for i in 0..(api.language_count)(result, 0) {
+        let code = (api.language_code)(result, 0, i);
+        if !code.is_null() {
+          let code = CStr::from_ptr(code).to_string_lossy().into_owned();
+          if !code.is_empty() && !self.languages.contains(&code) {
+            self.languages.push(code);
+          }
+        }
+      }
+      (api.result_destroy)(result);
+      Ok(words)
+    }
+  }
+}
+
+impl Drop for Words<'_> {
+  fn drop(&mut self) {
+    // SAFETY: created by asr_create, destroyed once.
+    unsafe { (self.api.asr_destroy)(self.handle) }
+  }
+}
+
+/// One speaker segment, in seconds; `speaker` from 0.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct RawSegment {
+  pub speaker: u32,
+  pub start: f64,
+  pub end: f64,
+}
+
+/// The speakers model and one stream over the whole recording, used from one thread.
+pub struct Speakers<'a> {
+  api: &'a Api,
+  model: Opaque,
+  stream: Opaque,
+}
+
+impl<'a> Speakers<'a> {
+  /// Loads the model with the `v3-offline` geometry (10× faster on a file than the default) and opens a stream.
+  pub fn load(api: &'a Api, model: &Path) -> Result<Self, EngineError> {
+    let path = c_path(model)?;
+    let preset = CString::new("v3-offline").unwrap_or_default();
+    let config = DiarModelConfig {
+      size: size_of::<DiarModelConfig>(),
+      model_path: path.as_ptr(),
+      gpu: -1,
+      preset: preset.as_ptr(),
+      chunk_frames: 0,
+      right_context_frames: 0,
+      left_context_frames: -1,
+      fifo_frames: 0,
+      spkcache_frames: 0,
+      update_period_frames: 0,
+    };
+    let mut handle: Opaque = std::ptr::null_mut();
+    // SAFETY: the config outlives the call.
+    let status = unsafe { (api.diar_create)(&config, &mut handle) };
+    if status != 0 || handle.is_null() {
+      return Err(api.error("loading the speakers model", status));
+    }
+    let mut stream: Opaque = std::ptr::null_mut();
+    // SAFETY: the model outlives the stream (Drop closes the stream first).
+    let status = unsafe { (api.diar_open)(handle, &mut stream) };
+    if status != 0 || stream.is_null() {
+      // SAFETY: destroyed once, here, since Self is never built.
+      unsafe { (api.diar_destroy)(handle) };
+      return Err(api.error("opening the speakers stream", status));
+    }
+    Ok(Self { api, model: handle, stream })
+  }
+
+  pub fn push(&mut self, samples: &[f32], rate: u32) -> Result<(), EngineError> {
+    // SAFETY: the samples outlive the call.
+    let status = unsafe { (self.api.diar_push)(self.stream, samples.as_ptr(), samples.len(), rate as i32) };
+    if status != 0 { Err(self.api.error("labelling speakers", status)) } else { Ok(()) }
+  }
+
+  /// Flushes the stream and returns every segment.
+  pub fn finish(&mut self) -> Result<Vec<RawSegment>, EngineError> {
+    let api = self.api;
+    // SAFETY: the two-call pattern of diar.h: count, then fill a buffer of that size.
+    unsafe {
+      let status = (api.diar_finish)(self.stream);
+      if status != 0 {
+        return Err(api.error("finishing the speakers", status));
+      }
+      let mut count = 0usize;
+      let _ = (api.diar_segments)(self.stream, std::ptr::null(), std::ptr::null_mut(), 0, &mut count);
+      let mut buffer = vec![DiarSegment::default(); count];
+      let status = (api.diar_segments)(self.stream, std::ptr::null(), buffer.as_mut_ptr(), count, &mut count);
+      if status != 0 {
+        return Err(api.error("reading the speaker segments", status));
+      }
+      Ok(
+        buffer[..count.min(buffer.len())]
+          .iter()
+          .filter(|s| s.speaker >= 1)
+          .map(|s| RawSegment { speaker: (s.speaker - 1) as u32, start: s.start_time, end: s.end_time })
+          .collect(),
+      )
+    }
+  }
+}
+
+impl Drop for Speakers<'_> {
+  fn drop(&mut self) {
+    // SAFETY: the stream first, then the model it came from, each once.
+    unsafe {
+      (self.api.diar_close)(self.stream);
+      (self.api.diar_destroy)(self.model);
+    }
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn structs_match_the_c_api_on_x64() {
+    // The sizes the C structs have with MSVC on x64 (asr.h, diar.h): a mismatch would corrupt every call.
+    assert_eq!(size_of::<BackendConfig>(), 16);
+    assert_eq!(size_of::<ModelConfig>(), 24);
+    assert_eq!(size_of::<RecognizerConfig>(), 88);
+    assert_eq!(size_of::<RecognitionOptions>(), 72);
+    assert_eq!(size_of::<DiarModelConfig>(), 56);
+    assert_eq!(size_of::<DiarSegment>(), 24);
+  }
+}

@@ -21,7 +21,7 @@
         "visible": false,
         "backgroundColor": "#ffffff",
         "theme": "Light",
-        "dragDropEnabled": false,
+        "dragDropEnabled": true,
         "create": false
       }
     ],

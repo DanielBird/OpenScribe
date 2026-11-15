@@ -46,7 +46,7 @@ export const TranscriptDocSchema = z.looseObject({
     durationSec: z.number().nullable(),
   }),
   request: z.looseObject({
-    provider: z.literal('elevenlabs'),
+    provider: z.string().min(1), // 'elevenlabs', 'local' or an engine a newer build knows (DECISIONS.md D52)
     model: z.string(),
     languageHint: z.string(), // 'auto' or a language code (DECISIONS.md D37)
     numSpeakers: z.number().nullable(),

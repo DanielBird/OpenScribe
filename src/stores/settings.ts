@@ -12,6 +12,7 @@ import {
 import { z } from '../lib/zod';
 import { probeDuration } from '../media/probeDuration';
 import { getTranscriptionProvider, verifyLlmKey } from '../providers/index';
+import type { TranscriptionProviderId } from '../providers/transcription/types';
 import {
   AGENT_EFFORTS,
   DEFAULT_AGENT_EFFORT,
@@ -58,6 +59,13 @@ const PrefsSchema = z.object({
   agentReadingBudget: z.enum(BUDGET_LEVELS).catch('medium'),
   /** The name saved with your chats (D29); empty for the one made up for this browser. */
   userName: z.string().catch(''),
+  /**
+   * Where the desktop app transcribes (DECISIONS.md D53). No UI until Phase 36: set it from DevTools in a debug build.
+   * The web build always uses ElevenLabs.
+   */
+  transcriptionEngine: z.enum(['elevenlabs', 'local']).catch('elevenlabs'),
+  /** Drop fillers and doubled words from a local transcript (the maintainer, 2026-11-15). No UI yet. */
+  localTextCleanUp: z.boolean().catch(true),
 });
 type Prefs = z.infer<typeof PrefsSchema>;
 
@@ -98,15 +106,24 @@ const CHECK_FAILED: KeyCheckResult = {
 };
 
 export const useSettingsStore = defineStore('settings', () => {
-  const transcription = getTranscriptionProvider();
-  const limits = transcription.limits;
+  const prefs = loadPrefs();
+  /** The engine that transcribes: always ElevenLabs in the web build. */
+  const transcriptionEngine = ref<TranscriptionProviderId>(
+    __DESKTOP__ ? prefs.transcriptionEngine : 'elevenlabs',
+  );
+  const localTextCleanUp = ref(prefs.localTextCleanUp);
+  const transcription = computed(() => getTranscriptionProvider(transcriptionEngine.value));
+  const limits = computed(() => transcription.value.limits);
+  /** Whether transcribing needs the ElevenLabs key. */
+  const keyRequired = computed(() => transcription.value.needsKey);
 
-  // Providers whose keys can be tested.
+  // Providers whose keys can be tested. The ElevenLabs key is tested whichever engine transcribes.
   const verifiers: Partial<Record<KeyProvider, KeyVerifier>> = {
     claude: (key, signal) => verifyLlmKey('claude', key, signal),
     gemini: (key, signal) => verifyLlmKey('gemini', key, signal),
   };
-  if (transcription.verifyKey) verifiers.elevenlabs = transcription.verifyKey;
+  const elevenLabs = getTranscriptionProvider('elevenlabs');
+  if (elevenLabs.verifyKey) verifiers.elevenlabs = elevenLabs.verifyKey;
 
   // --- API keys (DECISIONS.md D3) ---------------------------------------------------------------
 
@@ -199,13 +216,14 @@ export const useSettingsStore = defineStore('settings', () => {
   // --- Options ------------------------------------------------------------------------------------
 
   /** What can be chosen besides Auto-detect, A–Z by name (DECISIONS.md D37). */
-  const languages = transcription.languages
-    .map((code) => ({ code, label: languageName(code) }))
-    .sort((a, b) => a.label.localeCompare(b.label, 'en'));
+  const languages = computed(() =>
+    transcription.value.languages
+      .map((code) => ({ code, label: languageName(code) }))
+      .sort((a, b) => a.label.localeCompare(b.label, 'en')),
+  );
 
-  const prefs = loadPrefs();
   const languageHint = ref<LanguageHint>(
-    transcription.languages.includes(prefs.languageHint) ? prefs.languageHint : 'auto',
+    transcription.value.languages.includes(prefs.languageHint) ? prefs.languageHint : 'auto',
   );
   const zeroRetention = ref(prefs.zeroRetention);
   watch(
@@ -293,6 +311,8 @@ export const useSettingsStore = defineStore('settings', () => {
     agentToolBudget.value = defaults.agentToolBudget;
     agentReadingBudget.value = defaults.agentReadingBudget;
     userName.value = defaults.userName;
+    transcriptionEngine.value = __DESKTOP__ ? defaults.transcriptionEngine : 'elevenlabs';
+    localTextCleanUp.value = defaults.localTextCleanUp;
     // The watchers above have just saved the defaults (flush: 'sync'); remove them instead.
     removeKey('local', PREFS_KEY);
     // A new chat identity: chats saved before read as someone else's (D29).
@@ -347,7 +367,7 @@ export const useSettingsStore = defineStore('settings', () => {
     if (!f || fileProbing.value) return null;
     return checkFile(
       { name: f.name, size: f.size, type: f.type, durationSec: fileDurationSec.value },
-      limits,
+      limits.value,
     );
   });
 
@@ -355,7 +375,7 @@ export const useSettingsStore = defineStore('settings', () => {
 
   const speakersValid = computed(() => {
     const n = numSpeakers.value;
-    return n === null || (Number.isInteger(n) && n >= 1 && n <= limits.maxSpeakers);
+    return n === null || (Number.isInteger(n) && n >= 1 && n <= limits.value.maxSpeakers);
   });
 
   /** Why Next is disabled, in the order of the form. Empty when ready. */
@@ -366,9 +386,13 @@ export const useSettingsStore = defineStore('settings', () => {
     else if (!fileCheck.value?.ok) {
       missing.push('Choose a recording that meets the limits shown above.');
     }
-    if (elevenLabsKey.value.trim() === '') missing.push('Add your ElevenLabs API key in Settings.');
+    if (keyRequired.value && elevenLabsKey.value.trim() === '') {
+      missing.push('Add your ElevenLabs API key in Settings.');
+    }
     if (!speakersValid.value) {
-      missing.push(`Number of speakers must be a whole number from 1 to ${limits.maxSpeakers}.`);
+      missing.push(
+        `Number of speakers must be a whole number from 1 to ${limits.value.maxSpeakers}.`,
+      );
     }
     return missing;
   });
@@ -383,6 +407,9 @@ export const useSettingsStore = defineStore('settings', () => {
     keyLocations,
     keyChecks,
     languages,
+    transcriptionEngine,
+    localTextCleanUp,
+    keyRequired,
     languageHint,
     numSpeakers,
     zeroRetention,

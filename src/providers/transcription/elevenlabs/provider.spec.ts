@@ -18,6 +18,7 @@ const input = (overrides: Partial<TranscriptionInput> = {}): TranscriptionInput 
   languageHint: 'auto',
   numSpeakers: null,
   zeroRetention: false,
+  cleanUp: false,
   keyterms: [],
   ...overrides,
 });

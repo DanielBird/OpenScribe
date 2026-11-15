@@ -25,11 +25,15 @@
     "build:desktop": "vue-tsc -b && vite build --mode desktop",
     "desktop:dev": "tauri dev",
     "desktop:build": "tauri build --no-bundle",
-    "desktop:pack": "node scripts/pack-desktop.mjs"
+    "desktop:pack": "node scripts/pack-desktop.mjs",
+    "desktop:fetch-models": "node scripts/fetch-speech-pack.mjs",
+    "desktop:stt-runtime": "pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/build-stt-runtime.ps1",
+    "desktop:test": "cargo test --manifest-path src-tauri/Cargo.toml"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.133.0",
     "@google/genai": "^2.29.1",
+    "@tauri-apps/api": "~2.12.4",
     "docx": "^9.11.0",
     "idb-keyval": "^6.3.0",
     "pinia": "^4.1.0",

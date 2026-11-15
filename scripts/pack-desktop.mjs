@@ -1,11 +1,13 @@
 // Packs the desktop app as an x64 MSIX for the Microsoft Store (DECISIONS.md D35, docs/reference/desktop.md).
-// Builds the release exe, stages it with src-tauri/msix/ (the manifest, with package.json's version written in, and
+// Builds the release exe, stages it with the speech engine's DLLs (src-tauri/stt-runtime/, from npm run
+// desktop:stt-runtime; DECISIONS.md D53) and src-tauri/msix/ (the manifest, with package.json's version written in, and
 // its assets), then packs the stage with Microsoft's winapp CLI. Unsigned by default: the Store signs MSIX itself.
 // Usage: npm run desktop:pack [-- --sign]
 //   --sign  signs with a development certificate, devcert.pfx (made on first use, never committed), so the MSIX
 //           installs on this PC. Trust it once, as administrator: winapp cert install devcert.pfx
 //           After the manifest's Publisher changes, delete devcert.pfx so a matching one is made.
 import { execSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import {
   cpSync,
   existsSync,
@@ -81,6 +83,34 @@ if (sign && existsSync(cert)) {
   }
 }
 
+// 2b. The speech engine's DLLs, exactly as npm run desktop:stt-runtime built and listed them (stt-runtime.json names
+// the files; built.json their sizes and hashes).
+const runtimeDir = path('src-tauri/stt-runtime');
+const runtimeDefinition = JSON.parse(readFileSync(path('src-tauri/stt-runtime.json'), 'utf8'));
+const runtimeFiles = [...runtimeDefinition.engineFiles, ...runtimeDefinition.msvcRuntime.files];
+if (!existsSync(`${runtimeDir}/built.json`)) {
+  stop(
+    'src-tauri/stt-runtime/ has no engine. Run npm run desktop:stt-runtime first. Nothing was packed.',
+  );
+}
+const built = JSON.parse(readFileSync(`${runtimeDir}/built.json`, 'utf8').replace(/^\uFEFF/, ''));
+if (built.version !== runtimeDefinition.version) {
+  stop(
+    `src-tauri/stt-runtime/ holds ${built.name} ${built.version}, but stt-runtime.json names ` +
+      `${runtimeDefinition.version}. Run npm run desktop:stt-runtime again. Nothing was packed.`,
+  );
+}
+for (const name of runtimeFiles) {
+  const file = `${runtimeDir}/${name}`;
+  const listed = built.files.find((f) => f.name === name);
+  if (!existsSync(file) || !listed)
+    stop(`src-tauri/stt-runtime/${name} is missing. Nothing was packed.`);
+  const sha256 = createHash('sha256').update(readFileSync(file)).digest('hex');
+  if (sha256 !== listed.sha256 || statSync(file).size !== listed.bytes) {
+    stop(`src-tauri/stt-runtime/${name} has changed since it was built. Nothing was packed.`);
+  }
+}
+
 // 3. The licences Settings shows must list what this build includes.
 try {
   run('node scripts/make-notices.mjs --check');
@@ -104,6 +134,8 @@ for (const dir of [stage, dirname(stagedManifest)]) {
   mkdirSync(dir, { recursive: true });
 }
 cpSync(exe, `${stage}/describe.exe`);
+// Beside the exe, which loads them from its own folder (src-tauri/src/stt/nemo.rs).
+for (const name of runtimeFiles) cpSync(`${runtimeDir}/${name}`, `${stage}/${name}`);
 cpSync(path('src-tauri/msix/Assets'), `${stage}/Assets`, { recursive: true });
 writeFileSync(stagedManifest, manifest.replace(identityVersion, `$1${msixVersion}$2`));
 

@@ -14,6 +14,11 @@ All notable changes to DeScribe are recorded here. The format follows
 - **Desktop app launch:** the DeScribe mark appears at once, and the app then opens already maximised and drawn, with
   no blank window first.
 
+### Changed
+
+- **Desktop app:** closing the window while DeScribe is transcribing, translating or adding to a project asks first.
+- **Desktop app:** **Choose file…** opens Windows' own Open dialog.
+
 ## [1.2.0] - 2026-11-08
 
 ### Added

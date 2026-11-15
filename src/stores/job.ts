@@ -2,9 +2,15 @@ import { defineStore } from 'pinia';
 import { computed, onScopeDispose, ref, shallowRef } from 'vue';
 import { buildTranscriptDoc } from '../domain/buildTranscriptDoc';
 import type { SourceInfo, TranscriptionRequestInfo } from '../domain/transcript';
+import { z } from '../lib/zod';
 import { ProviderError } from '../providers/errors';
 import { getTranscriptionProvider } from '../providers/index';
-import type { TranscriptionInput, TranscriptionProvider } from '../providers/transcription/types';
+import type {
+  TranscriptionInput,
+  TranscriptionProvider,
+  TranscriptionTimings,
+} from '../providers/transcription/types';
+import { readJson, removeKey, writeJson } from '../storage/local';
 import { useGlossaryStore } from './glossary';
 import { usePlaybackStore } from './playback';
 import { useSettingsStore } from './settings';
@@ -30,6 +36,33 @@ const MESSAGES = {
 /** Asks before the page is left or reloaded while a run would be lost. */
 const unloadGuard = createUnloadGuard();
 
+/** The last run on this computer: what Settings will show (Phase 36), and how the work laptop is measured. */
+export interface LocalRunRecord {
+  at: string; // ISO
+  audioSec: number | null;
+  timings: TranscriptionTimings;
+}
+
+const LAST_LOCAL_RUN_KEY = 'lastLocalRun';
+
+const LocalRunSchema = z.object({
+  at: z.string(),
+  audioSec: z.number().nullable(),
+  timings: z.object({
+    decodeSec: z.number(),
+    wordsSec: z.number(),
+    speakersSec: z.number(),
+    totalSec: z.number(),
+    threads: z.number(),
+    peakMemoryBytes: z.number().nullable(),
+  }),
+});
+
+function loadLastLocalRun(): LocalRunRecord | null {
+  const parsed = LocalRunSchema.safeParse(readJson<unknown>('local', LAST_LOCAL_RUN_KEY, null));
+  return parsed.success ? parsed.data : null;
+}
+
 //   idle ──start──▶ uploading ──upload done──▶ processing ──200──▶ done
 //                     │ cancel/error              │ cancel/error
 //                     ▼                           ▼
@@ -44,6 +77,9 @@ export const useJobStore = defineStore('job', () => {
   const elapsedSec = ref(0);
 
   const isActive = computed(() => status.value === 'uploading' || status.value === 'processing');
+  /** On this computer: seconds of audio done, out of the total if known. Phase 36 shows it. */
+  const localProgress = ref<{ doneSec: number; totalSec: number | null } | null>(null);
+  const lastLocalRun = shallowRef<LocalRunRecord | null>(loadLastLocalRun());
 
   let controller: AbortController | null = null;
   let lastSnapshot: RunSnapshot | null = null;
@@ -71,17 +107,21 @@ export const useJobStore = defineStore('job', () => {
     const settings = useSettingsStore();
     const file = settings.file;
     if (!file) return null;
-    const provider = getTranscriptionProvider();
-    const keyterms = [...useGlossaryStore().validTerms];
+    const provider = getTranscriptionProvider(settings.transcriptionEngine);
+    // A provider that can't take an option is sent none, and the doc says none was used.
+    const keyterms = provider.supports.keyterms ? [...useGlossaryStore().validTerms] : [];
+    const zeroRetention = provider.supports.zeroRetention && settings.zeroRetention;
+    const numSpeakers = provider.supports.numSpeakers ? settings.numSpeakers : null;
     return {
       provider,
       input: {
         file,
-        apiKey: settings.elevenLabsKey,
+        apiKey: provider.needsKey ? settings.elevenLabsKey : '',
         languageHint: settings.languageHint,
-        numSpeakers: settings.numSpeakers,
-        zeroRetention: settings.zeroRetention,
+        numSpeakers,
+        zeroRetention,
         keyterms,
+        cleanUp: settings.localTextCleanUp,
       },
       source: {
         fileName: file.name,
@@ -94,8 +134,8 @@ export const useJobStore = defineStore('job', () => {
         provider: provider.id,
         model: provider.model,
         languageHint: settings.languageHint,
-        numSpeakers: settings.numSpeakers,
-        zeroRetention: settings.zeroRetention,
+        numSpeakers,
+        zeroRetention,
         keyterms: [...keyterms],
       },
     };
@@ -113,6 +153,7 @@ export const useJobStore = defineStore('job', () => {
     startedAt.value = Date.now();
     uploadDoneAt.value = null;
     elapsedSec.value = 0;
+    localProgress.value = null;
     stopTicker();
     unloadGuard.hold();
 
@@ -126,14 +167,30 @@ export const useJobStore = defineStore('job', () => {
           if (!isCurrent()) return;
           if (p.phase === 'uploading') {
             progress.value = { loaded: p.loaded, total: p.total };
-          } else if (status.value === 'uploading') {
+            return;
+          }
+          // Nothing is uploaded on this computer: its first event ('preparing') arrives before start() returns,
+          // so a local run shows the processing state from the beginning.
+          if (status.value === 'uploading') {
             status.value = 'processing';
             uploadDoneAt.value = Date.now();
             ticker = setInterval(updateElapsed, 1000);
           }
+          if (p.phase === 'transcribing') {
+            localProgress.value = { doneSec: p.doneSec, totalSec: p.totalSec };
+          }
         },
       });
       if (!isCurrent()) return;
+      if (result.timings) {
+        const record = {
+          at: new Date().toISOString(),
+          audioSec: result.audioDurationSec,
+          timings: result.timings,
+        };
+        lastLocalRun.value = record;
+        writeJson('local', LAST_LOCAL_RUN_KEY, record);
+      }
       const saved = useTranscriptStore().setDoc(
         buildTranscriptDoc(result, snap.source, snap.request),
       );
@@ -179,6 +236,7 @@ export const useJobStore = defineStore('job', () => {
     if (isActive.value) return Promise.resolve();
     if (!lastSnapshot) return start();
     // Read the key now, not at start: after a quota or rate-limit error, a key changed in Settings is used.
+    if (!lastSnapshot.provider.needsKey) return run(lastSnapshot);
     const apiKey = useSettingsStore().elevenLabsKey;
     if (apiKey.trim() === '') {
       error.value = new ProviderError('validation', MESSAGES.noKey);
@@ -199,6 +257,12 @@ export const useJobStore = defineStore('job', () => {
     progress.value = null;
   }
 
+  /** Forgets the last local run's timings (Clear saved data). */
+  function clearLastLocalRun(): void {
+    lastLocalRun.value = null;
+    removeKey('local', LAST_LOCAL_RUN_KEY);
+  }
+
   onScopeDispose(() => {
     controller?.abort();
     endRun();
@@ -212,6 +276,9 @@ export const useJobStore = defineStore('job', () => {
     uploadDoneAt,
     elapsedSec,
     isActive,
+    localProgress,
+    lastLocalRun,
+    clearLastLocalRun,
     start,
     cancel,
     retry,

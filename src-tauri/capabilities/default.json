@@ -1,7 +1,13 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "None: the web app never calls Tauri's IPC.",
+  "description": "The app's own commands for transcribing on this computer (DECISIONS.md D53), and nothing from Tauri's plugins.",
   "windows": ["main"],
-  "permissions": []
+  "permissions": [
+    "allow-stt-choose-recording",
+    "allow-stt-status",
+    "allow-stt-start",
+    "allow-stt-cancel",
+    "allow-set-close-guard"
+  ]
 }

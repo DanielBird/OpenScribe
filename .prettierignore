@@ -11,3 +11,7 @@ fixtures/elevenlabs/*.json
 *.md
 # Written by the Phase 33 scripts (pinrun topology, setup-emulation.ps1, calibrate.ps1).
 scripts/spikes/local-stt/profiles.json
+# Phase 34: the debug speech pack, the engine's DLLs and their build tree (all gitignored).
+.speech-pack/
+src-tauri/stt-runtime/
+.stt-runtime-build/

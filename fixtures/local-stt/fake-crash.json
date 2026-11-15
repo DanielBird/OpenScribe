@@ -1,0 +1,10 @@
+{
+  "durationSec": 5.0,
+  "steps": [
+    {
+      "afterMs": 200,
+      "doneSec": 1.0
+    }
+  ],
+  "crash": true
+}

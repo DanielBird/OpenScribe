@@ -17,7 +17,15 @@ const ALLOWED_HOSTS = [
 /** Tauri's own IPC sources in the desktop CSP, which aren't API hosts. */
 const TAURI_IPC_SOURCES = ['ipc:', 'http://ipc.localhost'];
 /** Strings that only Tauri's JavaScript contains: the web build must never include it. */
-const TAURI_MARKERS = ['__TAURI__', 'ipc.localhost'];
+// Tauri's own globals and IPC host, and the desktop app's local transcription (DECISIONS.md D53).
+const TAURI_MARKERS = [
+  '__TAURI__',
+  '__TAURI_INTERNALS__',
+  'ipc.localhost',
+  'postMessageWithAdditionalObjects',
+  'stt_start',
+  'nvidia-parakeet-nemotron',
+];
 const EXPECTED_FILE = 'describe.html';
 const WARN_BYTES = 3 * 1024 * 1024;
 const VITE_CONFIG = fileURLToPath(new URL('../vite.config.ts', import.meta.url));

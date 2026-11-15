@@ -1,0 +1,7 @@
+The Microsoft Visual C++ runtime (msvcp140.dll, vcruntime140.dll, vcruntime140_1.dll) and the Microsoft OpenMP
+runtime (vcomp140.dll) are not open-source software. They are Microsoft's redistributable files from Visual Studio
+2022 ("Distributable Code"), which the Microsoft Software License Terms for Visual Studio allow an application to
+include, and the speech engine needs them.
+
+https://visualstudio.microsoft.com/license-terms/
+https://learn.microsoft.com/cpp/windows/redistributing-visual-cpp-files

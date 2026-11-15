@@ -15,6 +15,8 @@ export function createElevenLabsProvider(
   return {
     id: 'elevenlabs',
     model: ELEVENLABS_MODEL,
+    needsKey: true,
+    supports: { keyterms: true, zeroRetention: true, numSpeakers: true },
     limits: ELEVENLABS_LIMITS,
     languages: ELEVENLABS_LANGUAGES.map(normalizeLanguage),
 

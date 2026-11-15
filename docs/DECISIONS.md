@@ -1033,3 +1033,68 @@ summarise them.
     (Phase 34 checks it).
 - **The maintainer's follow-up (2026-11-15):** clean up the verbatim text, removing repeats ("Yeah Yeah") and fillers
   ("um um"). It is a task in Phase 34's mapper; whether it is on by default is for the maintainer to decide there.
+
+### D52 — Every build reads a transcript from any engine (2026-11-15; Phase 34)
+- **Decision:** `TranscriptionRequestInfo.provider` is a known engine (`'elevenlabs'`, or `'local'` for the speech
+  models on the computer, D50) or any other non-empty string. `TranscriptDocSchema` accepts any non-empty string
+  where it had `z.literal('elevenlabs')`, as D37 did for `languageHint`. The export's **Transcription** line names
+  a known engine (`transcriptionEngineName()` in `domain/transcript.ts`) and shows an unknown one as it was saved.
+- **Why:** a transcript made on the computer must open everywhere a transcript does: on Output, in the export, and in
+  a shared project folder read by the HTML file.
+- **Consequences:**
+  - 1.1.0 and 1.2.0 have the literal, so they ignore a last transcript, and report a project transcript as
+    unreadable, when it was made locally (D38: a new enum value is a shape change).
+  - **The maintainer (2026-11-15):** the app isn't in use yet, so no build in colleagues' hands can meet one. The
+    change lands as Phase 34's first commit and needs no release of its own.
+  - Output's header and the session list don't name the engine, so only the export changed.
+
+### D53 — The local engine as built: the recording from Rust, the same exe as worker, one gateway to Tauri (2026-11-15; Phase 34)
+- **Decision:** Phase 34 builds D51's engine into the desktop app. A debug build with `DESCRIBE_SPEECH_PACK_DIR` set
+  and the pref `transcriptionEngine: 'local'` transcribes on the computer. The choice on Setup is Phase 36's.
+  - **The recording comes from Rust.**
+    - In the desktop app, **Choose file** opens Windows' own Open dialog (`stt_choose_recording`). A file dropped
+      on the window arrives through Tauri's native drop (`dragDropEnabled: true`), with where it landed, so FileDrop
+      takes it only on its zone, as before.
+    - Rust keeps the path under a token, and hands the page a real `File`: a read-only WebView2 file handle
+      (`CreateWebFileSystemFileHandle`, posted with `PostWebMessageAsJsonWithAdditionalObjects`) on which the page
+      calls `getFile()`. Playback, the duration probe and an ElevenLabs upload use it as any File.
+    - `stt_start` takes the token, so the page never names a path.
+  - **The worker is `describe.exe --stt-worker`**, the same exe started again, not a second one. It runs in a job
+    object that kills it with the app, reads one job on stdin and writes JSON events on stdout. Cancel ends it.
+    Both models run in it at once, on their own threads, fed by one decoder through bounded channels.
+  - **One module talks to Rust: `src/desktop/ipc.ts`,** the only importer of `@tauri-apps/api` (ESLint). The
+    transcription bridge (`providers/transcription/local/bridge.ts`), the recording hand-off
+    (`desktop/recordings.ts`) and the close guard (`desktop/closeGuard.ts`) go through it.
+  - **Closing the window while DeScribe works asks first,** with a native dialog (Close / Keep open). WebView2's
+    `beforeunload` doesn't stop the window closing, so the stores' unload guards also tell Rust (`set_close_guard`)
+    whether anything is running. A local run counts whatever the page says, and a page load clears the flag.
+  - **The commands:** `stt_choose_recording`, `stt_status`, `stt_start`, `stt_cancel`, `set_close_guard`. `build.rs`
+    lists them (`AppManifest::commands`), so each needs its permission, and the capability grants exactly those.
+  - **The clean-up is on by default** (the maintainer, 2026-11-15): the mapper drops fillers (um, uh, erm, äh, ähm,
+    euh) and keeps once a word one speaker says twice in a row ("Yeah Yeah"). The pref `localTextCleanUp` (no UI)
+    turns it off. "that that" and "had had" are kept.
+  - **The engine shipped is the one Phase 33 benchmarked:** built from source as `src-tauri/stt-runtime.json`
+    defines it (`npm run desktop:stt-runtime`), with the MSVC and OpenMP runtimes beside it.
+  - `@tauri-apps/api` ~2.12 is a runtime dependency of the desktop build only.
+- **Why:**
+  - **Page to Rust fails.** Phase 34's first probe had the page post its File to Rust
+    (`postMessageWithAdditionalObjects`). WebView2 accepts it, but wry's own message handler runs first and fails on
+    every message that isn't a string, which stops WebView2 calling later handlers. A string message instead makes
+    Tauri's IPC write a "JSON error" to the page's console.
+  - **Rust to page keeps the File.** Phase 33's routes (a drop or a dialog giving only a path) would have needed
+    Tauri's asset protocol for playback and an untested read-back for ElevenLabs uploads. The reverse hand-off keeps
+    every use of the File as it was. A 2 GB file handed over cost no memory.
+  - **One exe.** The same exe as the worker needs no change to `tauri build`, `tauri dev` or the MSIX's contents
+    beyond the DLLs, and the worker is still a separate process.
+  - **One process.** Phase 34's speed check found both models in one worker as fast as Phase 33's two processes:
+    5 minutes in 18.8 s against 19.4 s, an hour in 224.6 s against 229.1 s, pinned at full clock.
+  - **The C API.** Its words are as fast as the CLI's, which D51 left open.
+- **Consequences:**
+  - The desktop build's HTML drop no longer reaches the page (Tauri takes it). Only FileDrop used it.
+  - Committed memory is about 4.9 GB while both models run in the one worker. RAM in use peaks at about 1.1 GB, the
+    measure D51 chose.
+  - No temporary files: the recording is read where it is, and the samples stay in memory. Phase 34's decision 4
+    and its clean-up test don't arise.
+  - Parakeet reports no language, so with Auto-detect a local transcript's language is '' (Phase 36 decides).
+  - A module only the desktop build uses must do no work at import, or the web build keeps it (AGENTS.md rule 1).
+    `verify:single-file` fails on the local engine's markers.
