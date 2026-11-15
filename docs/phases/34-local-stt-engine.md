@@ -363,7 +363,7 @@ built). The checks are in reference/desktop.md (E1–E9) and reference/local-stt
   `setup-emulation.ps1` made them again with the calibrated caps; their GUIDs changed.
 - **Open:**
   - **The Windows App Certification Kit** on `release/DeScribe-v1.2.0-x64.msix`, as administrator.
-  - **By hand:** rename, edit, translate and Add to project on a local transcript; a real drop on the window;
+  - **By hand:** translate and Add to project on a local transcript (rename and edit passed, the maintainer); a real drop on the window;
     clicking Close and Keep open in the close dialog; Rust's connections during a run.
   - The smoothing's agreement on the Andrew recording.
 - **For Phase 35:**
