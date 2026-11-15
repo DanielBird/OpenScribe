@@ -412,3 +412,35 @@ need the calibrated profiles.
   - `scripts/spikes/local-stt/{models,vendor,out}/`, several GB, which part B needs.
 
   CMake and Ninja are installed on the PC.
+
+**Part B (2026-11-15): the results, the choices and the go/no-go.**
+- **Provisional go, at the target** (DECISIONS.md D51; reference/local-stt.md, *Go/no-go*):
+  - *Laptop* profile: an hour in 334 s (10.8×) and three hours in 998 s (10.8×), against the emulated target of 9×;
+  - *Throttled*: an hour in 567 s (6.35×), against the 2× required;
+  - two of the twelve processors kept busy: no effect.
+- **Accuracy and speakers:**
+  - the Andrew recording (34.5 min, two speakers) against DeScribe's ElevenLabs transcript: 4 % of words misheard,
+    98.8 % speaker agreement, 99 % of word times within 0.5 s;
+  - the maintainer: "the quality looks sufficient … good enough to proceed", with a clean-up of repeats and fillers
+    to add (Phase 34's mapper).
+- **The choices** are D51's:
+  - Parakeet TDT v3 with Nemotron 3 Diarization, NVIDIA's own q8_0 files;
+  - NeMo-Speech.cpp v0.3.0 through its C API, in a worker process, the words in 30 s pieces and the speakers
+    streamed, both at once;
+  - Media Foundation for decoding;
+  - the recording reaches Rust as a path;
+  - WinHTTP without a hard revocation check;
+  - the models kept in LocalCache.
+- **The emulation as set up:** `0xfff0`; *Laptop* 3,375 MHz (R23 +0.8 %, 2024 −28 % in a disturbed run, −11 % at
+  3,200), *Throttled* 1,950 MHz (both within 5 %). The slow-side rule is in the part A note.
+- **The work laptop (D5):** the download works in 30 s once revocation is best-effort. Cisco Umbrella inspects the
+  delivery host, and Range requests come back whole.
+- **Phases 34–36** each have a *Phase 33's findings* section, which overrides their tasks where they differ.
+- **Open:**
+  - D8's network and sleep steps (`interrupt-download.ps1 -Steps 1,2`);
+  - whether the C API's words are as fast as the CLI's (Phase 34);
+  - the laptop's real numbers (Phase 36, Task 1).
+- **Wrong reference:** the first ElevenLabs reference used (task 1) was of a different recording. Its comparisons
+  are kept apart in `out/invalid-reference/` and were not used.
+- **Not committed, kept for Phase 34:** `scripts/spikes/local-stt/{models,vendor,out}/` (gitignored, about 15 GB),
+  and `devcert.pfx`.

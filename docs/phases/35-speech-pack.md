@@ -6,8 +6,48 @@ cancelled, and the models can be removed again. A build with this goes through t
 download is proved on the work laptop's network.
 
 **Status of the plan:** rewritten on 2026-11-14, after the maintainer chose a download made by the app over an
-optional package in the Store (DECISIONS.md **D50**). Phase 33 has not yet run: its choices (where each file is
-hosted, the HTTP stack, the folder) override this file.
+optional package in the Store (DECISIONS.md **D50**). Phase 33 ran on 2026-11-15 (**D51**): its findings, below
+(where each file is hosted, the HTTP stack, the folder, the work laptop's network), override the text where they
+differ.
+
+## Phase 33's findings (2026-11-15; DECISIONS.md D51)
+
+They override the text below where they differ. Facts in [reference/local-stt.md](../reference/local-stt.md),
+*Downloading the models*; `scripts/spikes/local-stt/harness/src/bin/hf-fetch.rs` and `test-server.mjs` are working
+starts for Tasks 1, 2 and the tests.
+
+- **Hosting:** NVIDIA's own repositories, unchanged, ungated (D1). **No copy hosted by Dtype (D2):** decision 7's
+  last sentence and Task 6's last item don't apply.
+- **The size:** 821 MB for the two files, not 1.1 GB. Every text takes it from `pack.json`.
+- **The HTTP stack:** WinHTTP with `WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY` (Windows' proxy, PAC included) and
+  Windows' certificate store. Follow redirects in the code, HTTPS only, logging only each hop's host.
+- **Don't turn on revocation checks** (`WINHTTP_ENABLE_SSL_REVOCATION`). The work laptop's network inspects the
+  delivery host `us.aws.cdn.hf.co` with **Cisco Umbrella**, whose certificate's revocation status can't be checked
+  there, and Windows' curl failed hard on exactly that (`CRYPT_E_NO_REVOCATION_CHECK`). The pinned SHA-256 is the
+  guarantee. Never use a bundled root list: the inspecting CA is only in Windows' store.
+- **Resuming doesn't work on the company network:** a Range request came back `200` with the whole file. Decision 3
+  holds ("if the server won't resume, it starts that file again"), so plan S2 and S3 with that in mind.
+- **Speed on the work laptop:** 714 MB in 30.3 s (23.6 MB/s), with best-effort revocation. Expect under a minute
+  for both files.
+- **Task 2's failure kinds, from D9:**
+  - `blocked`: 403, 451, an untrusted certificate (WinHTTP 12175), an HTML page with 200 (its `Content-Type`), or a
+    body of the wrong size;
+  - `offline`: no name (12007), no connection (12029) or a timeout (12002);
+  - `busy`: 429, with `Retry-After` and `RateLimit` headers;
+  - `mismatch`: the hash;
+  - a cut connection ends the body early under WinHTTP, so it's caught by size. Keep the `.part` file for the next
+    attempt;
+  - an unknown revocation status is **not** a failure.
+- **The User-Agent:** Hugging Face asks for nothing (D3). Use `DeScribe/<version>`, with no user details.
+  Anonymous downloads get 3,000 resolver requests per 5 minutes per IP, which a company's whole office stays far
+  below.
+- **The folder:** the package's **LocalCache** (D7). It was kept across an update (1.0 → 2.0) and removed on
+  uninstall, and files there memory-map. The unpackaged path stays as decision 4 says.
+- **Task 7, the Store text:** Store Policies 7.20, quoted in the reference doc's D4.
+  - 10.2.2: no dynamic code. The models are data and the engine ships in the app.
+  - 10.1.1: describe the important limitations.
+  - 10.2.4: disclose a dependency at the start of the description. Say early that local transcription downloads
+    about 0.8 GB of NVIDIA speech models from Hugging Face on request.
 
 **Depends on:** Phases 33 and 34. It uses Phase 34's bridge, commands, `pack.json` and `pack.rs`.
 
@@ -77,7 +117,7 @@ because Rust makes the requests. Update AGENTS.md's rule 2 with the code, and re
    | `blocked` | A refusal (401, 403, 407), a certificate that isn't trusted, or a "file" that is a web page (the wrong size or hash on a small HTML answer) | "Your network didn't allow the download from huggingface.co. Try another network, or ask IT to allow it." |
    | `offline` | No connection, DNS failure, timeout | "Couldn't reach huggingface.co. Check your connection and try again." |
    | `busy` | 429 or 503 | "Hugging Face is busy. Try again in a few minutes." |
-   | `disk` | Not enough space, or a write fails | "Not enough disk space: the speech models need 1.1 GB." |
+   | `disk` | Not enough space, or a write fails | "Not enough disk space: the speech models need 0.8 GB." |
    | `mismatch` | A complete file with the wrong size or hash | "The download didn't arrive intact. Try again." |
    | `gone` | 404 or 410 | "This version of DeScribe can't download its speech models any more. Update DeScribe." |
 
@@ -92,10 +132,10 @@ because Rust makes the requests. Update AGENTS.md's rule 2 with the code, and re
 
    > **Transcribe on this computer**
    > *(missing)* Transcribes without ElevenLabs, using speech models from NVIDIA.
-   > [Download speech models] 1.1 GB from huggingface.co
-   > *(downloading)* a progress bar, "340 MB of 1.1 GB", [Cancel]
+   > [Download speech models] 0.8 GB from huggingface.co
+   > *(downloading)* a progress bar, "340 MB of 0.8 GB", [Cancel]
    > *(ready)* Speech models are installed. [Remove]
-   > *(outdated)* This version of DeScribe needs newer speech models. [Download speech models] 1.1 GB
+   > *(outdated)* This version of DeScribe needs newer speech models. [Download speech models] 0.8 GB
    > *(damaged)* The speech models are damaged. [Download again]
    > *(the CPU can't run it)* This computer can't run the speech models.
 
@@ -208,3 +248,6 @@ export interface LocalSttBridge {
 
 *(Where the files are hosted and kept, the HTTP stack as built, S1–S10 on both machines, the Store wording, and
 what Phase 36 needs.)*
+
+**Phase 33 (2026-11-15):** updated this file with *Phase 33's findings* above, which
+override the tasks where they differ (DECISIONS.md D51). Nothing in this phase has been built.

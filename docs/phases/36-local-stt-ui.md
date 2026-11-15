@@ -5,9 +5,35 @@ transcribed by ElevenLabs or on their computer, and sees honest progress while i
 recording goes in each case, that the models are downloaded from Hugging Face, and credits the NVIDIA models under
 their licences. Without the models, and in the HTML file, nothing changes.
 
-**Status of the plan:** drafted on 2026-11-14 with Phase 33 not yet run (DECISIONS.md **D50**). The limits and
-names below (25 languages, 8 speakers, the models' names) are the recommendation Phase 33 tests; use what it chose.
-All UI text here is a draft (D13).
+**Status of the plan:** drafted on 2026-11-14 (DECISIONS.md **D50**). Phase 33 ran on 2026-11-15 (**D51**) and chose
+the models named below. Its findings, below, override the text where they differ. All UI text here is a draft
+(D13).
+
+## Phase 33's findings (2026-11-15; DECISIONS.md D51)
+
+They override the text below where they differ ([reference/local-stt.md](../reference/local-stt.md)).
+
+- **The estimate for Task 1's checkpoint**, from the *Laptop* profile:
+  - an hour in **334 s (5.6 min)**, three hours in 998 s (16.6 min);
+  - *Throttled* (battery, heat): an hour in 567 s (9.5 min).
+
+  Use the same recordings, copied to the laptop:
+  - `scripts/spikes/local-stt/out/test-set/test_audio.1h.m4a` and `.3h.m4a` (the maintainer's recording joined to
+    itself);
+  - the Andrew recording (34.5 min), whose ElevenLabs transcript is the accuracy reference.
+
+  Speed was the same at every length (10.6–10.8×), so **a time-left estimate after the first minute can be trusted**
+  (decision 6 may change).
+- **Limits on Setup:**
+  - Parakeet's 25 European languages (English tested; German and French are first checked in L4).
+  - **No Number of speakers with This computer:** the engine ignores it. Hide it, as decision 4 does for options that
+    don't apply, rather than allowing 1 to 8.
+  - No length limit up to three hours, so Task 3's "Phase 33's length limit" doesn't arise.
+  - **Ogg Opus can't be read** locally. The file check names it and offers ElevenLabs.
+- **"Slower"** on Setup: at the estimate, an hour takes about 5–6 minutes on the laptop. Word it after the checkpoint.
+- **The transcript is verbatim** ("um", repeated words, no digits). Phase 34 adds the maintainer's clean-up; if it
+  becomes a choice, it belongs here.
+- **About:** the two models, NVIDIA's own files from Hugging Face. No copy hosted by Dtype.
 
 **Depends on:** Phases 34 and 35. Phase 35's download must have worked on the work laptop (its S1), because Task 1
 transcribes there.
@@ -73,8 +99,8 @@ transcribes there.
    > ◉ ElevenLabs  ○ This computer
    > *(with This computer chosen:)* Slower. The recording stays on this computer.
 
-   - With This computer: the API key section and Zero retention aren't rendered; Language lists Auto-detect and the
-     pack's languages; Number of speakers allows 1 to the pack's limit, and its help text names that limit.
+   - With This computer: the API key section, Zero retention and Number of speakers aren't rendered (the engine
+     takes no number of speakers: Phase 33); Language lists Auto-detect and the pack's languages.
    - The collapsed Options summary and **Next** behave as today. The file check uses the local limits (Phase 33's
      length limit, if it set one) with a message that offers ElevenLabs for a longer recording.
 4. **Glossary:** with This computer, one line above the list: "Used when you translate. Transcribing on this computer
@@ -196,3 +222,6 @@ debug build).
 ## Handoff
 
 *(The texts as shipped and what was trimmed, L1–L10, and anything the next release needs.)*
+
+**Phase 33 (2026-11-15):** updated this file with *Phase 33's findings* above, which
+override the tasks where they differ (DECISIONS.md D51). Nothing in this phase has been built.

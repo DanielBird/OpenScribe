@@ -5,9 +5,65 @@ runs the two models, and a second `TranscriptionProvider`, `local`, maps the res
 from a folder named by a developer setting, and the engine is chosen by a developer switch. Downloading the models
 (Phase 35) and the user's choice (Phase 36) come next. The HTML file gains nothing but a wider reader.
 
-**Status of the plan:** drafted on 2026-11-14 with Phase 33 not yet run (DECISIONS.md **D50**). **Phase 33's
-choices override this file.** Where a task says "the runtime" or "the models", it means the ones Phase 33 chose.
-Don't start before Phase 33's go.
+**Status of the plan:** drafted on 2026-11-14 (DECISIONS.md **D50**). Phase 33 gave a provisional go on 2026-11-15
+(**D51**). Its findings, below, override the tasks where they differ. "The runtime" and "the models" mean the ones it
+chose.
+
+## Phase 33's findings (2026-11-15; DECISIONS.md D51)
+
+They override the tasks below where they differ. The facts and numbers are in
+[reference/local-stt.md](../reference/local-stt.md); the spike's code in `scripts/spikes/local-stt/` is a working
+start for most of this phase.
+
+- **The engine:** NeMo-Speech.cpp v0.3.0 through its C API (`nemo_speech/asr.h`, `diar.h`; `nemo_speech_asr_c.dll`).
+  - Build it as `build-runtime.ps1` does: CPU only; `GGML_NATIVE=OFF`; AVX2, FMA, F16C and BMI2 on; AVX-512,
+    AVX-VNNI, CUDA and Vulkan off. Set `VCVARS_USER_VERSION` to the newest MSVC, or the link fails on STL symbols.
+  - It ships about 7 MB of DLLs, plus `vcomp140.dll` and the MSVC runtime.
+- **Task 4 runs it in a worker process** (`describe-stt-worker.exe` beside `describe.exe`), not in-process. The C
+  API has no cancel, no thread setting and no progress, so cancel means ending the worker, which took 50 ms and
+  frees everything.
+  - **Words:** `nemo_speech_asr_recognize_f32` on 30-second pieces with 2 s overlap. Each piece keeps the words whose
+    middle falls in its own part, so half of each overlap goes to each neighbour (`stt-bench.rs`, `merge_chunks`).
+  - **Speakers:** the `diar.h` stream with preset `v3-offline`, pushed in 30 s pieces over the whole recording
+    (`diar-stream.rs` is a working FFI example). Memory stays at about 160 MB for three hours.
+  - **Both at once.** Words take the C API's default of min(8, hardware threads), which is 8 on the laptop and on
+    the maintainer's PC alike; the diarizer is fixed at 4. In the *Laptop* profile that ran an hour in 334 s.
+  - Progress is the seconds of audio pushed out of the total.
+  - **Check that the C API's words are as fast as the CLI's:** Phase 33 timed the words through the CLI only.
+  - **Check AVX2** (`IsProcessorFeaturePresent(PF_AVX2_INSTRUCTIONS_AVAILABLE)`) before starting the worker, and
+    report `cpu` without it.
+- **Task 3, decoding:** Media Foundation's source reader produces 16 kHz mono itself, in constant memory
+  (`harness/src/decode.rs`). It reads MP3, M4A, MP4, WAV, FLAC, WMA, AMR and WebM.
+  - **Ogg Opus (`.opus`) fails** with `0xC00D36C4`. Its message should name the format and suggest MP3 or M4A, or
+    ElevenLabs.
+  - MP3 output starts 36 ms later than ffmpeg's (the encoder delay isn't trimmed), which is harmless.
+- **Task 6, the recording reaches Rust as a path.** Raw IPC bodies fail past about 100 MB: WebView2 retains about
+  4.5 MB per MB sent.
+  - **Getting the path:** Tauri's drag-and-drop event (`dragDropEnabled: true`, so the desktop build's `FileDrop`
+    takes Tauri's event instead of the HTML drop) and a native Open dialog (`IFileOpenDialog`).
+  - **Playback** of a dropped path needs another source than the `File`: Tauri's asset protocol (a scope, and
+    `media-src` in the CSP) or the page opening the file again. Choose here.
+  - **Decision 4 gets simpler:** there's no temporary copy of the recording, and the C API takes the samples
+    directly.
+- **Task 5, `pack.json`:** the entries are in `scripts/spikes/local-stt/models.json`, the two chosen files at NVIDIA's
+  pinned revisions. `fetch-models.mjs` is the seed of `fetch-speech-pack.mjs`.
+- **Task 7, `mapper.ts`:** the overlap rule held. Merged afterwards, the words' speakers agreed with ElevenLabs on
+  98.8 % of words, and labels held for three hours.
+  - **Add the maintainer's clean-up (D51):** collapse repeated words ("Yeah Yeah") and drop fillers ("um", "uh").
+    Parakeet is verbatim: it kept 245 more fillers and 96 more repeats than ElevenLabs on a 34-minute interview.
+    Whether it's on by default is the maintainer's call.
+  - Confidence is always 1, so `logprob` is `null`.
+- **Limits** (`limits.ts`, `languages.ts`):
+  - Parakeet's card lists 25 European languages (English tested).
+  - Up to 8 speakers.
+  - No length limit up to three hours.
+  - **The number of speakers is ignored** by the C API (`max_speaker_count`), so the local provider takes none.
+  - Parakeet doesn't report the language, so `language` is `null`.
+- **Memory (the 4 GB rule):** read it as the working set. Committed memory runs about 3× higher (3.4 GB for the
+  words worker), so a job object's commit limit isn't the test. Two workers, words and speakers, each stay under
+  4 GB committed.
+- **The acceptance timings to compare with,** from the *Laptop* profile: 1 h in 334 s and 3 h in 998 s, using
+  `scripts/spikes/local-stt/out/test-set/test_audio.{1h,3h}.m4a`.
 
 **Depends on:** Phase 33 (go, and its DECISIONS entry). Phase 35 builds on this phase.
 
@@ -278,3 +334,6 @@ export interface LocalSttBridge {
 ## Handoff
 
 *(What Phase 33 changed in this plan, the commands as built, sizes and timings, and what Phases 35 and 36 need.)*
+
+**Phase 33 (2026-11-15):** updated this file with *Phase 33's findings* above, which
+override the tasks where they differ (DECISIONS.md D51). Nothing in this phase has been built.

@@ -19,12 +19,66 @@
     "laptop": {
       "scheme": "DeScribe laptop emulation",
       "targetCinebench2024Multi": 557,
-      "targetCinebenchR23Multi": 10036
+      "targetCinebenchR23Multi": 10036,
+      "schemeGuid": "9589d08a-f1fa-4ac5-a58b-054c7b850953",
+      "calibratedAt": "2026-11-15T11:42:32.4921012+01:00",
+      "dryRun": false,
+      "policy": "neither benchmark more than 5 % faster than the laptop",
+      "capMHz": 3375,
+      "cinebench2024Multi": 400.38,
+      "cinebenchR23Multi": 10118.36,
+      "error2024": -0.2812,
+      "errorR23": 0.0082,
+      "cinebench2024Single": 74.15,
+      "cinebenchR23Single": 1206.4,
+      "withinTolerance": true,
+      "bothWithin5Percent": false,
+      "rounds": [
+        {
+          "round": 1,
+          "capMHz": 3200,
+          "cinebench2024Multi": 497.34,
+          "cinebenchR23Multi": 9525.64,
+          "error2024": -0.1071,
+          "errorR23": -0.0509
+        },
+        {
+          "round": 2,
+          "capMHz": 3375,
+          "cinebench2024Multi": 400.38,
+          "cinebenchR23Multi": 10118.36,
+          "error2024": -0.2812,
+          "errorR23": 0.0082
+        }
+      ]
     },
     "throttled": {
       "scheme": "DeScribe laptop emulation (throttled)",
       "targetCinebench2024Multi": 334,
-      "targetCinebenchR23Multi": 6022
+      "targetCinebenchR23Multi": 6022,
+      "schemeGuid": "951023bb-4e1a-473f-bb3a-829e8fe9edd1",
+      "calibratedAt": "2026-11-15T14:35:14.6295372+01:00",
+      "dryRun": false,
+      "policy": "neither benchmark more than 5 % faster than the laptop",
+      "capMHz": 1950,
+      "cinebench2024Multi": 320.74,
+      "cinebenchR23Multi": 5761.49,
+      "error2024": -0.0397,
+      "errorR23": -0.0433,
+      "cinebench2024Single": 42.69,
+      "cinebenchR23Single": 670.74,
+      "withinTolerance": true,
+      "bothWithin5Percent": true,
+      "rounds": [
+        {
+          "round": 1,
+          "capMHz": 1950,
+          "cinebench2024Multi": 320.74,
+          "cinebenchR23Multi": 5761.49,
+          "error2024": -0.0397,
+          "errorR23": -0.0433
+        }
+      ]
     }
   }
 }
