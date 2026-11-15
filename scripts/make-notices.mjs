@@ -7,13 +7,17 @@
 // A package with no licence file, or one that covers more than DeScribe includes (Vite's lists Vite's own bundled
 // dependencies), gets one in scripts/notices/<npm|cargo>/<name>.txt, which is used instead of the package's files.
 // Packages that contain other software (PREBUNDLED_* below) list it.
+// The desktop file ends with a Speech models part (scripts/notices/speechModels.mjs): the models in
+// src-tauri/speech-pack/pack.json, each with its licence from scripts/notices/models/<licence>.txt.
 // Usage: npm run notices [-- --check] [-- --web]
 //   --check  writes nothing, and fails if a file is out of date (release.mjs and pack-desktop.mjs run it)
-//   --web    only THIRD-PARTY-NOTICES.txt, which needs no Rust toolchain
+//   --web    only THIRD-PARTY-NOTICES.txt, which needs no Rust toolchain; with --check, also the desktop file's
+//            Speech models part
 import { execSync } from 'node:child_process';
 import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { speechModelsPart, speechModelsPartOf } from './notices/speechModels.mjs';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 const path = (p) => fileURLToPath(new URL(`../${p}`, import.meta.url));
@@ -169,6 +173,16 @@ const NATIVE_DESKTOP = {
     },
   ],
 };
+
+/** The Speech models part, from pack.json and scripts/notices/models/. A missing licence stops the script. */
+function speechModels() {
+  const pack = JSON.parse(read(path('src-tauri/speech-pack/pack.json')));
+  try {
+    return speechModelsPart(pack, path('scripts/notices/models'));
+  } catch (error) {
+    stop(error.message);
+  }
+}
 
 const LICENCE_FILE = /^(licen[cs]e|copying|copyright|notice|unlicense)/i;
 const MIT_TEXT = /Permission is hereby granted, free of charge/;
@@ -483,6 +497,7 @@ if (!webOnly) {
     name: 'THIRD-PARTY-NOTICES-DESKTOP.txt',
     intro:
       'The DeScribe Windows app also includes the open-source software below. Each is followed by its licence.',
+    after: speechModels,
     entries: async () => [
       ...cargoEntries(),
       ...nativeEntries(),
@@ -494,7 +509,12 @@ if (!webOnly) {
 let stale = false;
 for (const file of files) {
   const entries = await file.entries();
-  const text = render(file.intro, entries);
+  const text =
+    render(file.intro, entries) +
+    (file.after
+      ? `
+${file.after()}`
+      : '');
   const target = path(file.name);
   const current = existsSync(target) ? read(target).replace(/\r\n/g, '\n') : null;
   const kb = `${(Buffer.byteLength(text) / 1024).toFixed(0)} KB`;
@@ -508,6 +528,19 @@ for (const file of files) {
   } else {
     writeFileSync(target, text);
     console.log(`notices: wrote ${file.name} (${entries.length} packages, ${kb})`);
+  }
+}
+// release.mjs checks with --web, which has no Rust toolchain: the Speech models part is checked on its own.
+if (check && webOnly) {
+  const name = 'THIRD-PARTY-NOTICES-DESKTOP.txt';
+  const part = speechModels();
+  const target = path(name);
+  const current = existsSync(target) ? speechModelsPartOf(read(target)) : null;
+  if (current !== part) {
+    console.error(`notices: the Speech models part of ${name} is out of date.`);
+    stale = true;
+  } else {
+    console.log(`notices: the Speech models part of ${name} is up to date`);
   }
 }
 if (stale) stop('run "npm run notices" and commit the result.');

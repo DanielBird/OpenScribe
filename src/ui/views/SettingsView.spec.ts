@@ -340,6 +340,9 @@ describe('SettingsView', () => {
       expect(text).toContain('DeScribe includes the open-source software below.');
       expect(text).toContain('The DeScribe Windows app also includes');
       expect(text).toContain('Microsoft Edge WebView2 SDK loader');
+      expect(text).toContain('Speech models');
+      expect(text).toContain('OpenMDW License Agreement, version 1.1');
+      expect(text).toContain('DeScribe is not affiliated with, sponsored by or endorsed by NVIDIA.');
     });
   });
 });
