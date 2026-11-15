@@ -38,6 +38,8 @@ function fakeProvider() {
   const provider: TranscriptionProvider = {
     id: 'elevenlabs',
     model: 'scribe_v2',
+    needsKey: true,
+    supports: { keyterms: true, zeroRetention: true, numSpeakers: true },
     limits: ELEVENLABS_LIMITS,
     languages: ['de', 'en', 'fr'],
     transcribe: (input, { signal, onProgress }) =>
@@ -110,6 +112,7 @@ describe('job store', () => {
         numSpeakers: 2,
         zeroRetention: true,
         keyterms: ['Oticon'],
+        cleanUp: true,
       });
     });
 
@@ -423,6 +426,98 @@ describe('job store', () => {
       expect(job.status).toBe('done');
       job.dismiss();
       expect(job.status).toBe('idle');
+    });
+  });
+
+  describe('on this computer (a provider that needs no key)', () => {
+    const TIMINGS = {
+      decodeSec: 0.5,
+      wordsSec: 10,
+      speakersSec: 8,
+      totalSec: 10.2,
+      threads: 8,
+      peakMemoryBytes: 950_000_000,
+    };
+    let local: ReturnType<typeof fakeProvider>;
+
+    beforeEach(() => {
+      local = fakeProvider();
+      Object.assign(local.provider, {
+        id: 'local',
+        model: 'nvidia-parakeet-nemotron-1',
+        needsKey: false,
+        supports: { keyterms: false, zeroRetention: false, numSpeakers: false },
+      });
+      setTranscriptionProviderForTests(local.provider, 'local');
+    });
+
+    afterEach(() => setTranscriptionProviderForTests(null, 'local'));
+
+    function makeLocalReady() {
+      const settings = makeReady();
+      settings.elevenLabsKey = '';
+      settings.transcriptionEngine = 'local';
+      return settings;
+    }
+
+    it('runs without a key and sends none of ElevenLabs’ options', () => {
+      makeLocalReady();
+      void useJobStore().start();
+      expect(fake.calls).toHaveLength(0);
+      expect(local.calls[0]!.input).toMatchObject({
+        apiKey: '',
+        keyterms: [],
+        zeroRetention: false,
+        numSpeakers: null,
+        languageHint: 'de',
+        cleanUp: true,
+      });
+    });
+
+    it('shows the processing state from the start, with the seconds done', () => {
+      makeLocalReady();
+      const job = useJobStore();
+      void job.start();
+      local.calls[0]!.onProgress({ phase: 'preparing' });
+      expect(job.status).toBe('processing');
+      local.calls[0]!.onProgress({ phase: 'transcribing', doneSec: 12, totalSec: 60 });
+      expect(job.localProgress).toEqual({ doneSec: 12, totalSec: 60 });
+    });
+
+    it('records the engine and pack, and keeps the run’s timings outside the doc', async () => {
+      makeLocalReady();
+      const job = useJobStore();
+      const done = job.start();
+      local.calls[0]!.resolve({ ...RESULT, timings: TIMINGS } as NormalizedTranscription);
+      await done;
+      const doc = useTranscriptStore().doc!;
+      expect(doc.request).toEqual({
+        provider: 'local',
+        model: 'nvidia-parakeet-nemotron-1',
+        languageHint: 'de',
+        numSpeakers: null,
+        zeroRetention: false,
+        keyterms: [],
+      });
+      expect(JSON.stringify(doc)).not.toContain('peakMemoryBytes');
+      expect(job.lastLocalRun).toMatchObject({ timings: TIMINGS });
+      // It survives a restart, and Clear saved data forgets it.
+      setActivePinia(createPinia());
+      expect(useJobStore().lastLocalRun).toMatchObject({ timings: TIMINGS });
+      useJobStore().clearLastLocalRun();
+      setActivePinia(createPinia());
+      expect(useJobStore().lastLocalRun).toBeNull();
+    });
+
+    it('tries again without asking for a key', async () => {
+      makeLocalReady();
+      const job = useJobStore();
+      const done = job.start();
+      local.calls[0]!.reject(new ProviderError('server', 'stopped'));
+      await done;
+      void job.retry();
+      expect(local.calls).toHaveLength(2);
+      expect(job.status).not.toBe('error');
     });
   });
 });

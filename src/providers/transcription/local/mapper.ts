@@ -56,7 +56,11 @@ function capitalise(text: string): string {
 
 const startsUpper = (text: string) => {
   const first = text.match(/\p{L}/u)?.[0];
-  return first !== undefined && first === first.toLocaleUpperCase() && first !== first.toLocaleLowerCase();
+  return (
+    first !== undefined &&
+    first === first.toLocaleUpperCase() &&
+    first !== first.toLocaleLowerCase()
+  );
 };
 
 interface Placed {
@@ -71,7 +75,10 @@ interface Placed {
 /** Words with usable times and text, in order. A word whose end is before its start ends where it starts. */
 function usableWords(words: readonly LocalWord[]): LocalWord[] {
   return words
-    .filter((w) => Number.isFinite(w.start) && Number.isFinite(w.end) && w.start >= 0 && w.text.trim() !== '')
+    .filter(
+      (w) =>
+        Number.isFinite(w.start) && Number.isFinite(w.end) && w.start >= 0 && w.text.trim() !== '',
+    )
     .map((w) => ({ ...w, text: w.text.trim(), end: Math.max(w.start, w.end) }))
     .sort((a, b) => a.start - b.start || a.end - b.end);
 }
@@ -101,7 +108,8 @@ function place(words: readonly LocalWord[], segments: readonly LocalSegment[]): 
       const s = segments[i]!;
       if (s.start > w.end + NEAREST_WITHIN_SEC) break;
       const overlap = Math.min(w.end, s.end) - Math.max(w.start, s.start);
-      if (overlap > 0) overlapBySpeaker.set(s.speaker, (overlapBySpeaker.get(s.speaker) ?? 0) + overlap);
+      if (overlap > 0)
+        overlapBySpeaker.set(s.speaker, (overlapBySpeaker.get(s.speaker) ?? 0) + overlap);
       const gap = Math.max(s.start - w.end, w.start - s.end, 0);
       if (nearest === null || gap < nearest.gap) nearest = { speaker: s.speaker, gap };
     }
@@ -114,7 +122,13 @@ function place(words: readonly LocalWord[], segments: readonly LocalSegment[]): 
       const held = length > 0 ? Math.min(1, best.overlap / length) : 1;
       placed.push({ text: w.text, start: w.start, end: w.end, speaker: best.speaker, held });
     } else {
-      placed.push({ text: w.text, start: w.start, end: w.end, speaker: nearest?.speaker ?? 0, held: 0 });
+      placed.push({
+        text: w.text,
+        start: w.start,
+        end: w.end,
+        speaker: nearest?.speaker ?? 0,
+        held: 0,
+      });
     }
   }
   return placed;
@@ -155,7 +169,13 @@ export function cleanUp(placed: readonly Placed[]): Placed[] {
       capitaliseNext = false;
     }
     const key = bare(word.text);
-    if (sameSpeaker && key !== '' && key === bare(prev.text) && !endsSentence(prev.text) && !LEGITIMATE_DOUBLES.has(key)) {
+    if (
+      sameSpeaker &&
+      key !== '' &&
+      key === bare(prev.text) &&
+      !endsSentence(prev.text) &&
+      !LEGITIMATE_DOUBLES.has(key)
+    ) {
       // "Yeah Yeah" → "Yeah": the first copy's capitals and start, the last copy's punctuation and end.
       const capitals = startsUpper(prev.text) && !startsUpper(word.text);
       prev.text = capitals ? capitalise(word.text) : word.text;
@@ -193,9 +213,23 @@ export function toTokens(
     if (i > 0) {
       const prevEnd = final[i - 1]!.end;
       const at = Math.max(prevEnd, Math.min(w.start, prevEnd));
-      tokens.push({ text: ' ', start: at, end: Math.max(at, w.start), speakerId, kind: 'spacing', logprob: null });
+      tokens.push({
+        text: ' ',
+        start: at,
+        end: Math.max(at, w.start),
+        speakerId,
+        kind: 'spacing',
+        logprob: null,
+      });
     }
-    tokens.push({ text: w.text, start: w.start, end: w.end, speakerId, kind: 'word', logprob: null });
+    tokens.push({
+      text: w.text,
+      start: w.start,
+      end: w.end,
+      speakerId,
+      kind: 'word',
+      logprob: null,
+    });
   });
   return tokens;
 }

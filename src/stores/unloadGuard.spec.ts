@@ -1,5 +1,9 @@
-import { afterEach, describe, expect, it } from 'vitest';
-import { createUnloadGuard, type UnloadGuard } from './unloadGuard';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+
+const setCloseGuard = vi.fn<(active: boolean) => void>();
+vi.mock('../desktop/closeGuard', () => ({ setCloseGuard: (a: boolean) => setCloseGuard(a) }));
+const { anyGuardHeld, createUnloadGuard } = await import('./unloadGuard');
+type UnloadGuard = ReturnType<typeof createUnloadGuard>;
 
 const leaveBlocked = () => {
   const event = new Event('beforeunload', { cancelable: true });
@@ -17,6 +21,8 @@ describe('createUnloadGuard', () => {
 
   afterEach(() => {
     for (const g of made.splice(0)) g.release();
+    setCloseGuard.mockReset();
+    vi.unstubAllGlobals();
   });
 
   it('asks before leaving while held, and not after it is released', () => {
@@ -46,5 +52,27 @@ describe('createUnloadGuard', () => {
     g.hold();
     g.release();
     expect(leaveBlocked()).toBe(false);
+  });
+
+  it('in the desktop app, asks before closing while any guard is held, saying so only on a change', () => {
+    vi.stubGlobal('__DESKTOP__', true);
+    const job = guard();
+    const translation = guard();
+    job.hold();
+    translation.hold();
+    job.hold();
+    expect(setCloseGuard.mock.calls).toEqual([[true]]);
+    job.release();
+    expect(anyGuardHeld()).toBe(true);
+    translation.release();
+    expect(setCloseGuard.mock.calls).toEqual([[true], [false]]);
+    expect(anyGuardHeld()).toBe(false);
+  });
+
+  it('tells nothing to Rust in the web build', () => {
+    const g = guard();
+    g.hold();
+    g.release();
+    expect(setCloseGuard).not.toHaveBeenCalled();
   });
 });

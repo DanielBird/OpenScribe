@@ -2,10 +2,13 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, useTemplateRef } from 'vue';
 import { formatBytes, type FileCheck } from '../../domain/filecheck';
 import { formatTimestamp } from '../../domain/transcript';
+import { useDesktopRecordingStore } from '../../stores/desktopRecording';
 
-// Presentational: the parent owns the file and its check (Setup uses the settings store).
+// The parent owns the file and its check (Setup uses the settings store).
 // `compact` is a one-line picker (`prompt`, if any, and a `chooseLabel` button) with no file details:
 // AudioBar's Attach.
+// In the desktop app the file comes from Rust (DECISIONS.md D53): the button opens Windows' Open dialog, and a file
+// dropped on the window arrives with where it landed, so it counts only on the zone, as a browser drop would.
 const props = withDefaults(
   defineProps<{
     file?: File | null;
@@ -32,15 +35,24 @@ const ACCEPT = 'audio/*,video/*,.m4a,.wma,.mkv,.opus';
 
 const input = useTemplateRef<HTMLInputElement>('input');
 const chooseButton = useTemplateRef<HTMLButtonElement>('chooseButton');
-const dragging = ref(false);
+const zone = useTemplateRef<HTMLDivElement>('zone');
+const desktop = __DESKTOP__ ? useDesktopRecordingStore() : null;
+const htmlDragging = ref(false);
+const dragging = computed(() => htmlDragging.value || (desktop?.dragging ?? false));
 let dragDepth = 0;
+let stopDesktopDrops: (() => void) | null = null;
 
 const durationText = computed(() => {
   if (props.probing) return 'Checking…';
   return props.durationSec === null ? 'unknown' : formatTimestamp(props.durationSec);
 });
 
-function choose(): void {
+async function choose(): Promise<void> {
+  if (desktop) {
+    const picked = await desktop.choose();
+    if (picked) emit('select', picked);
+    return;
+  }
   input.value?.click();
 }
 
@@ -57,12 +69,12 @@ const carriesFiles = (event: DragEvent) => event.dataTransfer?.types.includes('F
 function onDragEnter(event: DragEvent): void {
   if (!carriesFiles(event)) return;
   dragDepth++;
-  dragging.value = true;
+  htmlDragging.value = true;
 }
 
 function onDragLeave(): void {
   dragDepth = Math.max(0, dragDepth - 1);
-  if (dragDepth === 0) dragging.value = false;
+  if (dragDepth === 0) htmlDragging.value = false;
 }
 
 function onDragOver(event: DragEvent): void {
@@ -73,7 +85,7 @@ function onDragOver(event: DragEvent): void {
 function onDrop(event: DragEvent): void {
   event.preventDefault();
   dragDepth = 0;
-  dragging.value = false;
+  htmlDragging.value = false;
   const dropped = event.dataTransfer?.files[0];
   if (dropped) emit('select', dropped);
 }
@@ -95,11 +107,19 @@ function blockStrayDrop(event: DragEvent): void {
 onMounted(() => {
   window.addEventListener('dragover', blockStrayDrop);
   window.addEventListener('drop', blockStrayDrop);
+  stopDesktopDrops =
+    desktop?.onDrop(({ file, x, y }) => {
+      const rect = zone.value?.getBoundingClientRect();
+      if (rect && x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom) {
+        emit('select', file);
+      }
+    }) ?? null;
 });
 
 onBeforeUnmount(() => {
   window.removeEventListener('dragover', blockStrayDrop);
   window.removeEventListener('drop', blockStrayDrop);
+  stopDesktopDrops?.();
 });
 </script>
 
@@ -108,6 +128,7 @@ onBeforeUnmount(() => {
     <input ref="input" type="file" :accept="ACCEPT" hidden @change="onChange" />
 
     <div
+      ref="zone"
       class="zone"
       :class="{ 'is-dragging': dragging, 'is-compact': compact }"
       data-testid="drop-zone"
