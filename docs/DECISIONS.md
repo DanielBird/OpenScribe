@@ -976,7 +976,8 @@ summarise them.
 - **Decision:** Phase 33's spike gives a **provisional go, at the target** (reference/local-stt.md, *Go/no-go*):
   an hour of audio in 5.6 minutes (10.8×) and three hours in 16.6 in the emulated laptop's profile, 9.5 minutes an
   hour throttled, against a target of 10 and a floor of 15. The maintainer judged the transcripts sufficient
-  (2026-11-15). It completes D50, and holds until Phase 36's run on the work laptop.
+  (2026-11-15) and **agreed to the provisional go** (2026-11-15). It completes D50, and holds until Phase 36's run
+  on the work laptop.
 - **What the app uses:**
   - **Models:**
     - words: **Parakeet TDT 0.6B v3** (CC-BY-4.0);

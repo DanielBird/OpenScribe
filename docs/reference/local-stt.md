@@ -288,8 +288,8 @@ temporary folder.
 
 ## Go/no-go
 
-**Provisional go, at the target** (2026-11-15; DECISIONS.md D51). It holds until Phase 36's run on the work laptop
-confirms or corrects it.
+**Provisional go, at the target** (2026-11-15; DECISIONS.md D51), **agreed with the maintainer** the same day. It
+holds until Phase 36's run on the work laptop confirms or corrects it.
 
 | | Goal on the laptop | Measured under emulation | Result |
 |---|---|---|---|

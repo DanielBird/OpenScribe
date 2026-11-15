@@ -414,7 +414,8 @@ need the calibrated profiles.
   CMake and Ninja are installed on the PC.
 
 **Part B (2026-11-15): the results, the choices and the go/no-go.**
-- **Provisional go, at the target** (DECISIONS.md D51; reference/local-stt.md, *Go/no-go*):
+- **Provisional go, at the target**, agreed with the maintainer on 2026-11-15 (DECISIONS.md D51;
+  reference/local-stt.md, *Go/no-go*):
   - *Laptop* profile: an hour in 334 s (10.8×) and three hours in 998 s (10.8×), against the emulated target of 9×;
   - *Throttled*: an hour in 567 s (6.35×), against the 2× required;
   - two of the twelve processors kept busy: no effect.
