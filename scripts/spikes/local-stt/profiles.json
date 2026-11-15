@@ -1,0 +1,30 @@
+{
+  "logicalProcessors": [
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15
+  ],
+  "mask": "0xfff0",
+  "note": "Phase 33's emulated laptop. The mask comes from `pinrun topology --write`; each profile's cap and scores from calibrate.ps1.",
+  "profiles": {
+    "laptop": {
+      "scheme": "DeScribe laptop emulation",
+      "targetCinebench2024Multi": 557,
+      "targetCinebenchR23Multi": 10036
+    },
+    "throttled": {
+      "scheme": "DeScribe laptop emulation (throttled)",
+      "targetCinebench2024Multi": 334,
+      "targetCinebenchR23Multi": 6022
+    }
+  }
+}

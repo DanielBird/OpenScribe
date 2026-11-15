@@ -25,3 +25,11 @@ devcert.pfx
 
 docs/screenshots/
 *.m4a
+
+# Phase 33 spike (scripts/spikes/local-stt): recordings, model files, the runtime's source, builds and results.
+tests/audio/
+scripts/spikes/local-stt/models/
+scripts/spikes/local-stt/vendor/
+scripts/spikes/local-stt/out/
+scripts/spikes/local-stt/**/target/
+scripts/spikes/local-stt/ipc-probe/gen/

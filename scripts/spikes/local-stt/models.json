@@ -1,0 +1,53 @@
+{
+  "note": "Phase 33 spike: every model file tried, pinned to the Hugging Face commit that NeMo-Speech.cpp v0.3.0's models/index.json names. Sizes and SHA-256 from the Hugging Face API (LFS oid) on 2026-11-14. fetch-models.mjs downloads them into models/ (gitignored) and checks both.",
+  "models": [
+    {
+      "id": "parakeet-tdt-0.6b-v3",
+      "role": "words",
+      "name": "NVIDIA Parakeet TDT 0.6B v3",
+      "repo": "nvidia/parakeet-tdt-0.6b-v3",
+      "revision": "541d1f99c6b0c3cd0b11a95167540bb8edefd82b",
+      "file": "parakeet-tdt-0.6b-v3.q8_0.gguf",
+      "bytes": 713975456,
+      "sha256": "e3880d0aaaaf2c308ea2c35016b2b895c423eb3fda924c1b463d1c19b7f4d32e",
+      "licence": "CC-BY-4.0",
+      "gated": false
+    },
+    {
+      "id": "nemotron-3.5-asr-streaming-0.6b",
+      "role": "words",
+      "name": "NVIDIA Nemotron 3.5 ASR Streaming 0.6B",
+      "repo": "nvidia/nemotron-3.5-asr-streaming-0.6b",
+      "revision": "1c8deaecc64b91f034d73e08dd8b64625eb3395d",
+      "file": "nemotron-3.5-asr-streaming-0.6b.q8_0.gguf",
+      "bytes": 741548352,
+      "sha256": "a5c435f294eea8f88ce68dd27b8c3bfea7f777cb2fbba04fcd30eaa555f429ae",
+      "licence": "OpenMDW-1.1",
+      "gated": false
+    },
+    {
+      "id": "nemotron-3-diarization",
+      "role": "speakers",
+      "name": "NVIDIA Nemotron 3 Diarization",
+      "repo": "nvidia/Nemotron-3-Diarization",
+      "revision": "f667ed73aee57d40cc39428eb768b4fd87a0a29e",
+      "file": "Nemotron-3-Diarization.q8_0.gguf",
+      "bytes": 107012128,
+      "sha256": "08456d9e22cd9a323c0364d98375f3746d6e68507ebb705cd46438c534c7a3a1",
+      "licence": "OpenMDW-1.1",
+      "gated": false
+    },
+    {
+      "id": "sortformer-4spk-v2",
+      "role": "speakers",
+      "name": "NVIDIA Streaming Sortformer 4spk v2",
+      "repo": "nvidia/diar_streaming_sortformer_4spk-v2",
+      "revision": "5240a64075176943f677d30fa2171c780229f341",
+      "file": "diar_streaming_sortformer_4spk-v2.q8_0.gguf",
+      "bytes": 147075776,
+      "sha256": "0679cfeb1ce356d0dea9470b31274f4bfc7eb927497d82005483770666da998a",
+      "licence": "CC-BY-4.0",
+      "gated": false
+    }
+  ]
+}

@@ -1,0 +1,50 @@
+[package]
+name = "local-stt-harness"
+version = "0.1.0"
+description = "Phase 33 spike: the local speech-to-text harness, probes and download prototype. Not part of the app."
+edition = "2024"
+license = "MIT"
+publish = false
+
+# A workspace of its own, so it never joins src-tauri's.
+[workspace]
+
+[features]
+default = []
+# Task 4's second decoder candidate.
+symphonia = ["dep:symphonia"]
+# D6's second HTTP stack candidate.
+reqwest = ["dep:reqwest"]
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+symphonia = { version = "0.5", optional = true, default-features = false, features = ["aac", "isomp4", "mp3", "wav", "pcm"] }
+reqwest = { version = "0.12", optional = true, default-features = false, features = ["blocking", "native-tls"] }
+
+# The version the app uses (src-tauri/Cargo.toml).
+[dependencies.windows]
+version = "0.62.2"
+features = [
+  "Win32_Foundation",
+  "Win32_Media_MediaFoundation",
+  "Win32_Networking_WinHttp",
+  "Win32_Security",
+  "Win32_System_Com",
+  "Win32_Storage_FileSystem",
+  "Win32_System_Com_StructuredStorage",
+  "Win32_System_Console",
+  "Win32_System_IO",
+  "Win32_System_JobObjects",
+  "Win32_System_LibraryLoader",
+  "Win32_System_Performance",
+  "Win32_System_Pipes",
+  "Win32_System_ProcessStatus",
+  "Win32_System_SystemInformation",
+  "Win32_System_Threading",
+  "Win32_System_Variant",
+]
+
+[profile.release]
+debug = false

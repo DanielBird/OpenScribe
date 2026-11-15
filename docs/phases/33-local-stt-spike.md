@@ -364,3 +364,51 @@ ONNX Runtime the alternative runtime.
 
 *(The choices, the emulation as set up and the numbers per profile, the download findings, and what Phases 34–36
 must change.)*
+
+**Part A (2026-11-15): the harness, the probes, and the maintainer's guide.** No go/no-go yet: the laptop estimates
+need the calibrated profiles.
+- **What the maintainer does next:** [33-maintainer-guide.md](33-maintainer-guide.md), ten tasks. Part B starts from
+  `scripts\spikes\local-stt\out\summary.md`, the task 8 lines and the task 9 answers.
+- **Decided with the maintainer during planning:**
+  - testing is English with two speakers only, so M5's language tests and M6's fifth or ninth speaker are *scoped
+    out*;
+  - the thresholds and the emulation stand as written;
+  - the maintainer brought D50 and Phases 35–36 in line with the Hugging Face download before part A.
+- **What was built:** `scripts/spikes/local-stt/`; [reference/local-stt.md](../reference/local-stt.md) lists every
+  tool. `src/` and `src-tauri/` are unchanged.
+- **Different from this file:**
+  - **Two power schemes, not one edited between profiles,** so switching is the only change during a session.
+  - **pinrun** pins through a job object, not `start /affinity`.
+  - **Cinebench** prints its score only to an attached console, so `pinrun --capture-console` runs it on a pseudo
+    console.
+  - **The calibration can't meet "both within 5 %":** pinned at full clock this PC is 1.37× the laptop in Cinebench
+    2024 and 1.62× in R23. `calibrate.ps1` takes the slow-side cap, at which neither benchmark is more than 5 % faster
+    than the laptop (R23 matches; 2024 is about 15 % below), and records both errors. Part B takes this to the
+    maintainer.
+  - The emulation's processors are `0xfff0` (P-cores 2–7).
+- **What part A found** (uncapped; details in the reference doc):
+  - **Models:** Parakeet TDT v3 and Nemotron 3 Diarization, NVIDIA's own ungated q8_0 GGUF files, 821 MB.
+    - Nemotron 3.5 ASR is far slower on a CPU.
+    - Sortformer v2 is 3× slower than Nemotron Diarization for the same labels.
+    - Sortformer v2.1 and Unified ASR aren't in NeMo-Speech.cpp.
+  - **The engine:** NeMo-Speech.cpp v0.3.0 CPU-only builds to 7.1 MB. Its C API has no thread setting, no progress
+    and no cancel, and ignores the number of speakers.
+  - **Long files** must be chunked by the caller: 30 s with 2 s overlap is 2.5× faster than the engine's own
+    full-context pass.
+  - **The diarization preset** `v3-offline` is 10× faster than the default.
+  - **Speaker labels** held for 3 hours.
+  - **Speed:** 15.7× real time at the full clock, pinned.
+  - **Memory:** the CLI's `diarize` grows to 3.3 GB at 3 hours, but the C API stream stays at 162 MB. Committed
+    memory is about 3× the working set.
+  - **Decoding:** Media Foundation reads everything but Ogg Opus, in constant memory.
+  - **The page to Rust:** raw IPC bodies fail past about 100 MB (WebView2 retains them), so Rust needs a path.
+  - **Downloads:** WinHTTP downloads, resumes and tells every failure apart.
+- **Not run, with reasons:**
+  - M9: only q8_0 is published;
+  - M1 on a CPU without AVX2: it needs Intel SDE, a download not approved;
+  - M5 and the extra speakers: scoped out.
+- **Left in the tree, gitignored:**
+  - `devcert.pfx` at the root, made by `ipc-probe/pack.ps1` and not yet trusted;
+  - `scripts/spikes/local-stt/{models,vendor,out}/`, several GB, which part B needs.
+
+  CMake and Ninja are installed on the PC.
