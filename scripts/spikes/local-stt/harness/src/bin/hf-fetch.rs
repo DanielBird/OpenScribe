@@ -13,6 +13,7 @@
 //!   connection-dropped, tls, blocked (403/451), not-found, rate-limited (429, with Retry-After), http-NNN,
 //!   not-the-file (HTML or a wrong size), disk-full, hash-mismatch.
 //! - `--fail-at-bytes` stops writing after N bytes with the disk-full kind, to simulate a full disk.
+//! - `--max-mbps N` holds the download to N MB/s on average (interrupt-download.ps1 uses it).
 //! - `--test-local` also allows plain http://127.0.0.1:PORT/, for the failure tests' local server (test-server.mjs).
 //! - WinHTTP (`--stack winhttp`, the default) is Windows' own HTTP client: it uses Windows' certificate store, so a
 //!   company's inspecting certificate is trusted as it is by Edge and curl.exe, and WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY
@@ -64,6 +65,7 @@ struct Options {
     fail_at: Option<u64>,
     timeout_sec: u32,
     test_local: bool,
+    max_mbps: Option<f64>,
 }
 
 fn parse() -> Result<Options, String> {
@@ -79,6 +81,7 @@ fn parse() -> Result<Options, String> {
         fail_at: None,
         timeout_sec: 60,
         test_local: false,
+        max_mbps: None,
     };
     let mut i = 0;
     while i < args.len() {
@@ -97,6 +100,7 @@ fn parse() -> Result<Options, String> {
             "--fail-at-bytes" => o.fail_at = Some(value()?.parse().map_err(|_| "bad --fail-at-bytes")?),
             "--timeout-sec" => o.timeout_sec = value()?.parse().map_err(|_| "bad --timeout-sec")?,
             "--test-local" => o.test_local = true,
+            "--max-mbps" => o.max_mbps = Some(value()?.parse().map_err(|_| "bad --max-mbps")?),
             s if s.starts_with("--") => return Err(format!("unknown option {s}")),
             _ => o.url = a,
         }
@@ -225,6 +229,14 @@ fn download(o: &Options, stack: &mut dyn Stack, hops: &mut Vec<Value>) -> Result
             if e.raw_os_error() == Some(112) { fail("disk-full", e.to_string()) } else { fail("disk", e.to_string()) }
         })?;
         written += n as u64;
+        // --max-mbps: hold the average down to N MB/s (a slower network, and time to interrupt by hand).
+        if let Some(limit) = o.max_mbps {
+            let due = written as f64 / 1e6 / limit;
+            let spent = started.elapsed().as_secs_f64();
+            if due > spent {
+                std::thread::sleep(std::time::Duration::from_secs_f64(due - spent));
+            }
+        }
         if last.elapsed().as_secs_f64() > 2.0 {
             last = Instant::now();
             let rate = written as f64 / 1e6 / started.elapsed().as_secs_f64();
