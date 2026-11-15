@@ -1,6 +1,7 @@
 // Writes the third-party notices that Settings → About shows:
 //   THIRD-PARTY-NOTICES.txt          the npm packages bundled into the app's JavaScript (both builds)
-//   THIRD-PARTY-NOTICES-DESKTOP.txt  the Rust crates, and Microsoft's WebView2 loader, in the Windows app
+//   THIRD-PARTY-NOTICES-DESKTOP.txt  the Rust crates, Microsoft's WebView2 loader, the speech engine's native libraries
+//                                    (NATIVE_DESKTOP) and the npm packages only the desktop build bundles
 // The npm list comes from the production build's module graph, so it is exactly what gets bundled. The Rust list
 // comes from `cargo metadata`: the crates linked into the x64 Windows exe, without build-only crates and proc macros.
 // A package with no licence file, or one that covers more than DeScribe includes (Vite's lists Vite's own bundled
@@ -107,6 +108,66 @@ const PREBUNDLED_CARGO = {
       },
     ],
   },
+};
+
+/**
+ * The speech engine's DLLs (src-tauri/stt-runtime.json, DECISIONS.md D53), which no package manager here knows: what
+ * the engine's build links in, read from its THIRD_PARTY_NOTICES.md and the vcpkg packages its ASR build installs.
+ * `checked` is the stt-runtime.json version this list was made for; any other stops the script.
+ */
+const NATIVE_DESKTOP = {
+  checked: '0.3.0',
+  includes: [
+    {
+      name: 'NeMo-Speech.cpp (nemo_speech_asr.dll, nemo_speech_asr_c.dll), with its NOTICE and third-party notices',
+      version: '0.3.0',
+      license: 'Apache-2.0',
+      url: 'https://github.com/NVIDIA/NeMo-Speech.cpp',
+      file: 'nemo-speech.txt',
+    },
+    {
+      name: 'ggml (ggml.dll, ggml-base.dll, ggml-cpu.dll), from llama.cpp',
+      version: 'bd4f514d',
+      license: 'MIT',
+      url: 'https://github.com/ggml-org/llama.cpp',
+      file: 'ggml.txt',
+    },
+    {
+      name: 'SentencePiece',
+      version: '0.2.1',
+      license: 'Apache-2.0',
+      url: 'https://github.com/google/sentencepiece',
+      file: 'sentencepiece.txt',
+    },
+    {
+      name: 'Abseil',
+      version: '20260107.1',
+      license: 'Apache-2.0',
+      url: 'https://github.com/abseil/abseil-cpp',
+      file: 'abseil.txt',
+    },
+    {
+      name: 'Protocol Buffers',
+      version: '6.33.4',
+      license: 'BSD-3-Clause',
+      url: 'https://github.com/protocolbuffers/protobuf',
+      file: 'protobuf.txt',
+    },
+    {
+      name: 'utf8_range',
+      version: '6.33.4',
+      license: 'MIT',
+      url: 'https://github.com/protocolbuffers/protobuf',
+      file: 'utf8-range.txt',
+    },
+    {
+      name: 'Microsoft Visual C++ and OpenMP runtimes (msvcp140, vcruntime140, vcruntime140_1, vcomp140)',
+      version: '14.44',
+      license: 'Microsoft Software License Terms, Distributable Code',
+      url: 'https://visualstudio.microsoft.com/license-terms/',
+      file: 'msvc-runtime.txt',
+    },
+  ],
 };
 
 const LICENCE_FILE = /^(licen[cs]e|copying|copyright|notice|unlicense)/i;
@@ -252,11 +313,12 @@ function prebundled(table, ecosystem, name, version, dir) {
   });
 }
 
-async function npmEntries() {
+async function npmEntries(mode = 'production') {
   const { build } = await import('vite');
   const ids = new Set();
   await build({
     root,
+    mode,
     logLevel: 'silent',
     build: { write: false },
     plugins: [
@@ -299,6 +361,33 @@ async function npmEntries() {
     const entry = npmEntry(dir);
     return [entry, ...prebundled(PREBUNDLED_NPM, 'npm', entry.name, entry.version, dir)];
   });
+}
+
+/** The engine's native libraries (NATIVE_DESKTOP), checked against the runtime the app is built with. */
+function nativeEntries() {
+  const runtime = JSON.parse(read(path('src-tauri/stt-runtime.json')));
+  if (runtime.version !== NATIVE_DESKTOP.checked) {
+    stop(
+      `src-tauri/stt-runtime.json is ${runtime.name} ${runtime.version}, but NATIVE_DESKTOP lists what ` +
+        `${NATIVE_DESKTOP.checked} contains. Check what the new build links in, then update the list.`,
+    );
+  }
+  return NATIVE_DESKTOP.includes.map((item) => {
+    const text = vendored('native', item.file);
+    if (!text) stop(`scripts/notices/native/${item.file} is missing.`);
+    return { ...item, texts: [text], note: 'in the speech engine' };
+  });
+}
+
+/**
+ * npm packages that only the desktop build bundles. The web build's module graph still names them (tree-shaking
+ * leaves them empty there, which verify:single-file checks), so the web file leaves them out and the desktop one
+ * lists them.
+ */
+const DESKTOP_ONLY_NPM = ['@tauri-apps/api'];
+
+async function desktopOnlyNpmEntries() {
+  return (await npmEntries('desktop')).filter((e) => DESKTOP_ONLY_NPM.includes(e.name));
 }
 
 function cargoEntries() {
@@ -386,7 +475,7 @@ const files = [
   {
     name: 'THIRD-PARTY-NOTICES.txt',
     intro: 'DeScribe includes the open-source software below. Each is followed by its licence.',
-    entries: npmEntries,
+    entries: async () => (await npmEntries()).filter((e) => !DESKTOP_ONLY_NPM.includes(e.name)),
   },
 ];
 if (!webOnly) {
@@ -394,7 +483,11 @@ if (!webOnly) {
     name: 'THIRD-PARTY-NOTICES-DESKTOP.txt',
     intro:
       'The DeScribe Windows app also includes the open-source software below. Each is followed by its licence.',
-    entries: cargoEntries,
+    entries: async () => [
+      ...cargoEntries(),
+      ...nativeEntries(),
+      ...(await desktopOnlyNpmEntries()),
+    ],
   });
 }
 
