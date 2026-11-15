@@ -33,3 +33,9 @@ scripts/spikes/local-stt/vendor/
 scripts/spikes/local-stt/out/
 scripts/spikes/local-stt/**/target/
 scripts/spikes/local-stt/ipc-probe/gen/
+
+# Phase 34: the speech pack for debug builds (npm run desktop:fetch-models), and the engine's DLLs and their build
+# (npm run desktop:stt-runtime)
+.speech-pack/
+src-tauri/stt-runtime/
+.stt-runtime-build/

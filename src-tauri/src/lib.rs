@@ -1,4 +1,6 @@
+mod close_guard;
 mod splash;
+pub mod stt;
 
 use splash::Splash;
 use std::path::PathBuf;
@@ -6,7 +8,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 use tauri::webview::{NewWindowResponse, PageLoadEvent, PermissionKind, PermissionResponse, WebviewWindowBuilder};
-use tauri::{Manager, Runtime, WebviewWindow};
+use tauri::{Manager, Runtime, WebviewWindow, WindowEvent};
 
 /// How long the splash may stay up if the page never reports that it has loaded.
 const REVEAL_TIMEOUT: Duration = Duration::from_secs(15);
@@ -50,7 +52,30 @@ fn package_data_dir() -> Option<PathBuf> {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   let launch = Arc::new(Launch { splash: Splash::show(), shown: AtomicBool::new(false) });
+  let stt = Arc::new(stt::Stt::default());
+  let dropped = Arc::clone(&stt);
   tauri::Builder::default()
+    .manage(stt)
+    .invoke_handler(tauri::generate_handler![
+      stt::commands::stt_choose_recording,
+      stt::commands::stt_status,
+      stt::commands::stt_start,
+      stt::commands::stt_cancel,
+      stt::commands::set_close_guard,
+    ])
+    .on_window_event(move |window, event| {
+      let Some(webview) = window.app_handle().get_webview_window(window.label()) else { return };
+      match event {
+        WindowEvent::DragDrop(drop) => stt::commands::on_drag_drop(&webview, &dropped, drop),
+        // Closing while DeScribe works asks first (close_guard.rs); the worker dies with the app either way.
+        WindowEvent::CloseRequested { api, .. } => {
+          if close_guard::CLOSE_GUARD.should_hold(&webview, dropped.is_running()) {
+            api.prevent_close();
+          }
+        }
+        _ => {}
+      }
+    })
     .setup(move |app| {
       // The window is made here from tauri.conf.json (where `create` is false) so it can handle new-window requests:
       // a link with target="_blank" opens in the default browser, where WebView2 would otherwise open nothing.
@@ -67,6 +92,7 @@ pub fn run() {
       }
       // Started before build(), which waits for WebView2: a hang there mustn't leave the splash up for good.
       let (handle, label, overdue) = (app.handle().clone(), config.label.clone(), Arc::clone(&launch));
+      let reloaded = Arc::clone(app.state::<Arc<stt::Stt>>().inner());
       std::thread::spawn(move || {
         std::thread::sleep(REVEAL_TIMEOUT);
         match handle.get_webview_window(&label) {
@@ -74,10 +100,13 @@ pub fn run() {
           None => overdue.close_splash(),
         }
       });
-      window
-        .on_page_load(move |window, payload| {
-          if matches!(payload.event(), PageLoadEvent::Finished) {
-            launch.reveal(&window);
+      let window = window
+        .on_page_load(move |window, payload| match payload.event() {
+          PageLoadEvent::Finished => launch.reveal(&window),
+          // F5 or a navigation: the page that held the close guard, and owned any local run, is gone.
+          PageLoadEvent::Started => {
+            close_guard::CLOSE_GUARD.set(false);
+            reloaded.cancel();
           }
         })
         // The user chose the folder in Windows' own picker, so the app grants access to it itself: WebView2's prompts
@@ -93,6 +122,7 @@ pub fn run() {
           NewWindowResponse::Deny
         })
         .build()?;
+      let _ = window;
       Ok(())
     })
     .run(tauri::generate_context!())

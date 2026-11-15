@@ -1,0 +1,342 @@
+{
+  "durationSec": 600.0,
+  "steps": [
+    {
+      "afterMs": 1000,
+      "doneSec": 10.0
+    },
+    {
+      "afterMs": 1000,
+      "doneSec": 20.0
+    },
+    {
+      "afterMs": 1000,
+      "doneSec": 30.0
+    },
+    {
+      "afterMs": 1000,
+      "doneSec": 40.0
+    },
+    {
+      "afterMs": 1000,
+      "doneSec": 50.0
+    },
+    {
+      "afterMs": 1000,
+      "doneSec": 60.0
+    },
+    {
+      "afterMs": 1000,
+      "doneSec": 70.0
+    },
+    {
+      "afterMs": 1000,
+      "doneSec": 80.0
+    },
+    {
+      "afterMs": 1000,
+      "doneSec": 90.0
+    },
+    {
+      "afterMs": 1000,
+      "doneSec": 100.0
+    },
+    {
+      "afterMs": 1000,
+      "doneSec": 110.0
+    },
+    {
+      "afterMs": 1000,
+      "doneSec": 120.0
+    },
+    {
+      "afterMs": 1000,
+      "doneSec": 130.0
+    },
+    {
+      "afterMs": 1000,
+      "doneSec": 140.0
+    },
+    {
+      "afterMs": 1000,
+      "doneSec": 150.0
+    },
+    {
+      "afterMs": 1000,
+      "doneSec": 160.0
+    },
+    {
+      "afterMs": 1000,
+      "doneSec": 170.0
+    },
+    {
+      "afterMs": 1000,
+      "doneSec": 180.0
+    },
+    {
+      "afterMs": 1000,
+      "doneSec": 190.0
+    },
+    {
+      "afterMs": 1000,
+      "doneSec": 200.0
+    },
+    {
+      "afterMs": 1000,
+      "doneSec": 210.0
+    },
+    {
+      "afterMs": 1000,
+      "doneSec": 220.0
+    },
+    {
+      "afterMs": 1000,
+      "doneSec": 230.0
+    },
+    {
+      "afterMs": 1000,
+      "doneSec": 240.0
+    },
+    {
+      "afterMs": 1000,
+      "doneSec": 250.0
+    },
+    {
+      "afterMs": 1000,
+      "doneSec": 260.0
+    },
+    {
+      "afterMs": 1000,
+      "doneSec": 270.0
+    },
+    {
+      "afterMs": 1000,
+      "doneSec": 280.0
+    },
+    {
+      "afterMs": 1000,
+      "doneSec": 290.0
+    },
+    {
+      "afterMs": 1000,
+      "doneSec": 300.0
+    },
+    {
+      "afterMs": 1000,
+      "doneSec": 310.0
+    },
+    {
+      "afterMs": 1000,
+      "doneSec": 320.0
+    },
+    {
+      "afterMs": 1000,
+      "doneSec": 330.0
+    },
+    {
+      "afterMs": 1000,
+      "doneSec": 340.0
+    },
+    {
+      "afterMs": 1000,
+      "doneSec": 350.0
+    },
+    {
+      "afterMs": 1000,
+      "doneSec": 360.0
+    },
+    {
+      "afterMs": 1000,
+      "doneSec": 370.0
+    },
+    {
+      "afterMs": 1000,
+      "doneSec": 380.0
+    },
+    {
+      "afterMs": 1000,
+      "doneSec": 390.0
+    },
+    {
+      "afterMs": 1000,
+      "doneSec": 400.0
+    },
+    {
+      "afterMs": 1000,
+      "doneSec": 410.0
+    },
+    {
+      "afterMs": 1000,
+      "doneSec": 420.0
+    },
+    {
+      "afterMs": 1000,
+      "doneSec": 430.0
+    },
+    {
+      "afterMs": 1000,
+      "doneSec": 440.0
+    },
+    {
+      "afterMs": 1000,
+      "doneSec": 450.0
+    },
+    {
+      "afterMs": 1000,
+      "doneSec": 460.0
+    },
+    {
+      "afterMs": 1000,
+      "doneSec": 470.0
+    },
+    {
+      "afterMs": 1000,
+      "doneSec": 480.0
+    },
+    {
+      "afterMs": 1000,
+      "doneSec": 490.0
+    },
+    {
+      "afterMs": 1000,
+      "doneSec": 500.0
+    },
+    {
+      "afterMs": 1000,
+      "doneSec": 510.0
+    },
+    {
+      "afterMs": 1000,
+      "doneSec": 520.0
+    },
+    {
+      "afterMs": 1000,
+      "doneSec": 530.0
+    },
+    {
+      "afterMs": 1000,
+      "doneSec": 540.0
+    },
+    {
+      "afterMs": 1000,
+      "doneSec": 550.0
+    },
+    {
+      "afterMs": 1000,
+      "doneSec": 560.0
+    },
+    {
+      "afterMs": 1000,
+      "doneSec": 570.0
+    },
+    {
+      "afterMs": 1000,
+      "doneSec": 580.0
+    },
+    {
+      "afterMs": 1000,
+      "doneSec": 590.0
+    },
+    {
+      "afterMs": 1000,
+      "doneSec": 600.0
+    }
+  ],
+  "words": [
+    {
+      "text": "Thanks",
+      "start": 0.2,
+      "end": 0.5,
+      "confidence": 1.0
+    },
+    {
+      "text": "for",
+      "start": 0.5,
+      "end": 0.65,
+      "confidence": 1.0
+    },
+    {
+      "text": "coming",
+      "start": 0.65,
+      "end": 1.0,
+      "confidence": 1.0
+    },
+    {
+      "text": "in",
+      "start": 1.0,
+      "end": 1.15,
+      "confidence": 1.0
+    },
+    {
+      "text": "today.",
+      "start": 1.15,
+      "end": 1.6,
+      "confidence": 1.0
+    },
+    {
+      "text": "Um,",
+      "start": 2.0,
+      "end": 2.2,
+      "confidence": 1.0
+    },
+    {
+      "text": "happy",
+      "start": 2.3,
+      "end": 2.6,
+      "confidence": 1.0
+    },
+    {
+      "text": "to",
+      "start": 2.6,
+      "end": 2.7,
+      "confidence": 1.0
+    },
+    {
+      "text": "to",
+      "start": 2.7,
+      "end": 2.8,
+      "confidence": 1.0
+    },
+    {
+      "text": "help.",
+      "start": 2.8,
+      "end": 3.2,
+      "confidence": 1.0
+    },
+    {
+      "text": "Shall",
+      "start": 3.6,
+      "end": 3.8,
+      "confidence": 1.0
+    },
+    {
+      "text": "we",
+      "start": 3.8,
+      "end": 3.9,
+      "confidence": 1.0
+    },
+    {
+      "text": "start?",
+      "start": 3.9,
+      "end": 4.4,
+      "confidence": 1.0
+    }
+  ],
+  "speakerSegments": [
+    {
+      "speaker": 0,
+      "start": 0.1,
+      "end": 1.7
+    },
+    {
+      "speaker": 1,
+      "start": 1.9,
+      "end": 3.3
+    },
+    {
+      "speaker": 0,
+      "start": 3.5,
+      "end": 4.5
+    }
+  ]
+}

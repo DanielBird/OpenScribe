@@ -1,0 +1,13 @@
+{
+  "durationSec": 5.0,
+  "steps": [
+    {
+      "afterMs": 200,
+      "doneSec": 1.0
+    }
+  ],
+  "failure": {
+    "kind": "out-of-memory",
+    "detail": "recognising words: failed to allocate buffer (status 2)"
+  }
+}

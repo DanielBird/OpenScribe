@@ -22,16 +22,37 @@ tauri-build = { version = "2.7.4", features = [] }
 tauri = { version = "2.12.5", features = [] }
 # Only its open_url function, from Rust: the plugin isn't registered, so it injects no script and needs no capability.
 tauri-plugin-opener = "2.7.2"
+# The commands' arguments and replies, the speech pack's definition and the worker's messages. The versions Tauri
+# already uses.
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# The speech models' SHA-256, checked before they are used (DECISIONS.md D50).
+sha2 = "0.10"
 
 [target.'cfg(windows)'.dependencies]
-# The installed app's own data folder (ApplicationData) and the launch splash (Win32). The version Tauri already uses,
+# The web view's own interfaces, for the recording's path (DECISIONS.md D53). The version Tauri's wry already uses.
+webview2-com = "0.39.1"
+# The installed app's own data folder (ApplicationData), the launch splash (Win32), and transcribing on this computer:
+# Media Foundation, the worker's job object, the power request, the Open dialog and the close dialog. The version Tauri already uses,
 # so it isn't built twice.
 windows = { version = "0.62.2", features = [
   "Storage",
   "Storage_Search",
   "Win32_Foundation",
   "Win32_Graphics_Gdi",
+  "Win32_Media_MediaFoundation",
+  "Win32_Security",
+  "Win32_System_Com",
+  "Win32_System_Com_StructuredStorage",
+  "Win32_System_JobObjects",
   "Win32_System_LibraryLoader",
+  "Win32_System_Power",
+  "Win32_System_ProcessStatus",
+  "Win32_System_Threading",
+  "Win32_System_Variant",
+  "Win32_UI_Controls",
   "Win32_UI_HiDpi",
+  "Win32_UI_Shell",
+  "Win32_UI_Shell_Common",
   "Win32_UI_WindowsAndMessaging",
 ] }
