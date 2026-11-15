@@ -33,7 +33,8 @@ sha2 = "0.10"
 # The web view's own interfaces, for the recording's path (DECISIONS.md D53). The version Tauri's wry already uses.
 webview2-com = "0.39.1"
 # The installed app's own data folder (ApplicationData), the launch splash (Win32), and transcribing on this computer:
-# Media Foundation, the worker's job object, the power request, the Open dialog and the close dialog. The version Tauri already uses,
+# Media Foundation, the worker's job object, the power request, the Open dialog and the close dialog; and downloading
+# the speech models: WinHTTP and the free disk space (DECISIONS.md D54). The version Tauri already uses,
 # so it isn't built twice.
 windows = { version = "0.62.2", features = [
   "Storage",
@@ -41,7 +42,9 @@ windows = { version = "0.62.2", features = [
   "Win32_Foundation",
   "Win32_Graphics_Gdi",
   "Win32_Media_MediaFoundation",
+  "Win32_Networking_WinHttp",
   "Win32_Security",
+  "Win32_Storage_FileSystem",
   "Win32_System_Com",
   "Win32_System_Com_StructuredStorage",
   "Win32_System_JobObjects",

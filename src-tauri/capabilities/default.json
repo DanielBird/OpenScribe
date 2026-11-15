@@ -1,13 +1,16 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "The app's own commands for transcribing on this computer (DECISIONS.md D53), and nothing from Tauri's plugins.",
+  "description": "The app's own commands for transcribing on this computer and downloading its speech models (DECISIONS.md D53, D54), and nothing from Tauri's plugins.",
   "windows": ["main"],
   "permissions": [
     "allow-stt-choose-recording",
     "allow-stt-status",
     "allow-stt-start",
     "allow-stt-cancel",
-    "allow-set-close-guard"
+    "allow-set-close-guard",
+    "allow-stt-download",
+    "allow-stt-download-cancel",
+    "allow-stt-remove-models"
   ]
 }

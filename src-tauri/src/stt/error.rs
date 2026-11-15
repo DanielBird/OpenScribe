@@ -9,6 +9,8 @@ use std::path::Path;
 pub enum SttErrorKind {
   /// A run is already going.
   Busy,
+  /// The speech models are being downloaded or removed.
+  Downloading,
   /// The recording handed over is unknown, gone, or not a file.
   Recording,
   /// No speech models in the pack folder.
