@@ -321,6 +321,35 @@ holds until Phase 36's run on the work laptop confirms or corrects it.
 
 Nemotron 3.5 ASR and Sortformer v2 are not on this list: both were slower.
 
+## As built (Phase 34)
+
+DECISIONS.md D53; the app's commands and debug switches in [desktop.md](desktop.md#transcribing-on-this-computer-phase-34).
+
+- **The engine** is the build Phase 33 benchmarked, defined by `src-tauri/stt-runtime.json` and assembled by
+  `npm run desktop:stt-runtime` into `src-tauri/stt-runtime/`: five engine DLLs plus the MSVC 14.44 and OpenMP
+  runtimes, 6.7 MB.
+- **The worker** is `describe.exe --stt-worker`. It runs both models at once in one process, fed by one Media
+  Foundation decoder in 5 s blocks:
+  - words in 30 s pieces with 2 s overlap (`stt/chunks.rs`);
+  - speakers pushed 30 s at a time into the `v3-offline` stream.
+- **C API settings, from its source:** `gpu: -1`; word times and punctuation turned on (the defaults are zeroed, and
+  then the text comes back lower-case and unpunctuated); word times are int32 milliseconds.
+- **The speed check** (E9), pinned to `0xfff0` at full clock, so it compares with the uncapped rows above:
+
+  | File | Phase 34 (one worker, the C API) | Phase 33 (two CLI processes) | Peak commit | GPU |
+  |---|---|---|---|---|
+  | 5 min | 18.8 s | 19.4 s | 4.9 GB | 0.0 % |
+  | 1 h | 224.6 s (16.0×) | 229.1 s (15.7×) | 4.9 GB | 0.0 % |
+
+  So the C API's words are as fast as the CLI's, which D51 left open. One process is as fast as two.
+- **In the app** (E1, debug exe), the 5-minute recording took 16.9 s in the engine, with peak RAM 1.09 GB.
+- **The merge:** each word goes to the speaker with the most overlap, else the nearest segment. A lone word follows
+  the speaker on both sides, unless its own segment holds most of it.
+  - *Not yet measured:* agreement with and without that smoothing on the Andrew recording.
+- **The clean-up:** drops um, umm, uh, uhh, erm, äh, ähm, öhm and euh, and keeps once a word one speaker repeats
+  ("that that" and "had had" excepted). On by default.
+- **The *Laptop* profile** (E6) and Phase 36's laptop column are still to run.
+
 ## Verification log
 
 | Date | Where | What | Result |
@@ -343,4 +372,6 @@ Nemotron 3.5 ASR and Sortformer v2 are not on this list: both were slower.
 | 2026-11-15 | Maintainer's PC, the maintainer | `interrupt-download.ps1` | As in D8. |
 | 2026-11-15 | Work laptop, company network, the maintainer | `curl.exe`, then with `--ssl-revoke-best-effort` | As in D5. |
 | 2026-11-15 | Maintainer's PC | The Andrew recording (34.5 min), the pipeline, against DeScribe's ElevenLabs transcript | As in M3, M7 and M12. The maintainer read the transcripts: sufficient. |
+| 2026-11-15 | Maintainer's PC, pinned `0xfff0`, uncapped (the agent) | Phase 34's worker, `--job`, on the 5-minute and 1-hour files | 18.8 s and 224.6 s; GPU 0.0 %. |
+| 2026-11-15 | Maintainer's PC, debug exe over CDP (the agent) | E1–E5, E8 | As in desktop.md's E rows. |
 | 2026-11-15 | Maintainer's PC | `ipc-probe/pack.ps1` | `DeScribe.SttProbe` 1.0.0.0 and 2.0.0.0, 2.7 MB each, signed with a new `devcert.pfx` (gitignored, not trusted yet: guide task 6). |

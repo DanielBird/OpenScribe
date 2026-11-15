@@ -14,8 +14,9 @@ Official docs: [Tauri 2](https://v2.tauri.app/) ·
 
 The same Vue app as the HTML file, in a Tauri 2 window, which draws with WebView2 (the Edge engine). `vite build
 --mode desktop` writes a normal multi-file build to `dist-desktop/`, and Tauri embeds it in `describe.exe`.
-`__DESKTOP__` is the only switch in `src/`, and it changes only Settings' wording. The Rust side is configuration and the
-launch splash: no commands, no plugins, and a capability that grants nothing. The app is packed as MSIX with Microsoft's `winapp` CLI,
+`__DESKTOP__` is the only switch in `src/`. The Rust side is configuration, the launch splash, the close guard and
+transcription on the computer ([below](#transcribing-on-this-computer-phase-34)): five commands of its own, no plugins,
+and a capability that grants only those. The app is packed as MSIX with Microsoft's `winapp` CLI,
 not Tauri's bundler, and the Store signs, hosts and updates it.
 
 ## Prerequisites
@@ -106,12 +107,13 @@ Made by `winapp manifest generate`, then edited:
   - **Why it's set:** WebView2's `msedgewebview2.exe` runs outside the package, so Windows doesn't redirect its
     writes. Installed 1.0.0, without `data_directory`, kept its profile in the unpackaged folder, shared with
     `tauri dev`, where an uninstall would have left it (keys included).
-- **Capabilities:** `src-tauri/capabilities/default.json` grants no permissions. Tauri still injects its IPC bridge
-  (`window.__TAURI_INTERNALS__` exists), but any call through it is denied.
+- **Capabilities:** `src-tauri/capabilities/default.json` grants the app's five commands and nothing else
+  (`build.rs` lists them with `AppManifest::commands`, so each needs its `allow-…` permission). Any other call is
+  denied: `plugin:opener|open_url` ("opener.open_url not allowed"), `plugin:window|close`, an unknown command.
 - **DevTools:** debug builds have them. Release builds don't, because the `devtools` feature isn't enabled
   (Tauri's `devtools` window option: "requires `devtools` feature flag to enable it in release builds").
-- **Drag and drop:** the window sets `dragDropEnabled: false` (the name is in Tauri's config schema), so WebView2's
-  own drag and drop reaches the page and `FileDrop` works as in Edge.
+- **Drag and drop:** since Phase 34 the window sets `dragDropEnabled: true`: Tauri takes a dropped file natively and
+  WebView2's own HTML drop no longer reaches the page. Rust hands the file to `FileDrop` with where it landed (D53).
 - **Window:** titled DeScribe, opens maximised (1280 × 860 when restored), at least 800 × 600. `"theme": "Light"`
   keeps Windows' title bar light to match the app, which is light-only (`color-scheme: light`); by default it follows
   Windows' dark mode. `create` is false in
@@ -211,6 +213,57 @@ link.
 with `chromium.connectOverCDP` and used `tests/e2e/helpers.ts`'s mocks. Each restart closed the window gracefully
 (`taskkill` without `/F`). The script isn't in the repo: automated desktop tests are Phase 25's.
 
+## Transcribing on this computer (Phase 34)
+
+DECISIONS.md D50, D51, D53; the engine and models in [local-stt.md](local-stt.md).
+
+- **The commands** (`src-tauri/src/stt/commands.rs`):
+
+  | Command | What it does |
+  |---|---|
+  | `stt_choose_recording` | Windows' Open dialog; hands the file to the page and returns its token, or `null` |
+  | `stt_status` | `ready`, `missing` or `unusable` (`damaged`, `outdated`, `cpu`), with the pack's info |
+  | `stt_start { token, onProgress }` | One run at a time; progress on the channel; the words, segments and timings |
+  | `stt_cancel` | Ends the worker; `stt_start` then fails with `cancelled` |
+  | `set_close_guard { active }` | Whether closing the window should ask first |
+
+- **The recording:** Rust chooses it (the dialog, or a native drop) and posts the page a read-only file handle with
+  `PostWebMessageAsJsonWithAdditionalObjects`. The page calls `getFile()` (`src/desktop/recordings.ts`). The other way
+  round fails: wry's message handler runs first and stops WebView2 calling later ones for any non-string message
+  (D53).
+- **The worker:** `describe.exe --stt-worker`, in a job object with `KILL_ON_JOB_CLOSE`. Job on stdin (or
+  `--job <file>` for timing runs by hand), JSON events on stdout. It loads `nemo_speech_asr_c.dll` from beside the
+  exe, or in a debug build from `DESCRIBE_STT_RUNTIME_DIR` or `src-tauri/stt-runtime/`.
+- **Keep awake:** a `PowerRequestSystemRequired` power request is held for the run.
+- **Closing:** while the page's guard is set or a local run is going, closing the window shows a task dialog
+  (**Keep open** / **Close**). Checked first: WebView2's `beforeunload` didn't stop the window closing.
+- **Debug-build switches** (none work in a release build):
+
+  | Variable | Effect |
+  |---|---|
+  | `DESCRIBE_SPEECH_PACK_DIR` | The folder holding `<pack id>/` (`npm run desktop:fetch-models` fills `.speech-pack/`) |
+  | `DESCRIBE_STT_RUNTIME_DIR` | Where the engine's DLLs are, if not `src-tauri/stt-runtime/` |
+  | `DESCRIBE_STT_FAKE` | A script from `fixtures/local-stt/` instead of the engine: progress, then a result, a failure or a crash |
+  | `DESCRIBE_STT_PICK` | The file the Open dialog returns without showing, for CDP |
+  | `DESCRIBE_STT_PRETEND_NO_AVX2` | `1`: as if the processor lacked AVX2 |
+
+- **The engine pref:** until Phase 36 there is no UI. In DevTools, set `localStorage['describe.v1.prefs']` to include
+  `"transcriptionEngine": "local"` and reload. `"localTextCleanUp": false` keeps the text verbatim.
+- **Size:** the MSIX is **5.3 MB** with the engine (version 1.2.0, 2026-11-15), against 3.0 MB without. The engine's
+  DLLs are 6.7 MB uncompressed.
+
+| ID | Check | Maintainer's PC | Work laptop |
+|---|---|---|---|
+| E1 | A real local run: speakers, word times, no key, no request to the API hosts. Playback, export. | **Pass** (the agent, debug exe over CDP, the 5-minute English recording): 10 turns, two speakers; 16.9 s in the engine; peak 1.09 GB; playback from turn 4 at 62.1 s; the `.docx` downloaded; requests only to `tauri.localhost` and IPC; no console errors; the worker gone afterwards. *Rename, edit, translate and Add to project: by hand.* | *Phase 36* |
+| E2 | Progress; Cancel; Try again. | **Pass** (fake engine): the worker gone 237 ms after Cancel, "cancelled" shown; Try again started a new worker. | |
+| E3 | Each failure has its own message, with Technical details. | **Pass:** missing, damaged, outdated, the processor (pretended), an Ogg Opus file (Media Foundation's real `0xC00D36C4`, no path in the detail), out of memory and a crash (`0xC0000409`). Try again only for the last two. | |
+| E4 | Closing mid-run asks first. | **Pass:** during a run the dialog appeared and the app stayed; with nothing running, closing closed. *Clicking Close and Keep open: by hand.* | |
+| E5 | The capability grants only the app's commands. | **Pass:** `plugin:opener|open_url`, `plugin:window|close` and an unknown command were refused. | |
+| E6 | *Laptop* profile: 1 h and 3 h within Phase 33's thresholds, within 15 % of the harness, word times at the end. | *Open: needs the emulation's power scheme, which the maintainer switches.* | *Phase 36* |
+| E7 | No GPU used; no GPU backend. | **Pass:** `pinrun` saw 0.0 % on every GPU engine in the 5-minute and 1-hour runs; the build has `GGML_CUDA` and `GGML_VULKAN` off and no GPU DLL. | |
+| E8 | No connections during a local run. | **Pass from the page** (E1's requests). *Rust's side by capture: by hand.* | |
+| E9 | The C API's words as fast as the CLI's; both models in one worker. | **Pass** (pinned to `0xfff0`, full clock): 5 min in 18.8 s (Phase 33: 19.4 s), 1 h in 224.6 s (229.1 s). | |
+
 ## Input for Phase 25
 
 **Can stay as it is** (it works in the web view): the API calls (CORS accepts `http://tauri.localhost`, D35), the
@@ -229,8 +282,7 @@ localStorage in the app's own profile, the keys' Remember setting, and Clear sav
   "This browser can't open project folders", "The browser didn't let DeScribe use this folder… ask IT", "This browser
   isn't saving …", and the folder notices. Phase 23's read-only mode adds more (it asks the browser to "upload" the
   folder).
-- **Closing mid-run:** the `beforeunload` guards (job, translation, pipeline) probably don't stop the window closing.
-  Check whether closing the window during a transcription asks first.
+- **Closing mid-run:** done in Phase 34 (D53): closing asks first while a job, a translation or the pipeline runs.
 - **A forced kill loses recent localStorage writes.** With `taskkill /F`, a key saved half a minute earlier was gone
   after a restart, while IndexedDB kept the transcript. A crash or a forced shutdown could do the same.
 - **Storage isn't persistent:** `navigator.storage.persist()` could ask for it, so Windows doesn't evict it under

@@ -245,7 +245,8 @@ Where results go:
   [reference/file-system-access.md](reference/file-system-access.md). A policy that blocks folder access is a
   no-go for projects on those laptops (PROJECTS.md §9 Q4).
 
-**The desktop app:** for each desktop release, also run W1–W15 in
+**The desktop app:** `npm run desktop:test` runs the Rust tests (`cargo test`). For each desktop release, also run E1–E9
+(transcribing on this computer) and W1–W15 in
 [reference/desktop.md](reference/desktop.md#checklist), on the maintainer's PC and on the work laptop.
 
 ### Results for 1.0.0
