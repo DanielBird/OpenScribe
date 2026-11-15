@@ -7,6 +7,7 @@ import type { TranscriptionProgress } from '../types';
 
 export const LOCAL_ERROR_KINDS = [
   'busy',
+  'downloading',
   'recording',
   'pack-missing',
   'pack-damaged',
@@ -18,6 +19,32 @@ export const LOCAL_ERROR_KINDS = [
   'cancelled',
 ] as const;
 export type LocalErrorKind = (typeof LOCAL_ERROR_KINDS)[number];
+
+/** Why a download of the speech models ended (src-tauri/src/stt/download.rs), `cancelled` and `in-use` included. */
+export const DOWNLOAD_ERROR_KINDS = [
+  'blocked',
+  'offline',
+  'busy',
+  'disk',
+  'mismatch',
+  'gone',
+  'cancelled',
+  'in-use',
+] as const;
+export type DownloadErrorKind = (typeof DOWNLOAD_ERROR_KINDS)[number];
+/** The failures a user can act on (Phase 35, Task 2). */
+export type DownloadFailure = Exclude<DownloadErrorKind, 'cancelled' | 'in-use'>;
+
+/** A download or removal that failed, as Rust reports it: a kind, and a detail naming hosts, never a URL or folder. */
+export class SpeechPackError extends Error {
+  constructor(
+    public readonly kind: DownloadErrorKind,
+    public readonly detail: string,
+  ) {
+    super(`${kind}: ${detail}`);
+    this.name = 'SpeechPackError';
+  }
+}
 
 /** A failure as Rust reports it: a kind, and a detail with no paths outside the pack. */
 export class LocalSttError extends Error {
@@ -51,7 +78,18 @@ function makeSchemas() {
         pack,
         reason: z.enum(['damaged', 'outdated', 'cpu']),
       }),
+      z.object({
+        state: z.literal('downloading'),
+        pack,
+        receivedBytes: z.number().int().nonnegative(),
+        totalBytes: z.number().int().nonnegative(),
+      }),
     ]),
+    downloadProgress: z.object({
+      receivedBytes: z.number().int().nonnegative(),
+      totalBytes: z.number().int().nonnegative(),
+    }),
+    downloadError: z.object({ kind: z.enum(DOWNLOAD_ERROR_KINDS), detail: z.string() }),
     result: z.object({
       language: z.string().nullable(),
       durationSec: finite.nonnegative(),
@@ -96,7 +134,6 @@ export function bridgeSchemas(): Schemas {
 }
 
 export type SpeechPackInfo = z.infer<Schemas['pack']>;
-/** Phase 35 adds a 'downloading' state. */
 export type LocalSttStatus = z.infer<Schemas['status']>;
 export type LocalSttResult = z.infer<Schemas['result']>;
 export type LocalSttTimings = LocalSttResult['timings'];
@@ -111,8 +148,28 @@ export function toLocalError(raw: unknown): LocalSttError {
   return new LocalSttError('engine', detail.slice(0, 300));
 }
 
+/** What Rust rejected a download or removal with. Anything unexpected counts as `offline`, with what came. */
+export function toSpeechPackError(raw: unknown): SpeechPackError {
+  if (raw instanceof SpeechPackError) return raw;
+  const parsed = bridgeSchemas().downloadError.safeParse(raw);
+  if (parsed.success) return new SpeechPackError(parsed.data.kind, parsed.data.detail);
+  const detail =
+    raw instanceof Error ? raw.message : typeof raw === 'string' ? raw : 'an unreadable reply';
+  return new SpeechPackError('offline', detail.slice(0, 300));
+}
+
 export interface LocalSttBridge {
   status(): Promise<LocalSttStatus>;
+  /**
+   * Downloads the speech models this build lists, reporting bytes of the whole download. Rejects with a
+   * SpeechPackError (`cancelled` when `signal` aborts). Rust takes no URL, host or folder from the page.
+   */
+  download(opts: {
+    signal: AbortSignal;
+    onProgress: (receivedBytes: number, totalBytes: number) => void;
+  }): Promise<void>;
+  /** Deletes the speech models and anything a download left. Rejects with a SpeechPackError. */
+  removeModels(): Promise<void>;
   transcribe(
     file: File,
     options: { languageHint: string; numSpeakers: number | null },
@@ -157,6 +214,33 @@ export function createTauriSttBridge(): LocalSttBridge {
         throw toLocalError(error);
       } finally {
         signal.removeEventListener('abort', cancel);
+      }
+    },
+
+    async download({ signal, onProgress }) {
+      if (signal.aborted) throw new SpeechPackError('cancelled', 'cancelled before starting');
+      const channel = openChannel((message) => {
+        const progress = bridgeSchemas().downloadProgress.safeParse(message);
+        if (progress.success) onProgress(progress.data.receivedBytes, progress.data.totalBytes);
+      });
+      const cancel = () => {
+        invokeCommand('stt_download_cancel').catch(() => {});
+      };
+      signal.addEventListener('abort', cancel, { once: true });
+      try {
+        await invokeCommand('stt_download', { onProgress: channel });
+      } catch (error) {
+        throw toSpeechPackError(error);
+      } finally {
+        signal.removeEventListener('abort', cancel);
+      }
+    },
+
+    async removeModels() {
+      try {
+        await invokeCommand('stt_remove_models');
+      } catch (error) {
+        throw toSpeechPackError(error);
       }
     },
   };

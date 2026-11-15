@@ -6,12 +6,29 @@ import { createGeminiProvider, verifyGeminiKey } from './llm/gemini';
 import { createGeminiAgent } from './llm/geminiAgent';
 import type { AgentProvider, LlmProvider } from './llm/types';
 import { createElevenLabsProvider } from './transcription/elevenlabs/provider';
-import { createTauriSttBridge } from './transcription/local/bridge';
+import { createTauriSttBridge, type LocalSttBridge } from './transcription/local/bridge';
 import { createLocalProvider } from './transcription/local/provider';
 import type { KeyCheckResult, TranscriptionProvider } from './transcription/types';
 
 const transcription: Partial<Record<TranscriptionProviderId, TranscriptionProvider>> = {};
 const transcriptionOverrides: Partial<Record<TranscriptionProviderId, TranscriptionProvider>> = {};
+let localBridge: LocalSttBridge | null = null;
+let localBridgeOverride: LocalSttBridge | null = null;
+
+/**
+ * The desktop app's speech commands: the local provider's runs, and the speech models' status, download and removal
+ * (Settings). One bridge for both. Only the desktop build calls it: `null` in the web build.
+ */
+export function getLocalSttBridge(): LocalSttBridge | null {
+  if (localBridgeOverride) return localBridgeOverride;
+  if (!__DESKTOP__) return null;
+  return (localBridge ??= createTauriSttBridge());
+}
+
+/** Replaces the local bridge in tests; `null` restores the real one. */
+export function setLocalSttBridgeForTests(bridge: LocalSttBridge | null): void {
+  localBridgeOverride = bridge;
+}
 
 /**
  * ElevenLabs, or this computer's speech models in the desktop app (DECISIONS.md D11, D50). The web build has only
@@ -23,7 +40,8 @@ export function getTranscriptionProvider(
   const override = transcriptionOverrides[id];
   if (override) return override;
   if (__DESKTOP__ && id === 'local') {
-    return (transcription.local ??= createLocalProvider(createTauriSttBridge()));
+    const bridge = getLocalSttBridge();
+    if (bridge) return (transcription.local ??= createLocalProvider(bridge));
   }
   return (transcription.elevenlabs ??= createElevenLabsProvider());
 }

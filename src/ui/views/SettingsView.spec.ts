@@ -2,11 +2,13 @@ import 'fake-indexeddb/auto';
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { setLocalSttBridgeForTests } from '../../providers';
 import * as idb from '../../storage/idb';
 import { useGlossaryStore } from '../../stores/glossary';
 import { useNavStore } from '../../stores/nav';
 import { useSettingsStore } from '../../stores/settings';
 import { useTranscriptStore } from '../../stores/transcript';
+import { fakeLocalBridge } from '../../testing/localBridge';
 import { makeDoc } from '../../testing/transcriptDoc';
 import SettingsView from './SettingsView.vue';
 
@@ -286,8 +288,25 @@ describe('SettingsView', () => {
 
   // Vitest exposes Vite's defines as globals, so the desktop build's texts can be checked here (D35).
   describe('in the desktop app', () => {
-    beforeEach(() => vi.stubGlobal('__DESKTOP__', true));
-    afterEach(() => vi.unstubAllGlobals());
+    beforeEach(() => {
+      vi.stubGlobal('__DESKTOP__', true);
+      setLocalSttBridgeForTests(fakeLocalBridge());
+    });
+    afterEach(() => {
+      vi.unstubAllGlobals();
+      setLocalSttBridgeForTests(null);
+    });
+
+    it('adds the speech models after the keys', () => {
+      mountView();
+      expect(wrapper!.findAll('.band > h2').map((h) => h.text())).toEqual([
+        'API keys',
+        'Transcribe on this computer',
+        'Chats',
+        'Saved data',
+        'About',
+      ]);
+    });
 
     it('says the app runs on this computer and keeps its data in its own storage', () => {
       mountView();
@@ -310,7 +329,9 @@ describe('SettingsView', () => {
       mountView();
       await buttonNamed('Clear saved data…')!.trigger('click');
       await flushPromises();
-      expect(wrapper!.get('dialog').text()).toContain('the link to your project from this app.');
+      expect(wrapper!.get('dialog[open]').text()).toContain(
+        'the link to your project from this app.',
+      );
     });
 
     it('adds the Rust crates’ notices to the licences', async () => {

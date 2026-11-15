@@ -14,7 +14,8 @@ vi.mock('../../../desktop/ipc', () => ({
 const token = vi.fn<(file: File) => string | null>();
 vi.mock('../../../desktop/recordings', () => ({ tokenOf: (file: File) => token(file) }));
 
-const { createTauriSttBridge, LocalSttError, toLocalError } = await import('./bridge');
+const { createTauriSttBridge, LocalSttError, SpeechPackError, toLocalError, toSpeechPackError } =
+  await import('./bridge');
 
 const PACK = { id: 'p', version: '1', languages: ['en'], maxSpeakers: 8, downloadBytes: 10 };
 const RESULT = {
@@ -52,6 +53,7 @@ describe('the bridge', () => {
       { state: 'ready', pack: PACK },
       { state: 'missing', pack: PACK },
       { state: 'unusable', pack: PACK, reason: 'cpu' },
+      { state: 'downloading', pack: PACK, receivedBytes: 3, totalBytes: 10 },
     ]) {
       invoke.mockResolvedValueOnce(reply);
       await expect(createTauriSttBridge().status()).resolves.toEqual(reply);
@@ -63,6 +65,7 @@ describe('the bridge', () => {
       null,
       { state: 'ready' },
       { state: 'downloading', pack: PACK },
+      { state: 'downloading', pack: PACK, receivedBytes: -1, totalBytes: 10 },
       { state: 'unusable', pack: PACK, reason: 'bored' },
       { state: 'ready', pack: { ...PACK, maxSpeakers: -1 } },
     ]) {
@@ -133,5 +136,63 @@ describe('the bridge', () => {
     expect(toLocalError({ kind: 'surprise', detail: 'x' }).kind).toBe('engine');
     expect(toLocalError('IPC said no').detail).toBe('IPC said no');
     expect(toLocalError(new Error('boom')).kind).toBe('engine');
+  });
+
+  describe('the download', () => {
+    const download = (
+      onProgress: (r: number, t: number) => void = () => {},
+      signal = new AbortController().signal,
+    ) => createTauriSttBridge().download({ signal, onProgress });
+
+    it('starts it with nothing but a channel, and passes progress on', async () => {
+      const seen: [number, number][] = [];
+      invoke.mockImplementation(async (command) => {
+        if (command !== 'stt_download') return null;
+        channelListener?.({ receivedBytes: 4, totalBytes: 10 });
+        channelListener?.({ receivedBytes: 'four', totalBytes: 10 }); // ignored
+        return null;
+      });
+      await expect(download((r, t) => seen.push([r, t]))).resolves.toBeUndefined();
+      expect(invoke).toHaveBeenCalledWith('stt_download', { onProgress: { id: 1 } });
+      expect(seen).toEqual([[4, 10]]);
+    });
+
+    it('cancels it in Rust when its signal aborts', async () => {
+      const controller = new AbortController();
+      let fail: (reason: unknown) => void = () => {};
+      invoke.mockImplementation((command) =>
+        command === 'stt_download'
+          ? new Promise((_, reject) => (fail = reject))
+          : Promise.resolve(null),
+      );
+      const done = download(undefined, controller.signal);
+      controller.abort();
+      expect(invoke).toHaveBeenCalledWith('stt_download_cancel', undefined);
+      fail({ kind: 'cancelled', detail: 'cancelled' });
+      await expect(done).rejects.toMatchObject({ kind: 'cancelled' });
+    });
+
+    it('rejects with each failure Rust reports', async () => {
+      for (const kind of ['blocked', 'offline', 'busy', 'disk', 'mismatch', 'gone', 'in-use']) {
+        invoke.mockRejectedValueOnce({ kind, detail: 'huggingface.co 403' });
+        const error = await download().catch((e: unknown) => e);
+        expect(error).toBeInstanceOf(SpeechPackError);
+        expect(error).toMatchObject({ kind, detail: 'huggingface.co 403' });
+      }
+    });
+
+    it('removes the models, and reads a failure to', async () => {
+      invoke.mockResolvedValueOnce(null);
+      await expect(createTauriSttBridge().removeModels()).resolves.toBeUndefined();
+      expect(invoke).toHaveBeenCalledWith('stt_remove_models', undefined);
+      invoke.mockRejectedValueOnce({ kind: 'in-use', detail: 'a transcription is running' });
+      await expect(createTauriSttBridge().removeModels()).rejects.toMatchObject({ kind: 'in-use' });
+    });
+
+    it('makes anything unexpected an offline failure', () => {
+      expect(toSpeechPackError({ kind: 'surprise', detail: 'x' }).kind).toBe('offline');
+      expect(toSpeechPackError('IPC said no').detail).toBe('IPC said no');
+      expect(toSpeechPackError(new Error('boom'))).toBeInstanceOf(SpeechPackError);
+    });
   });
 });

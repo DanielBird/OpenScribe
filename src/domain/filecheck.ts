@@ -43,6 +43,17 @@ export function formatBytes(bytes: number): string {
   return `${value.toFixed(1)} ${units[unit]}`;
 }
 
+/**
+ * A download's size as people read it: decimal units, as Windows' Store and Hugging Face show them. `340 MB` below
+ * 1 GB, `0.8 GB` above 500 MB when `asTotal`, `1.2 GB` from 1 GB.
+ */
+export function formatDownloadSize(bytes: number, asTotal = false): string {
+  const mb = bytes / 1e6;
+  if (mb >= 1000 || (asTotal && mb >= 500)) return `${(mb / 1000).toFixed(1)} GB`;
+  if (mb >= 1) return `${Math.round(mb)} MB`;
+  return bytes >= 1000 ? `${Math.round(bytes / 1000)} kB` : `${bytes} B`;
+}
+
 export function checkFile(
   info: { name: string; size: number; type: string; durationSec: number | null },
   limits: FileLimits,

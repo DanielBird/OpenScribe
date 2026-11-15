@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { checkFile, formatBytes } from './filecheck';
+import { checkFile, formatBytes, formatDownloadSize } from './filecheck';
 
 const LIMITS = { maxFileBytes: 3 * 1024 ** 3, maxDurationSec: 10 * 3600, minDurationSec: 0.1 };
 const file = (overrides: Partial<Parameters<typeof checkFile>[0]> = {}) => ({
@@ -113,5 +113,16 @@ describe('checkFile', () => {
     );
     expect(result.errors).toHaveLength(2);
     expect(result.warnings).toHaveLength(1);
+  });
+});
+
+describe('formatDownloadSize', () => {
+  it('reads as the Store and Hugging Face show sizes', () => {
+    expect(formatDownloadSize(820_987_584, true)).toBe('0.8 GB');
+    expect(formatDownloadSize(340_000_000)).toBe('340 MB');
+    expect(formatDownloadSize(340_000_000, true)).toBe('340 MB');
+    expect(formatDownloadSize(1_520_000_000)).toBe('1.5 GB');
+    expect(formatDownloadSize(0)).toBe('0 B');
+    expect(formatDownloadSize(12_000)).toBe('12 kB');
   });
 });

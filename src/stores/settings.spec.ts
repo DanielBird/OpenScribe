@@ -676,6 +676,8 @@ describe('settings store', () => {
     const unusedBridge: LocalSttBridge = {
       status: () => Promise.reject(new Error('unused')),
       transcribe: () => Promise.reject(new Error('unused')),
+      download: () => Promise.reject(new Error('unused')),
+      removeModels: () => Promise.reject(new Error('unused')),
     };
 
     beforeEach(() => setTranscriptionProviderForTests(createLocalProvider(unusedBridge), 'local'));
