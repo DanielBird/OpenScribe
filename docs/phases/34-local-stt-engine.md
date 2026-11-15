@@ -363,8 +363,9 @@ built). The checks are in reference/desktop.md (E1–E9) and reference/local-stt
   `setup-emulation.ps1` made them again with the calibrated caps; their GUIDs changed.
 - **Open:**
   - **The Windows App Certification Kit** on `release/DeScribe-v1.2.0-x64.msix`, as administrator.
-  - **By hand:** translate and Add to project on a local transcript (rename and edit passed, the maintainer); a real drop on the window;
-    clicking Close and Keep open in the close dialog; Rust's connections during a run.
+  - **By hand:** Translate on Output with a local transcript, and Rust's connections during a run. Passed by the
+    maintainer: rename, edit, a real drop (on the zone, and ignored elsewhere), the close dialog during a run.
+  - **Add to project translated an English local transcript** before summarising (the maintainer): see *For Phase 36*.
   - The smoothing's agreement on the Andrew recording.
 - **For Phase 35:**
   - The pack folder is `<root>/<pack id>/` with `receipt.json` (`stt/pack.rs`). Add LocalCache as the root, and the
