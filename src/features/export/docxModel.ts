@@ -3,6 +3,7 @@ import {
   formatDateTime,
   formatTimestamp,
   languageName,
+  transcriptionEngineName,
   type LlmProviderId,
   type TranscriptDoc,
   type TranscriptVersion,
@@ -25,9 +26,6 @@ export interface DocModelOptions {
 }
 
 const PROVIDER_NAMES: Record<LlmProviderId, string> = { claude: 'Claude', gemini: 'Gemini' };
-const TRANSCRIPTION_PROVIDER_NAMES: Record<TranscriptDoc['request']['provider'], string> = {
-  elevenlabs: 'ElevenLabs',
-};
 
 /** Throws `Error('translation incomplete')` for `version: 'en'` unless every turn has a translation. */
 export function buildDocModel(doc: TranscriptDoc, opts: DocModelOptions): DocModel {
@@ -63,7 +61,7 @@ export function buildDocModel(doc: TranscriptDoc, opts: DocModelOptions): DocMod
   const glossary = terms > 0 ? ` · glossary of ${terms} ${terms === 1 ? 'term' : 'terms'}` : '';
   meta.push({
     label: 'Transcription',
-    value: `${TRANSCRIPTION_PROVIDER_NAMES[request.provider]} ${request.model}${glossary}`,
+    value: `${transcriptionEngineName(request)}${glossary}`,
   });
   meta.push({ label: 'Exported', value: formatDate(opts.generatedAt.toISOString()) });
 

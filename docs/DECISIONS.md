@@ -1033,3 +1033,17 @@ summarise them.
     (Phase 34 checks it).
 - **The maintainer's follow-up (2026-11-15):** clean up the verbatim text, removing repeats ("Yeah Yeah") and fillers
   ("um um"). It is a task in Phase 34's mapper; whether it is on by default is for the maintainer to decide there.
+
+### D52 — Every build reads a transcript from any engine (2026-11-15; Phase 34)
+- **Decision:** `TranscriptionRequestInfo.provider` is a known engine (`'elevenlabs'`, or `'local'` for the speech
+  models on the computer, D50) or any other non-empty string. `TranscriptDocSchema` accepts any non-empty string
+  where it had `z.literal('elevenlabs')`, as D37 did for `languageHint`. The export's **Transcription** line names
+  a known engine (`transcriptionEngineName()` in `domain/transcript.ts`) and shows an unknown one as it was saved.
+- **Why:** a transcript made on the computer must open everywhere a transcript does: on Output, in the export, and in
+  a shared project folder read by the HTML file.
+- **Consequences:**
+  - 1.1.0 and 1.2.0 have the literal, so they ignore a last transcript, and report a project transcript as
+    unreadable, when it was made locally (D38: a new enum value is a shape change).
+  - **The maintainer (2026-11-15):** the app isn't in use yet, so no build in colleagues' hands can meet one. The
+    change lands as Phase 34's first commit and needs no release of its own.
+  - Output's header and the session list don't name the engine, so only the export changed.

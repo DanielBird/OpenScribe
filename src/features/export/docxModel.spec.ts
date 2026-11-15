@@ -243,6 +243,18 @@ describe('buildDocModel', () => {
     );
   });
 
+  it('names the engine, including one this build does not know (D52)', () => {
+    const doc = makeDoc();
+    const by = (provider: string, model: string) => ({
+      ...doc,
+      request: { ...doc.request, provider, model },
+    });
+    expect(metaOf(by('local', 'nvidia-parakeet-nemotron-1')).Transcription).toBe(
+      'On this computer (nvidia-parakeet-nemotron-1)',
+    );
+    expect(metaOf(by('a-later-engine', 'v9')).Transcription).toBe('a-later-engine v9');
+  });
+
   it('refuses an English export without a complete translation', () => {
     expect(() => buildDocModel(makeDoc(), { ...OPTS, version: 'en' })).toThrow(
       'translation incomplete',

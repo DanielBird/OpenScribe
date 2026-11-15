@@ -7,6 +7,8 @@ export const TRANSCRIPT_SCHEMA_VERSION = 1 as const;
 export type LanguageHint = string;
 export type TranscriptVersion = 'original' | 'en';
 export type LlmProviderId = 'claude' | 'gemini';
+/** The transcription engines this build knows: ElevenLabs, or the speech models on this computer (D50). */
+export type TranscriptionProviderId = 'elevenlabs' | 'local';
 
 export interface SourceInfo {
   fileName: string;
@@ -17,8 +19,9 @@ export interface SourceInfo {
 }
 
 export interface TranscriptionRequestInfo {
-  provider: 'elevenlabs';
-  model: string; // 'scribe_v2'
+  /** A known engine, or any other non-empty string a newer build wrote (DECISIONS.md D52). */
+  provider: TranscriptionProviderId | (string & {});
+  model: string; // 'scribe_v2', or the speech pack's id for 'local'
   languageHint: LanguageHint;
   numSpeakers: number | null; // null = auto
   zeroRetention: boolean;
@@ -149,6 +152,28 @@ export function languageName(code: string): string {
 /** `languageName()`, or 'Unknown language' for a code that names none (''). For text sent to a model. */
 export function languageOrUnknown(code: string): string {
   return languageName(code) || 'Unknown language';
+}
+
+const TRANSCRIPTION_PROVIDER_NAMES: Record<TranscriptionProviderId, string> = {
+  elevenlabs: 'ElevenLabs',
+  local: 'On this computer',
+};
+
+/**
+ * The engine that made a transcript, for the export's details: 'ElevenLabs scribe_v2', 'On this computer
+ * (nvidia-parakeet-nemotron-1)'. An engine this build doesn't know is shown as it was saved.
+ */
+export function transcriptionEngineName(
+  request: Pick<TranscriptionRequestInfo, 'provider' | 'model'>,
+): string {
+  const { provider, model } = request;
+  if (provider === 'elevenlabs')
+    return `${TRANSCRIPTION_PROVIDER_NAMES.elevenlabs} ${model}`.trim();
+  if (provider === 'local') {
+    const name = TRANSCRIPTION_PROVIDER_NAMES.local;
+    return model ? `${name} (${model})` : name;
+  }
+  return `${provider} ${model}`.trim();
 }
 
 /** Default label for the speaker at `index` (0-based, in order of first appearance). */

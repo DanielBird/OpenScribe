@@ -10,6 +10,7 @@ import {
   languageName,
   languageOrUnknown,
   normalizeLanguage,
+  transcriptionEngineName,
 } from './transcript';
 
 describe('formatDateTime', () => {
@@ -130,6 +131,27 @@ describe('languageOrUnknown', () => {
     expect(languageOrUnknown('zzz')).toBe('ZZZ');
     expect(languageOrUnknown('')).toBe('Unknown language');
     expect(languageOrUnknown('  ')).toBe('Unknown language');
+  });
+});
+
+describe('transcriptionEngineName', () => {
+  it('names the known engines with their model', () => {
+    expect(transcriptionEngineName({ provider: 'elevenlabs', model: 'scribe_v2' })).toBe(
+      'ElevenLabs scribe_v2',
+    );
+    expect(
+      transcriptionEngineName({ provider: 'local', model: 'nvidia-parakeet-nemotron-1' }),
+    ).toBe('On this computer (nvidia-parakeet-nemotron-1)');
+    expect(transcriptionEngineName({ provider: 'local', model: '' })).toBe('On this computer');
+  });
+
+  it('shows an engine it does not know as it was saved', () => {
+    expect(transcriptionEngineName({ provider: 'a-later-engine', model: 'v9' })).toBe(
+      'a-later-engine v9',
+    );
+    expect(transcriptionEngineName({ provider: 'a-later-engine', model: '' })).toBe(
+      'a-later-engine',
+    );
   });
 });
 
