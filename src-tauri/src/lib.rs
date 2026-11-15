@@ -62,14 +62,18 @@ pub fn run() {
       stt::commands::stt_start,
       stt::commands::stt_cancel,
       stt::commands::set_close_guard,
+      stt::commands::stt_download,
+      stt::commands::stt_download_cancel,
+      stt::commands::stt_remove_models,
     ])
     .on_window_event(move |window, event| {
       let Some(webview) = window.app_handle().get_webview_window(window.label()) else { return };
       match event {
         WindowEvent::DragDrop(drop) => stt::commands::on_drag_drop(&webview, &dropped, drop),
-        // Closing while DeScribe works asks first (close_guard.rs); the worker dies with the app either way.
+        // Closing while DeScribe works asks first (close_guard.rs): a run, a download, or work the page reports. The
+        // worker dies with the app either way, and a download's .part file is kept for the next attempt.
         WindowEvent::CloseRequested { api, .. } => {
-          if close_guard::CLOSE_GUARD.should_hold(&webview, dropped.is_running()) {
+          if close_guard::CLOSE_GUARD.should_hold(&webview, dropped.is_busy()) {
             api.prevent_close();
           }
         }
@@ -77,6 +81,12 @@ pub fn run() {
       }
     })
     .setup(move |app| {
+      // Partial downloads this build won't finish (DECISIONS.md D54), off the main thread.
+      std::thread::spawn(|| {
+        if let Some(root) = stt::pack::root() {
+          stt::pack::clean_stale_parts(&root, stt::pack::definition());
+        }
+      });
       // The window is made here from tauri.conf.json (where `create` is false) so it can handle new-window requests:
       // a link with target="_blank" opens in the default browser, where WebView2 would otherwise open nothing.
       let config = app
@@ -103,10 +113,11 @@ pub fn run() {
       let window = window
         .on_page_load(move |window, payload| match payload.event() {
           PageLoadEvent::Finished => launch.reveal(&window),
-          // F5 or a navigation: the page that held the close guard, and owned any local run, is gone.
+          // F5 or a navigation: the page that held the close guard, and owned any local run or download, is gone.
           PageLoadEvent::Started => {
             close_guard::CLOSE_GUARD.set(false);
             reloaded.cancel();
+            reloaded.cancel_download();
           }
         })
         // The user chose the folder in Windows' own picker, so the app grants access to it itself: WebView2's prompts

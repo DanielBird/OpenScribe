@@ -15,8 +15,9 @@ Official docs: [Tauri 2](https://v2.tauri.app/) ·
 The same Vue app as the HTML file, in a Tauri 2 window, which draws with WebView2 (the Edge engine). `vite build
 --mode desktop` writes a normal multi-file build to `dist-desktop/`, and Tauri embeds it in `describe.exe`.
 `__DESKTOP__` is the only switch in `src/`. The Rust side is configuration, the launch splash, the close guard and
-transcription on the computer ([below](#transcribing-on-this-computer-phase-34)): five commands of its own, no plugins,
-and a capability that grants only those. The app is packed as MSIX with Microsoft's `winapp` CLI,
+transcription on the computer ([below](#transcribing-on-this-computer-phase-34)) with its speech models' download
+([below](#the-speech-models-download-phase-35)): eight commands of its own, no plugins, and a capability that grants
+only those. The app is packed as MSIX with Microsoft's `winapp` CLI,
 not Tauri's bundler, and the Store signs, hosts and updates it.
 
 ## Prerequisites
@@ -107,7 +108,7 @@ Made by `winapp manifest generate`, then edited:
   - **Why it's set:** WebView2's `msedgewebview2.exe` runs outside the package, so Windows doesn't redirect its
     writes. Installed 1.0.0, without `data_directory`, kept its profile in the unpackaged folder, shared with
     `tauri dev`, where an uninstall would have left it (keys included).
-- **Capabilities:** `src-tauri/capabilities/default.json` grants the app's five commands and nothing else
+- **Capabilities:** `src-tauri/capabilities/default.json` grants the app's eight commands and nothing else
   (`build.rs` lists them with `AppManifest::commands`, so each needs its `allow-…` permission). Any other call is
   denied: `plugin:opener|open_url` ("opener.open_url not allowed"), `plugin:window|close`, an unknown command.
 - **DevTools:** debug builds have them. Release builds don't, because the `devtools` feature isn't enabled
@@ -163,7 +164,8 @@ same three hosts, or if this CSP loses `default-src 'none'` or gains `'unsafe-ev
 | Visibility | *Available, but not discoverable: only the direct link reaches it. Record the setting's wording.* |
 | Price and properties | *Free; category; the privacy policy URL; age rating; one screenshot.* |
 | `runFullTrust` | *If asked: it's a desktop app.* |
-| Certification notes | *The app needs the user's own API keys (ElevenLabs, and Claude or Gemini to translate).* |
+| Certification notes | *The app needs the user's own API keys (ElevenLabs, and Claude or Gemini to translate).* From Phase 35, add the speech models' note below. |
+| Description (from Phase 35) | The draft below, at the start of the description (Policy 10.2.4). *Record the submitted wording.* |
 | Direct link | *The listing's URL, for the work laptop.* |
 
 ### The certification kit
@@ -266,6 +268,41 @@ DECISIONS.md D50, D51, D53; the engine and models in [local-stt.md](local-stt.md
 | E8 | No connections during a local run. | **Pass from the page** (E1's requests). *Rust's side by capture: by hand.* | |
 | E9 | The C API's words as fast as the CLI's; both models in one worker. | **Pass** (pinned to `0xfff0`, full clock): 5 min in 18.8 s (Phase 33: 19.4 s), 1 h in 224.6 s (229.1 s). | |
 
+## The speech models' download (Phase 35)
+
+DECISIONS.md D54; the downloader as built and the S checks in [local-stt.md](local-stt.md#the-download-as-built-phase-35).
+
+- **The commands** (`src-tauri/src/stt/commands.rs`), beside Phase 34's:
+
+  | Command | What it does |
+  |---|---|
+  | `stt_status` | Also `downloading`, with `receivedBytes` and `totalBytes`, while a download runs |
+  | `stt_download { onProgress }` | Downloads the files `pack.json` lists, progress on the channel; fails with a kind (`blocked`, `offline`, `busy`, `disk`, `mismatch`, `gone`, `cancelled`, `in-use`) and a detail |
+  | `stt_download_cancel` | Stops it; the `.part` file is kept |
+  | `stt_remove_models` | Deletes the models, their parts and receipts, and older packs' folders |
+
+  None takes a URL, a host or a folder. A run, a download and a removal refuse each other (`in-use`, or
+  `downloading` for `stt_start`).
+- **Where the models live:** `%LOCALAPPDATA%\Packages\<family name>\LocalCache\speech-pack\<pack id>\` installed
+  (removed on uninstall, kept across updates: Phase 33's D7); `%LOCALAPPDATA%\io.github.danielbird.describe\speech-pack\`
+  unpackaged. `receipt.json` beside the files remembers their hashes.
+- **Closing** during a download asks first, as during a run. F5 cancels it.
+- **Debug-build switches** (none work in a release build):
+
+  | Variable | Effect |
+  |---|---|
+  | `DESCRIBE_SPEECH_PACK_DIR` | The root the downloads go to (and are checked in), instead of the app's folder |
+  | `DESCRIBE_SPEECH_PACK_TEST_LIST` | A list to use instead of the compiled `pack.json`; its URLs may be `http://127.0.0.1:<port>/…` |
+
+- **Trying it without Hugging Face:** `node scripts/speech-pack-test-server.mjs` serves two made-up files and writes
+  `.speech-pack-test/test-pack.json` for `DESCRIBE_SPEECH_PACK_TEST_LIST`. Its scenarios (`ok` at 400 kB/s, `fast`,
+  `no-range`, `redirect`, `drop`, `403`, `404`, `410`, `429`, `503`, `html`, `to-http`, `altered`) switch with
+  `GET /scenario/<name>`.
+- **The agent's rows** (local-stt.md's S table) ran on the debug exe built with
+  `CARGO_TARGET_DIR=<repo>/src-tauri/target/cdp npx tauri build --debug --no-bundle` (an absolute path: Tauri runs
+  cargo in `src-tauri/`, so a relative one lands in `src-tauri/src-tauri/`), against the stand-in, over CDP as
+  above.
+
 ## Input for Phase 25
 
 **Can stay as it is** (it works in the web view): the API calls (CORS accepts `http://tauri.localhost`, D35), the
@@ -287,6 +324,16 @@ localStorage in the app's own profile, the keys' Remember setting, and Clear sav
 - **Closing mid-run:** done in Phase 34 (D53): closing asks first while a job, a translation or the pipeline runs.
 - **A forced kill loses recent localStorage writes.** With `taskkill /F`, a key saved half a minute earlier was gone
   after a restart, while IndexedDB kept the transcript. A crash or a forced shutdown could do the same.
+- **Phase 35's wording, drafted** (Store Policies 7.20: 10.2.2 no dynamic code, 10.1.1 describe the important
+  limitations, 10.2.4 disclose a dependency at the start of the description). The maintainer submits it and records
+  what Partner Center took:
+  - **At the start of the description:** "Transcribing on this computer is optional: when you ask, DeScribe downloads
+    about 0.8 GB of NVIDIA speech models from Hugging Face. Otherwise DeScribe transcribes with ElevenLabs, using your
+    own API key."
+  - **Certification notes:** "In Settings, Download speech models fetches two NVIDIA model files (about 0.8 GB) from
+    huggingface.co, only when the user clicks it. They are data, not code: the speech engine that reads them ships
+    in the package, and the app checks each file's size and SHA-256 before using it. Nothing is downloaded at
+    launch or in the background."
 - **Storage isn't persistent:** `navigator.storage.persist()` could ask for it, so Windows doesn't evict it under
   storage pressure.
 - **One instance, ARM64, moving data over from the HTML file:** still out of scope (the app starts with no saved
@@ -309,4 +356,5 @@ localStorage in the app's own profile, the keys' Remember setting, and Clear sav
 | 2026-10-31 | Maintainer's PC, Windows App Certification Kit 10.0.22621.5040 (Windows 11 26200), the unsigned 1.0.0.0 MSIX | **Validate Store App** | **Passed.** Every required test passed. One optional test failed, *Blocked executables*: see [the certification kit](#the-certification-kit). |
 | 2026-11-08 | Maintainer's PC, release exe, a scratch profile (the agent) | W16: a script polling the app's own windows, `PrintWindow`, and CDP for the page's paint timings, focus and reload | As in the checklist. In the run with paint timings: page loaded at 686 ms, window shown at 727 ms, first paint at 803 ms after the process started. |
 | 2026-11-08 | Maintainer's PC, debug exe with the page-load reveal disabled (not committed) | The 15 s watchdog | The window appeared and the splash closed at 15.2 s. |
+| 2026-11-16 | Maintainer's PC, debug exe over CDP, the stand-in server (the agent) | Phase 35's S1 (missing, installed), S2, S4, S5, S6, S9 | As in local-stt.md's S table. |
 | – | Work laptop | W1–W16 from the direct link | Not run |

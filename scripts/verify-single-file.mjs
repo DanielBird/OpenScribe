@@ -17,14 +17,17 @@ const ALLOWED_HOSTS = [
 /** Tauri's own IPC sources in the desktop CSP, which aren't API hosts. */
 const TAURI_IPC_SOURCES = ['ipc:', 'http://ipc.localhost'];
 /** Strings that only Tauri's JavaScript contains: the web build must never include it. */
-// Tauri's own globals and IPC host, and the desktop app's local transcription (DECISIONS.md D53).
+// Tauri's own globals and IPC host, the desktop app's local transcription (DECISIONS.md D53), and the speech models'
+// download and its Settings band (D54).
 const TAURI_MARKERS = [
   '__TAURI__',
   '__TAURI_INTERNALS__',
   'ipc.localhost',
   'postMessageWithAdditionalObjects',
   'stt_start',
+  'stt_download',
   'nvidia-parakeet-nemotron',
+  'Download speech models',
 ];
 const EXPECTED_FILE = 'describe.html';
 const WARN_BYTES = 3 * 1024 * 1024;

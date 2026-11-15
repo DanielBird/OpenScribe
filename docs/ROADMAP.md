@@ -69,8 +69,9 @@ src-tauri/                      the desktop app (D35): tauri.conf.json (window, 
                                 commands only), src/ (the app, its launch splash, the close guard), icons/ (from
                                 source.svg), msix/ (Package.appxmanifest + Assets, for winapp)
   src/stt/                      transcribing on the computer (D50, D51, D53): the recording chosen and handed to the
-                                page, the commands, the speech pack's check, and the worker (`describe.exe
-                                --stt-worker`): Media Foundation decoding, NeMo-Speech.cpp's C API, the 30 s pieces
+                                page, the commands, the speech pack's folder and check, and the worker (`describe.exe
+                                --stt-worker`): Media Foundation decoding, NeMo-Speech.cpp's C API, the 30 s pieces;
+                                download.rs: the speech models' download over WinHTTP (D54)
   speech-pack/pack.json         the model files this build works with: pinned URLs, sizes, SHA-256, licences
   stt-runtime.json              the engine's version, commit, build flags and DLLs (built into stt-runtime/)
 src/
@@ -88,6 +89,7 @@ src/
     playback.ts                 audio object URL, attach + source match, current time, active turn, follow
     export.ts                   builds the .docx (busy + error state) and starts the download
     savedData.ts                "Clear saved data" (About): glossary, prefs, last transcript, project folder + text cache
+    speechPack.ts               the speech models (desktop): status, Download with progress, Cancel, Remove (D54)
     project.ts                  project folder: connect / reconnect, the recent projects (D49), project file + brief,
                                 sessions (cached text) and their summaries, the saved chats, rescan on focus, keyword
                                 search, Copy text, the session-file and chat-file writes
@@ -163,6 +165,7 @@ src/
                                 ConfirmDialog, JobStatus, TranscriptHeader, SpeakerPanel, TurnList, TurnItem,
                                 VersionToggle, TranslateButton, TranslateDialog, ExportButton, ExportDialog, AudioBar,
                                 AddToProjectButton, AddToProjectDialog, PipelineStatus, FolderNotice;
+                                SpeechPackSection (Settings, desktop only);
                                 Analyse mode: ProjectHeader, BriefDialog, SessionList, SessionSummary, QuoteCard,
                                 SummariseDialog, KeyDialog; the chat: ChatPane (Chat | Search),
                                 ChatMessage, ChatCompaction, AnswerBlocks, ChatActivity, ChatInput, SessionSearch (its
@@ -198,7 +201,9 @@ tests/e2e/                      Playwright specs (file:// + route mocks): *.e2e.
                                 projectFolder.ts (the fake project folder)
 scripts/                        postbuild.mjs, verify-single-file.mjs, release.mjs, live-check-elevenlabs.mjs,
                                 make-elevenlabs-fixtures.mjs, make-test-audio.mjs, make-large-fixture.mjs,
-                                pack-desktop.mjs (the MSIX)
+                                pack-desktop.mjs (the MSIX), speech-pack-test-server.mjs (a stand-in for Hugging
+                                Face, for debug builds); notices/ (licence texts; speechModels.mjs, the Speech models
+                                part)
   spikes/                       fsa-probe.html, make-probe-files.mjs (Phase 10: the project folder on file://);
                                 local-stt/ (Phase 33: the local speech harness, probes and emulation scripts)
 ```
@@ -360,7 +365,7 @@ MVP = Phases 0–5. Each phase is sized for one agent session (or a few) and end
 | 32 | [Launch splash and hidden start](phases/32-launch-splash.md) | 24 | 23, 25 | ☑ Done (manual check W16 open) |
 | 33 | [Spike: local speech models, and downloading them](phases/33-local-stt-spike.md) | 24 | 23, 25 | ☑ Done: provisional go at the target (D51); D8's network and sleep steps open, and the real check on the work laptop is Phase 36's |
 | 34 | [Local transcription engine](phases/34-local-stt-engine.md) | 33 | – | ☑ Done (Translate on Output with a local transcript by hand, and a local transcript's language for Phase 36, open) |
-| 35 | [The speech pack: downloading the models](phases/35-speech-pack.md) | 33, 34 | – | ☐ Not started |
+| 35 | [The speech pack: downloading the models](phases/35-speech-pack.md) | 33, 34 | – | ◐ Built; the maintainer's checks open (S1–S10 on the PC, S1, S2, S5, S6 and S8 on the work laptop from the Store, the licence reading, the Store submission) |
 | 36 | [Transcribe on this computer: the choice, progress and About](phases/36-local-stt-ui.md) | 34, 35 | – | ☐ Not started |
 
 Status values: ☐ Not started · ◐ In progress · ☑ Done.

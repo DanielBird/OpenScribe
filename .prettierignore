@@ -13,5 +13,6 @@ fixtures/elevenlabs/*.json
 scripts/spikes/local-stt/profiles.json
 # Phase 34: the debug speech pack, the engine's DLLs and their build tree (all gitignored).
 .speech-pack/
+.speech-pack-test/
 src-tauri/stt-runtime/
 .stt-runtime-build/

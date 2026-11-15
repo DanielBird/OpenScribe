@@ -62,6 +62,8 @@ function fakeBridge(
       if (outcome === RESULT) return RESULT;
       throw outcome;
     },
+    download: () => Promise.reject(new Error('unused')),
+    removeModels: () => Promise.reject(new Error('unused')),
   };
 }
 
@@ -144,7 +146,13 @@ describe('createLocalProvider', () => {
       expect(error.userMessage.length).toBeGreaterThan(10);
       expect(technicalDetails(error)).toContain(`${kind}: the detail`);
       const canTryAgain = !['auth', 'validation'].includes(error.kind);
-      const shouldTryAgain = ['out-of-memory', 'engine', 'busy', 'cancelled'].includes(kind);
+      const shouldTryAgain = [
+        'out-of-memory',
+        'engine',
+        'busy',
+        'downloading',
+        'cancelled',
+      ].includes(kind);
       expect(canTryAgain).toBe(shouldTryAgain);
     },
   );

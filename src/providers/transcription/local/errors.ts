@@ -6,6 +6,10 @@ import type { LocalErrorKind, LocalSttError } from './bridge';
 
 const MESSAGES: Record<LocalErrorKind, { kind: ProviderErrorKind; message: string }> = {
   busy: { kind: 'unknown', message: 'Another transcription is already running on this computer.' },
+  downloading: {
+    kind: 'unknown',
+    message: 'DeScribe is downloading its speech models. Try again when it has finished.',
+  },
   recording: {
     kind: 'validation',
     message: "DeScribe can't find this recording any more. Choose it again on Setup.",

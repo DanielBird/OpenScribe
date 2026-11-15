@@ -45,6 +45,19 @@ Get-FileHash .\DeScribe-v2.0.0.html -Algorithm SHA256
 
 The hash must match the first word of `DeScribe-v2.0.0.sha256`. The comparison ignores case.
 
+## The desktop app's speech models
+
+`src-tauri/speech-pack/pack.json` is the only list of model files the app downloads (DECISIONS.md D50, D54). Changing
+it is a change to the app:
+
+- **Each file's `bytes` and `sha256`** come from Hugging Face's own listing at the pinned commit, never from a file
+  downloaded through a network you don't trust. `cargo test` checks every URL is pinned.
+- **The notices:** a model under a licence not yet in `scripts/notices/models/` needs its full text there (with
+  `Name:`, `URL:`, `Text:` and `Retrieved:` lines at the top). Then `npm run notices`, and commit the result.
+- **Colleagues download again.** The old files stay usable only by the old version; the new one shows *outdated* and
+  deletes them once the new ones are in. Say so in CHANGELOG.md, with the new size.
+- Change `version` in `pack.json` whenever its files change.
+
 ## SharePoint
 
 - Upload `DeScribe-v<version>.html` and **keep the previous version's file**, so colleagues can go back if the new

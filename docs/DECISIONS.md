@@ -1098,3 +1098,48 @@ summarise them.
   - Parakeet reports no language, so with Auto-detect a local transcript's language is '' (Phase 36 decides).
   - A module only the desktop build uses must do no work at import, or the web build keeps it (AGENTS.md rule 1).
     `verify:single-file` fails on the local engine's markers.
+
+### D54 — The speech models' download as built: Rust's fourth host, the app's own folder, one attempt (2026-11-16; Phase 35)
+- **Decision:** **Download speech models** in Settings (desktop only) fetches the files `pack.json` lists, and only
+  when the user clicks it.
+  - **The fourth host is Rust's, not the page's.** The web view's CSP and its three API hosts don't change; the page
+    never talks to Hugging Face. Rust requests only the URLs compiled in from `pack.json`, each pinned to a commit on
+    `huggingface.co` (`pack::is_pinned`), and follows their redirects by hand, over HTTPS only (a plain-HTTP hop is
+    refused). The file's size and SHA-256 decide whether it is accepted, not the host it came from. No command takes
+    a URL, a host or a folder. A debug build may read a test list (`DESCRIBE_SPEECH_PACK_TEST_LIST`) that points at
+    `http://127.0.0.1`; a release never reads it.
+  - **WinHTTP,** as D51 chose: Windows' proxy (PAC included) and certificate store, no revocation check, and
+    `DeScribe/<version>` as the user agent. Nothing about the user is sent.
+  - **The folder:** the package's `LocalCache\speech-pack\<pack id>\` (kept across updates, removed on uninstall);
+    `%LOCALAPPDATA%\io.github.danielbird.describe\speech-pack\` unpackaged. Each file arrives as `<file>.part`, is
+    checked for size and hash, and only then gets its name. Its hash goes into `receipt.json` at once, so the next
+    status check hashes nothing (S6).
+  - **One attempt.** A `.part` is resumed with a Range request; a `200` starts the file again; a `206` that doesn't
+    fit drops the part. A failure ends the attempt with one kind: `blocked`, `offline`, `busy`, `disk`, `mismatch` or
+    `gone` (Phase 35's Task 2), plus `cancelled` and `in-use`. No retries.
+  - **A partly downloaded pack is `missing`, not `damaged`.** A file that's there but wrong makes it damaged;
+    otherwise a file that isn't there makes it missing, so a cancelled download is offered again.
+  - **A run, a download and a removal exclude each other.** Closing the window during a download asks first, as
+    during a run (from Rust's own state, not the page's flag). A page load (F5) cancels a download as it cancels a
+    run; the part is kept.
+  - **Removing and cleaning up touch only what the app named:** this pack's listed files, their parts and the
+    receipt, and other packs' folders that hold a receipt. At start, parts this build won't finish are deleted. After
+    a download, other versions' folders go (Phase 35's decision 5). **Clear saved data** leaves the models.
+  - **The commands:** `stt_download { onProgress }`, `stt_download_cancel`, `stt_remove_models`, granted in the
+    capability as the others. `stt_status` gains `downloading`, with the bytes received and the total.
+  - **The page side:** `stores/speechPack.ts` holds the status, the progress and the last failure;
+    `SpeechPackSection.vue` is Settings' band, after API keys. `getLocalSttBridge()` gives the provider and the store
+    one bridge.
+  - **The licences ship with the app:** the desktop notices end with a Speech models part generated from `pack.json`
+    and `scripts/notices/models/`. A model without its licence fails `npm run notices` and both `--check`s, so
+    `release` and `desktop:pack` can't ship it.
+- **Why:**
+  - The CSP governs only the web view, and the page has no reason to talk to Hugging Face. With the requests in Rust
+    and the list compiled in, nothing the page or a server sends can add a URL.
+  - The work laptop's network doesn't honour Range (Phase 33's D5), so resuming is a bonus, not something to retry for.
+  - Calling a cancelled download damaged would give the commonest interruption a wrong message.
+- **Consequences:**
+  - AGENTS.md rule 2 names both: the page's three hosts, and Rust's downloads of `pack.json`'s URLs.
+  - A new set of models means a new app version and a new download for everyone (RELEASING.md).
+  - Phase 36's Setup reads `speechPack.status` to decide whether to offer the choice (its Task 2 says the settings
+    store).

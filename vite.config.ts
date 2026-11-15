@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import vue from '@vitejs/plugin-vue';
 import type { Plugin } from 'vite';
 import { viteSingleFile } from 'vite-plugin-singlefile';
-import { defineConfig } from 'vitest/config';
+import { configDefaults, defineConfig } from 'vitest/config';
 
 /**
  * The only hosts the app may contact (AGENTS.md rule 2). Adding one also means updating
@@ -74,7 +74,9 @@ export default defineConfig(({ mode }) => {
     },
     test: {
       environment: 'happy-dom',
-      include: ['src/**/*.spec.ts'],
+      include: ['src/**/*.spec.ts', 'scripts/**/*.spec.ts'],
+      // Phase 33's spike keeps other projects' sources (and their specs) under scripts/spikes/ (gitignored).
+      exclude: [...configDefaults.exclude, 'scripts/spikes/**'],
       // Vitest blanks CSS by default; tokens.spec.ts reads the real tokens file.
       css: { include: [/tokens\.css/] },
     },

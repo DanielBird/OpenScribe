@@ -9,6 +9,7 @@ import { useSettingsStore } from '../../stores/settings';
 import { useTranscriptStore } from '../../stores/transcript';
 import ApiKeyField from '../components/ApiKeyField.vue';
 import ConfirmDialog from '../components/ConfirmDialog.vue';
+import SpeechPackSectionImpl from '../components/SpeechPackSection.vue';
 import StepFooter from '../components/StepFooter.vue';
 import { useConfirm } from '../composables/useConfirm';
 
@@ -31,6 +32,8 @@ const buildDate = __BUILD_DATE__;
 /** The desktop app (D35) keeps its data in its own storage, not a browser's. */
 const desktop = __DESKTOP__;
 const keysEl = useTemplateRef<HTMLElement>('keys');
+/** The speech models' band (D54): only in the desktop app. A literal `false` in the web build, which drops it. */
+const SpeechPackSection = __DESKTOP__ ? SpeechPackSectionImpl : null;
 
 /**
  * DeScribe's licence, then the notices from scripts/make-notices.mjs. The Rust crates' are only in the desktop build:
@@ -128,6 +131,8 @@ async function clearSavedData(): Promise<void> {
           </div>
         </div>
       </section>
+
+      <component :is="SpeechPackSection" v-if="SpeechPackSection" />
 
       <section class="band" aria-labelledby="settings-chats">
         <h2 id="settings-chats">Chats</h2>
