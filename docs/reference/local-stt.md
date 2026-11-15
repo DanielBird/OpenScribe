@@ -348,7 +348,18 @@ DECISIONS.md D53; the app's commands and debug switches in [desktop.md](desktop.
   - *Not yet measured:* agreement with and without that smoothing on the Andrew recording.
 - **The clean-up:** drops um, umm, uh, uhh, erm, äh, ähm, öhm and euh, and keeps once a word one speaker repeats
   ("that that" and "had had" excepted). On by default.
-- **The *Laptop* profile** (E6) and Phase 36's laptop column are still to run.
+- **The *Laptop* profile** (E6; the release exe's worker, the schemes recreated by `setup-emulation.ps1` with the
+  calibrated caps):
+
+  | File | Phase 34 | Phase 33's harness | × real time |
+  |---|---|---|---|
+  | 1 h | 328.3 s | 334.1 s | 11.0 |
+  | 3 h | 972.6 s | 998.2 s | 11.1 |
+
+  - The app is 2–3 % faster than the harness: within the 15 % the acceptance allows, and inside the target (an hour
+    in 400 s).
+  - Word times at the end of the 3-hour file match the first copy: 1,533 of 1,644 words paired, all within 0.5 s.
+  - Phase 36's laptop column is still to run.
 
 ## Verification log
 
@@ -374,4 +385,5 @@ DECISIONS.md D53; the app's commands and debug switches in [desktop.md](desktop.
 | 2026-11-15 | Maintainer's PC | The Andrew recording (34.5 min), the pipeline, against DeScribe's ElevenLabs transcript | As in M3, M7 and M12. The maintainer read the transcripts: sufficient. |
 | 2026-11-15 | Maintainer's PC, pinned `0xfff0`, uncapped (the agent) | Phase 34's worker, `--job`, on the 5-minute and 1-hour files | 18.8 s and 224.6 s; GPU 0.0 %. |
 | 2026-11-15 | Maintainer's PC, debug exe over CDP (the agent) | E1–E5, E8 | As in desktop.md's E rows. |
+| 2026-11-15 | Maintainer's PC, *Laptop* profile (the maintainer switched the scheme) | E6: the release worker on 1 h and 3 h | 328.3 s and 972.6 s; GPU 0.0 %. |
 | 2026-11-15 | Maintainer's PC | `ipc-probe/pack.ps1` | `DeScribe.SttProbe` 1.0.0.0 and 2.0.0.0, 2.7 MB each, signed with a new `devcert.pfx` (gitignored, not trusted yet: guide task 6). |

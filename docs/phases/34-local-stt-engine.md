@@ -358,8 +358,10 @@ built). The checks are in reference/desktop.md (E1–E9) and reference/local-stt
     clears them.
   - **Task 1's "header and session list":** neither names the engine, so only the export changed.
 - **Sizes:** the MSIX is 5.3 MB (from 3.0 MB); the engine's DLLs are 6.7 MB.
+- **The *Laptop* profile (E6):** an hour in 328.3 s and three hours in 972.6 s, against the harness's 334.1 s and
+  998.2 s, with word times holding at the end. Phase 33's two emulation schemes had been removed, so
+  `setup-emulation.ps1` made them again with the calibrated caps; their GUIDs changed.
 - **Open:**
-  - **E6**, the 1-hour and 3-hour runs in the *Laptop* profile: the maintainer switches the power scheme.
   - **The Windows App Certification Kit** on `release/DeScribe-v1.2.0-x64.msix`, as administrator.
   - **By hand:** rename, edit, translate and Add to project on a local transcript; a real drop on the window;
     clicking Close and Keep open in the close dialog; Rust's connections during a run.
