@@ -4,8 +4,10 @@ import { useProjectStore } from '../../stores/project';
 import BriefDialog from '../components/BriefDialog.vue';
 import ChatList from '../components/ChatList.vue';
 import ChatPane from '../components/ChatPane.vue';
+import ConfirmDialog from '../components/ConfirmDialog.vue';
 import SessionList from '../components/SessionList.vue';
 import SessionSummary from '../components/SessionSummary.vue';
+import { useOpenTranscript } from '../composables/useOpenTranscript';
 import { useProjectUi } from '../composables/useProjectUi';
 
 // Project mode (PROJECTS.md §5.6): connecting to the project folder, then the sidebar on the left, with the sessions
@@ -16,6 +18,8 @@ import { useProjectUi } from '../composables/useProjectUi';
 // One block per status of the project store.
 const project = useProjectStore();
 const ui = useProjectUi();
+/** Every **Open** (a summary's, a quote's, a search hit's) asks here before replacing the transcript on Output. */
+const { openDialog } = useOpenTranscript();
 const root = useTemplateRef<HTMLElement>('root');
 const list = useTemplateRef<InstanceType<typeof SessionList>>('list');
 const chatPane = useTemplateRef<InstanceType<typeof ChatPane>>('chatPane');
@@ -267,6 +271,7 @@ onMounted(() => {
     </div>
 
     <BriefDialog :open="ui.briefOpen" @close="ui.briefOpen = false" />
+    <ConfirmDialog v-bind="openDialog" />
   </section>
 </template>
 

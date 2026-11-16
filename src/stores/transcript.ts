@@ -48,6 +48,8 @@ export const useTranscriptStore = defineStore('transcript', () => {
 
   const doc = shallowRef<TranscriptDoc | null>(null);
   const view = ref<TranscriptVersion>('original');
+  /** The turn Output scrolls to and marks once it shows the transcript (a quote's **Open**); Output clears it. */
+  const revealTurnId = ref<string | null>(null);
   /** True when the last save failed: the transcript lasts only for this tab. */
   const saveFailed = ref(false);
 
@@ -218,6 +220,7 @@ export const useTranscriptStore = defineStore('transcript', () => {
     setLink(null);
     doc.value = next;
     view.value = 'original';
+    revealTurnId.value = null;
     return saveNow();
   }
 
@@ -275,6 +278,17 @@ export const useTranscriptStore = defineStore('transcript', () => {
     scheduleSave();
   }
 
+  /**
+   * Asks Output to show a turn: in English when `english` and there is a translation (a quote's words are the
+   * English text), otherwise the original.
+   */
+  function showTurn(turnId: string, english: boolean): void {
+    const current = doc.value;
+    if (!current) return;
+    view.value = english && current.translations.en ? 'en' : 'original';
+    revealTurnId.value = turnId;
+  }
+
   /** Removes the transcript from the view and deletes the saved copy ("Clear saved data"). */
   function clear(): Promise<void> {
     if (saveTimer !== null) {
@@ -285,6 +299,7 @@ export const useTranscriptStore = defineStore('transcript', () => {
     setLink(null);
     doc.value = null;
     view.value = 'original';
+    revealTurnId.value = null;
     saveFailed.value = false;
     return clearLastTranscript();
   }
@@ -467,6 +482,7 @@ export const useTranscriptStore = defineStore('transcript', () => {
   return {
     doc,
     view,
+    revealTurnId,
     saveFailed,
     hasAutosave,
     autosaveInfo,
@@ -481,6 +497,7 @@ export const useTranscriptStore = defineStore('transcript', () => {
     setTranslation,
     renameSpeaker,
     editTurnText,
+    showTurn,
     clear,
     loadAutosave,
     linkToProject,

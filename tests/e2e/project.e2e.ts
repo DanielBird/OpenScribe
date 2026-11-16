@@ -10,6 +10,7 @@ import {
   transcriptPath,
 } from '../../src/testing/projectSeed';
 import {
+  clickInHeader,
   enterProject,
   expect,
   modeButton,
@@ -376,7 +377,7 @@ test('search finds planted phrases in English and in the original, and Copy copi
   const englishText = doc.translations.en?.texts[turn.id] ?? turn.text;
   const hit = page.locator('li.result', { hasText: doc.source.fileName }).locator('li.hit').first();
   await hit.getByRole('button', { name: /^Copy/ }).click();
-  await expect(hit.getByRole('button', { name: /^Copy/ })).toHaveText('Copied');
+  await expect(hit.getByRole('button', { name: /^Copy/ })).toHaveClass(/\bcopied\b/);
   const copied = await page.evaluate(() => navigator.clipboard.readText());
   expect(copied).toContain(`"${englishText}" — `);
   expect(copied).toContain(doc.source.fileName);
@@ -398,6 +399,48 @@ test('search finds planted phrases in English and in the original, and Copy copi
   await openSearch(page);
   await expect(box).toHaveValue(`"${english.phrase}"`);
   await expect(result).toBeVisible();
+});
+
+test("a hit's Open shows its turn on Output, in the words it was found in, and the search is there on the way back", async ({
+  page,
+}) => {
+  await useProjectFolder(page, { [ROOT]: projectFiles(docs) });
+  await openSeeded(page);
+  const box = await openSearch(page);
+
+  const english = planted.find((p) => p.field === 'english')!;
+  const doc = docs.find((d) => d.id === english.sessionId)!;
+  await box.fill(`"${english.phrase}"`);
+  const hit = page.locator('li.result', { hasText: doc.source.fileName }).locator('li.hit').first();
+  // Copy and Open show only on the hit pointed at.
+  await page.mouse.move(0, 0);
+  await expect(hit.locator('.actions')).toHaveCSS('opacity', '0');
+  await hit.hover();
+  await expect(hit.locator('.actions')).toHaveCSS('opacity', '1');
+  // Each says what it does on pointing at it.
+  const openButton = hit.getByRole('button', { name: /^Open in transcript/ });
+  await expect(openButton.locator('.icon-tip')).toHaveCSS('opacity', '0');
+  await openButton.hover();
+  await expect(openButton.locator('.icon-tip')).toHaveText('Open');
+  await expect(openButton.locator('.icon-tip')).toHaveCSS('opacity', '1');
+  await expect(hit.getByRole('button', { name: /^Copy/ }).locator('.icon-tip')).toHaveCSS(
+    'opacity',
+    '0',
+  );
+  await openButton.click();
+
+  await expect(page.getByRole('heading', { level: 1, name: 'Output' })).toBeAttached();
+  const turn = page.locator(`li.turn[data-turn-id="${english.turnId}"]`);
+  await expect(turn).toBeFocused();
+  await expect(turn).toBeInViewport();
+  await expect(turn).toHaveClass(/\bis-revealed\b/);
+  const englishText = doc.translations.en?.texts[english.turnId];
+  if (englishText) await expect(turn.locator('.text')).toHaveText(englishText);
+
+  await clickInHeader(page, 'Home');
+  await enterProject(page);
+  await expect(box).toHaveValue(`"${english.phrase}"`);
+  await expect(page.locator('li.result', { hasText: doc.source.fileName })).toBeVisible();
 });
 
 test("a hit opens to its whole turn without moving the snippet's words, and closes when clicked again or another opens", async ({

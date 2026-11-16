@@ -334,3 +334,6 @@ Tasks 1–5 and 7, and the Hugging Face parts of Tasks 8 and 9.
   - the Store submission;
   - Phase 35's open rows.
 - **For later:** whether the clean-up ran still isn't recorded in the doc (Phase 34's note).
+- **Outside the phase, at the maintainer's request:** a quote's **Open** (D57). Quote cards and search hits open
+  their turn on Output, the copy buttons are icons (`src/ui/icons/`), and the search is kept on the way back to
+  Analyse.

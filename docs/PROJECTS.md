@@ -377,6 +377,9 @@ Two notices cover the rest:
   - **Verified:** the card shows the transcript's own text, the speaker, the time and the session title. **Copy**
     puts it on the clipboard as `"…" — Anna (P07), 00:41:12, P07 – home visit, Hamburg (translated from German)`.
   - **Not found**, or an omission that could change the meaning: the card is marked, and it has no **Copy** button.
+  - **Open** (after **Copy**, an icon) opens the session on Output at the quote's turn, scrolled to it, focused and
+    tinted for a moment, in English when the quote is a translation (D57). Marked cards have it too, whenever the ref
+    names a turn that exists.
 
 **Activity.** Under each answer, a collapsed `<details>` lists the tool activity, for example "Searched
 *charg\* night* · 23 hits in 9 sessions" and "Read P07 00:38–00:47". It also gives the approximate cost, worked out
@@ -412,16 +415,17 @@ DeScribe                                                    Hearing at home 2026
   the last one added to first, each with its title, "You" or the colleague's name, and the time. Selecting one opens
   it in the chat pane; the pane opens on a new chat.
 - **Search** in the chat pane (A16, D30): **Chat | Search** under the question box switches the pane to the search box,
-  and its results take the conversation's place: hits grouped by session, each with the speaker, time, snippet and
-  **Copy**. A session lists its first 4 hits; **Show all** under them lists the rest below them, and **Show fewer**
+  and its results take the conversation's place: hits grouped by session, each with the speaker, time, snippet,
+  **Copy** and **Open** (at the hit's turn, D57). A session lists its first 4 hits; **Show all** under them lists the rest below them, and **Show fewer**
   goes back to 4 without moving the button. A click on a hit (or its speaker and time, a button) opens it to its whole
   turn without moving the snippet's words: the rest of the turn follows them in a box at least three lines tall (and a
   line taller than the snippet), and the turn before them is above, a scroll up. One hit is open at a time. **Chat**
-  goes back; the search stays as it was. (Until 2026-10-28 the box was above the sessions list.)
+  goes back; the search stays as it was, and so it does after a hit's **Open** and a return to Analyse. (Until
+  2026-10-28 the box was above the sessions list.)
 - **Model:** a select in the Project header, **Sonnet 5.5** (default) or **Opus 5.5** (A17), saved on this
   computer. From Phase 19 it lists Gemini models too, grouped by provider (D26).
 - **Session summary:** selecting a session shows its summary in the right-hand pane:
-  - metadata, synopsis, overview, research questions, themes, key moments, and quotes with **Copy**;
+  - metadata, synopsis, overview, research questions, themes, key moments, and quotes with **Copy** and **Open**;
   - **Open transcript**, which loads the transcript on the Output tab and saves edits back to the folder (§5.2);
   - **Regenerate**.
 

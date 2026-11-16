@@ -3,8 +3,10 @@ import {
   computed,
   nextTick,
   onBeforeUnmount,
+  onMounted,
   ref,
   shallowRef,
+  toRef,
   useId,
   useTemplateRef,
   watch,
@@ -14,6 +16,11 @@ import { plural } from '../../domain/text';
 import { formatTimestamp } from '../../domain/transcript';
 import { useProjectStore } from '../../stores/project';
 import { writeClipboard } from '../clipboard';
+import { useOpenTranscript } from '../composables/useOpenTranscript';
+import { useProjectUi } from '../composables/useProjectUi';
+import IconCopied from '../icons/IconCopied.vue';
+import IconCopy from '../icons/IconCopy.vue';
+import IconOpen from '../icons/IconOpen.vue';
 
 // The researchers' keyword search (PROJECTS.md §5.6, A16), on the same engine as the agent's search tool: the chat
 // pane's Search mode (D30). The results scroll above the box, where the conversation is in Chat mode.
@@ -28,7 +35,8 @@ const input = useTemplateRef<HTMLInputElement>('input');
 const DEBOUNCE_MS = 250;
 const COPIED_MS = 1500;
 
-const query = ref('');
+/** Kept in the shared view state, so the search is still there after a hit's **Open** and back. */
+const query = toRef(useProjectUi(), 'searchQuery');
 /** The query the results are for. */
 const searched = ref('');
 const error = ref('');
@@ -82,6 +90,7 @@ function clearResults(): void {
   sessions.value = [];
   nextOffset.value = null;
   copyFallback.value = null;
+  openError.value = null;
   open.value = null;
   allHits.value = new Map();
 }
@@ -110,6 +119,11 @@ function runNow(): void {
   cancelTimer();
   run();
 }
+
+// Back in Analyse with a search in the box: its results again, from the first page.
+onMounted(() => {
+  if (query.value.trim() !== '') run();
+});
 
 function clear(): void {
   query.value = '';
@@ -222,12 +236,12 @@ function quoteRegions(
 }
 
 /**
- * A click anywhere on a hit opens or closes it, except on Copy and its fallback, and except a click that ends a
+ * A click anywhere on a hit opens or closes it, except on Copy, Open and what they show, and except a click that ends a
  * selection, so words can still be selected. (The toggle's own click, from the keyboard too, arrives here.)
  */
 function onHitClick(event: MouseEvent, hit: SearchHit, quote: string): void {
   if (!canOpen(hit)) return;
-  if ((event.target as Element | null)?.closest('.copy, .copy-fallback')) return;
+  if ((event.target as Element | null)?.closest('.actions, .copy-fallback, .open-error')) return;
   if (event.detail > 0 && window.getSelection()?.isCollapsed === false) return;
   void toggle(quote);
 }
@@ -446,6 +460,21 @@ async function copy(sessionId: string, hit: SearchHit): Promise<void> {
   area?.select();
 }
 
+// --- Open ------------------------------------------------------------------------------------------
+
+/** The hit whose transcript couldn't be opened, and why. */
+const openError = ref<{ key: string; message: string } | null>(null);
+const opener = useOpenTranscript();
+
+async function openHit(sessionId: string, hit: SearchHit): Promise<void> {
+  openError.value = null;
+  const message = await opener.openTranscript(sessionId, {
+    turnId: hit.turnId,
+    english: hit.field === 'english',
+  });
+  if (message !== null) openError.value = { key: keyOf(sessionId, hit.turnId), message };
+}
+
 onBeforeUnmount(() => {
   cancelTimer();
   if (copiedTimer !== null) clearTimeout(copiedTimer);
@@ -498,14 +527,29 @@ defineExpose({ focus: () => input.value?.focus() });
                   {{ ' ' }}
                   <span class="time">{{ formatTimestamp(hit.start) }}</span>
                 </template>
-                <button
-                  type="button"
-                  class="copy"
-                  :aria-label="`Copy, ${project.speakerLabel(s.sessionId, hit.speakerId)} at ${formatTimestamp(hit.start)}`"
-                  @click="copy(s.sessionId, hit)"
-                >
-                  {{ copied === keyOf(s.sessionId, hit.turnId) ? 'Copied' : 'Copy' }}
-                </button>
+                <span class="actions">
+                  <button
+                    type="button"
+                    class="icon-button copy"
+                    :class="{ copied: copied === keyOf(s.sessionId, hit.turnId) }"
+                    :aria-label="`Copy, ${project.speakerLabel(s.sessionId, hit.speakerId)} at ${formatTimestamp(hit.start)}`"
+                    @click="copy(s.sessionId, hit)"
+                  >
+                    <IconCopied v-if="copied === keyOf(s.sessionId, hit.turnId)" class="icon" />
+                    <IconCopy v-else class="icon" />
+                    <span class="icon-tip" aria-hidden="true">Copy</span>
+                  </button>
+                  <button
+                    type="button"
+                    class="icon-button open"
+                    :aria-label="`Open in transcript, ${project.speakerLabel(s.sessionId, hit.speakerId)} at ${formatTimestamp(hit.start)}`"
+                    :disabled="!opener.canOpen(s.sessionId)"
+                    @click="openHit(s.sessionId, hit)"
+                  >
+                    <IconOpen class="icon" />
+                    <span class="icon-tip" aria-hidden="true">Open</span>
+                  </button>
+                </span>
               </div>
               <p
                 :id="quoteId(si, hi)"
@@ -539,6 +583,13 @@ defineExpose({ focus: () => input.value?.focus() });
                 />
                 <p class="hint">Press Ctrl+C to copy the selected text.</p>
               </div>
+              <p
+                v-if="openError?.key === keyOf(s.sessionId, hit.turnId)"
+                class="open-error"
+                role="alert"
+              >
+                {{ openError.message }}
+              </p>
             </li>
           </ul>
           <button
@@ -730,7 +781,7 @@ defineExpose({ focus: () => input.value?.focus() });
   font-variant-numeric: tabular-nums;
 }
 
-.copy,
+.icon-button,
 .show-all {
   padding: 0;
   border: 0;
@@ -740,13 +791,50 @@ defineExpose({ focus: () => input.value?.focus() });
   transition: color 0.15s;
 }
 
-.copy {
+/* Copy and Open, at the end of the hit's first line. */
+.actions {
+  display: inline-flex;
+  align-self: center;
+  gap: var(--space-1);
+  margin: calc(-1 * var(--space-1));
   margin-left: auto;
+  transition: opacity 0.15s;
 }
 
-.copy:hover,
+/* As on QuoteCard: with a mouse, only on the hit pointed at or with focus in it, and for "Copied". */
+@media (hover: hover) {
+  .hit:not(:hover, :focus-within) .actions:not(:has(.copied)) {
+    opacity: 0;
+  }
+}
+
+/* Icon only; its name is the aria-label, and a tip says it on pointing (.icon-tip, base.css). The padding widens the
+   target, the margin keeps it in place. */
+.icon-button {
+  position: relative;
+  display: inline-flex;
+  padding: var(--space-1);
+}
+
+.icon-button .icon {
+  width: 1.25em;
+  height: 1.25em;
+}
+
+.icon-button:hover:not(:disabled),
+.icon-button.copied,
 .show-all:hover {
   color: var(--color-accent);
+}
+
+.icon-button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.open-error {
+  color: var(--color-danger);
+  font-size: var(--font-size-sm);
 }
 
 /* Under the session's hits, quiet like Copy. */
@@ -798,7 +886,8 @@ mark {
 
 @media (prefers-reduced-motion: reduce) {
   .hit,
-  .copy,
+  .actions,
+  .icon-button,
   .show-all {
     transition: none;
   }

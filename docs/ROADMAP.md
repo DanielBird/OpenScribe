@@ -179,7 +179,7 @@ src/
     composables/useProjectUi.ts the Brief dialog, the Change chooser, the selected session, the sidebar's tab and the
                                 chat pane's mode, shared by the Analyse mode components
     composables/useRovingListbox.ts  one Tab stop and arrow keys for a listbox (SessionList, ChatList)
-    composables/useCopy.ts      Copy with "Copied" and the Ctrl+C fallback (QuoteCard)
+    composables/useCopy.ts      Copy with the copied icon and the Ctrl+C fallback (QuoteCard)
     clipboard.ts                writeClipboard (Copy buttons)
     providerNames.ts            each LLM provider's name, company and key label, in the order the UI lists them
     speakerColor.ts             speaker index → `var(--speaker-N)`, cycling after 10 (D15)

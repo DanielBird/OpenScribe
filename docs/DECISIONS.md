@@ -1185,3 +1185,17 @@ summarise them.
     2026-11-16): they cost nothing on screen and help when a colleague reports slowness.
 - **Why:** each thing in the user's terms (D13); a transcript that always knows its language.
 - **Consequences:** D37's "Auto-detect is first in the list" holds for ElevenLabs only.
+
+### D57 — A quote opens at its turn (2026-11-16; at the maintainer's request, during Phase 36)
+- **Decision:**
+  - **Every quote card and search hit has Open**, an icon after **Copy**. It opens the session on Output as **Open
+    transcript** does (asking first when the transcript there would lose work), then scrolls to the turn, focuses
+    it and tints it for a moment.
+  - **In the words it was shown in:** English when the quote is a translation or the hit was found in English, if the
+    transcript has a translation; the original otherwise.
+  - **Marked quotes have it too** (not found, or left-out words that may change the meaning), whenever the ref names a
+    turn that exists: reading the turn is how to check them (the maintainer, 2026-11-16).
+  - **The player doesn't move** (the maintainer): the turn's timestamp plays it, as before.
+  - **The search is kept** for the way back (`useProjectUi`), since leaving Analyse unmounts it.
+- **Why:** a quote is checked by reading it in context; Copy alone left the reader to find the turn by hand.
+- **Consequences:** one confirmation for every Open, rendered by ProjectView (`useOpenTranscript`).

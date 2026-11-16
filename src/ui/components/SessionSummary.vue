@@ -11,12 +11,9 @@ import {
 import { NOT_DISCUSSED, type SummaryQuote } from '../../domain/summary';
 import { formatDate, formatTimestamp, languageName } from '../../domain/transcript';
 import { projectModelLabel } from '../../providers/llm/models';
-import { useNavStore } from '../../stores/nav';
 import { usePipelineStore } from '../../stores/pipeline';
 import { useProjectStore } from '../../stores/project';
-import { useTranscriptStore } from '../../stores/transcript';
-import { useConfirm } from '../composables/useConfirm';
-import ConfirmDialog from './ConfirmDialog.vue';
+import { useOpenTranscript } from '../composables/useOpenTranscript';
 import ErrorDetails from './ErrorDetails.vue';
 import PipelineStatus from './PipelineStatus.vue';
 import QuoteCard from './QuoteCard.vue';
@@ -30,9 +27,7 @@ const emit = defineEmits<{ back: [] }>();
 
 const project = useProjectStore();
 const pipeline = usePipelineStore();
-const transcript = useTranscriptStore();
-const nav = useNavStore();
-const { confirm, dialog } = useConfirm();
+const opener = useOpenTranscript();
 const id = useId();
 const heading = useTemplateRef<HTMLElement>('heading');
 
@@ -104,6 +99,7 @@ function quoteCards(quotes: readonly SummaryQuote[]) {
       start,
       translatedFrom,
       citation: parts ? formatCitation(parts) : null,
+      at: turn ? { sessionId: s.sessionId, turnId: turn.id } : null,
     };
   });
 }
@@ -145,31 +141,7 @@ function onKeyConfirmed(): void {
 
 async function openTranscript(): Promise<void> {
   openError.value = '';
-  const current = transcript.doc;
-  if (current?.id === props.sessionId && transcript.projectLink) {
-    nav.goTo('output');
-    return;
-  }
-  if (current && (!transcript.projectLink || transcript.folderNotice)) {
-    const ok = await confirm({
-      title: 'Replace the transcript on Output?',
-      message: transcript.projectLink
-        ? "Its latest changes aren't saved in its project."
-        : "It isn't in a project, and is saved only in this browser.",
-      confirmLabel: 'Replace',
-      danger: true,
-    });
-    if (!ok) return;
-  }
-  try {
-    await transcript.openFromProject(props.sessionId);
-    nav.goTo('output');
-  } catch (err) {
-    openError.value =
-      err instanceof Error && 'userMessage' in err && typeof err.userMessage === 'string'
-        ? err.userMessage
-        : "DeScribe couldn't open this transcript. Try again.";
-  }
+  openError.value = (await opener.openTranscript(props.sessionId)) ?? '';
 }
 
 // The heading takes focus when a session is picked in the list, so keyboard and screen-reader users land on it. Not
@@ -201,7 +173,7 @@ watch(
         <button
           type="button"
           class="button"
-          :disabled="status === 'running'"
+          :disabled="!opener.canOpen(sessionId)"
           @click="openTranscript"
         >
           Open transcript
@@ -267,6 +239,7 @@ watch(
                   :start="c.start"
                   :translated-from="c.translatedFrom"
                   :citation="c.citation"
+                  :at="c.at"
                 />
               </li>
             </ul>
@@ -290,6 +263,7 @@ watch(
                     :start="c.start"
                     :translated-from="c.translatedFrom"
                     :citation="c.citation"
+                    :at="c.at"
                   />
                 </li>
               </ul>
@@ -313,7 +287,6 @@ watch(
       </details>
     </template>
 
-    <ConfirmDialog v-bind="dialog" />
     <SummariseDialog
       :open="keyDialog"
       title="Summarise"

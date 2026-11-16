@@ -8,6 +8,7 @@ import { cleanTurnText, formatTimestamp, joinLines, type Turn } from '../../doma
 // text also plays (a mouse shortcut; the button is the keyboard path), unless the user is selecting text.
 // With `editable`, the text is a box instead (DECISIONS.md D19): clicking it places the caret, and the
 // timestamp still plays. `outdated` marks a translation made before the turn's text was changed (D39).
+// `revealed` is the turn a quote's **Open** went to: it takes focus, and is tinted for a moment.
 const props = defineProps<{
   turn: Turn;
   label: string;
@@ -19,6 +20,8 @@ const props = defineProps<{
   editable?: boolean;
   /** `text` is a translation of what the turn said before it was edited. */
   outdated?: boolean;
+  /** The turn a quote opened at. */
+  revealed?: boolean;
 }>();
 const emit = defineEmits<{ select: [turn: Turn]; edit: [turnId: string, text: string] }>();
 
@@ -97,10 +100,11 @@ function onBlur(): void {
   <!-- DOM order (timestamp, speaker, text) is the reading order; the grid only places them. -->
   <li
     class="turn"
-    :class="{ 'is-active': active, 'is-playable': playable }"
+    :class="{ 'is-active': active, 'is-playable': playable, 'is-revealed': revealed }"
     :style="{ '--turn-color': color }"
     :data-turn-id="turn.id"
     :aria-current="active ? 'true' : undefined"
+    :tabindex="revealed ? -1 : undefined"
   >
     <span class="time-row">
       <button
@@ -163,6 +167,32 @@ function onBlur(): void {
   border-radius: var(--radius-sm);
   background: color-mix(in srgb, var(--turn-color) 8%, var(--color-bg));
   content: '';
+}
+
+/* The turn a quote opened at: the same tint, fading once the reader has found it. Playing it shows it as active. */
+.turn.is-revealed:not(.is-active)::before {
+  position: absolute;
+  z-index: -1;
+  inset: calc(-1 * var(--space-2)) calc(-1 * var(--space-2)) calc(-1 * var(--space-2))
+    calc(-1 * var(--space-3));
+  border-left: 3px solid var(--turn-color);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--turn-color) 8%, var(--color-bg));
+  content: '';
+  animation: reveal-fade 600ms ease-out 2s forwards;
+}
+
+@keyframes reveal-fade {
+  to {
+    opacity: 0;
+  }
+}
+
+/* Without the fade: the tint goes at once. */
+@media (prefers-reduced-motion: reduce) {
+  .turn.is-revealed:not(.is-active)::before {
+    animation-duration: 1ms;
+  }
 }
 
 .turn.is-playable p.text {

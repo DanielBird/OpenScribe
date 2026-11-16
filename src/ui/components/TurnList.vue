@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, useTemplateRef, watch } from 'vue';
+import { computed, nextTick, ref, useTemplateRef, watch } from 'vue';
 import type { Speaker, Turn } from '../../domain/transcript';
 import { speakerColor } from '../speakerColor';
 import TurnItem from './TurnItem.vue';
@@ -10,6 +10,8 @@ import TurnItem from './TurnItem.vue';
 // `activeId` is the turn being played; with `follow`, the list scrolls to it when it changes.
 // `editable` turns each text into a box (D19); `edit` passes on what was typed, for the store.
 // `outdated` lists the turns whose shown translation is out of date (D39).
+// `revealId` is a turn to show, as a quote's **Open** asks: the list scrolls to it, marks it and focuses it, then
+// emits `revealed`.
 const props = withDefaults(
   defineProps<{
     turns: readonly Turn[];
@@ -22,6 +24,7 @@ const props = withDefaults(
     follow?: boolean;
     editable?: boolean;
     outdated?: ReadonlySet<string>;
+    revealId?: string | null;
   }>(),
   {
     playable: false,
@@ -31,9 +34,14 @@ const props = withDefaults(
     follow: false,
     editable: false,
     outdated: undefined,
+    revealId: null,
   },
 );
-const emit = defineEmits<{ select: [turn: Turn]; edit: [turnId: string, text: string] }>();
+const emit = defineEmits<{
+  select: [turn: Turn];
+  edit: [turnId: string, text: string];
+  revealed: [];
+}>();
 
 const speakerInfo = computed(() => {
   const info = new Map<string, { label: string; color: string }>();
@@ -70,6 +78,27 @@ watch(
       ?.scrollIntoView({ block: 'nearest', behavior: reducedMotion() ? 'auto' : 'smooth' });
   },
 );
+
+/** The turn last revealed, marked until another is. */
+const marked = ref<string | null>(null);
+
+watch(
+  () => props.revealId,
+  async (id) => {
+    if (!id) return;
+    await nextTick();
+    const el = list.value?.querySelector<HTMLElement>(`[data-turn-id="${id}"]`);
+    if (el) {
+      marked.value = id;
+      await nextTick();
+      el.focus({ preventScroll: true });
+      el.scrollIntoView({ block: 'center', behavior: reducedMotion() ? 'auto' : 'smooth' });
+    }
+    // Asked once: a turn that has gone (the transcript changed since) just leaves the list at the top.
+    emit('revealed');
+  },
+  { immediate: true },
+);
 </script>
 
 <template>
@@ -86,6 +115,7 @@ watch(
         turn.id === activeId,
         editable,
         outdated?.has(turn.id) ?? false,
+        turn.id === marked,
       ]"
       :turn="turn"
       :label="infoFor(turn).label"
@@ -95,6 +125,7 @@ watch(
       :active="turn.id === activeId"
       :editable="editable"
       :outdated="outdated?.has(turn.id) ?? false"
+      :revealed="turn.id === marked"
       @select="emit('select', $event)"
       @edit="(turnId, text) => emit('edit', turnId, text)"
     />

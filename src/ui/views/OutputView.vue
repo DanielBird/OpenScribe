@@ -129,6 +129,8 @@ watch(
           :follow="playback.followPlayback && !playback.followPaused"
           :editable="editing"
           :outdated="outdated"
+          :reveal-id="transcript.revealTurnId"
+          @revealed="transcript.revealTurnId = null"
           @select="playback.seekTo($event.start)"
           @edit="(turnId, text) => transcript.editTurnText(turnId, text)"
         />

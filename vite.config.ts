@@ -63,7 +63,19 @@ export default defineConfig(({ mode }) => {
     server: {
       port: 5173,
       strictPort: true,
-      watch: { ignored: ['**/src-tauri/**'] },
+      // Rust, and the gitignored folders that builds and tests fill. Watching scripts/spikes/ alone (the Phase 33 spike:
+      // the engine's sources and builds, ~40,000 files) held up the first page load by over 20 seconds.
+      watch: {
+        ignored: [
+          '**/src-tauri/**',
+          '**/scripts/spikes/**',
+          '**/.speech-pack/**',
+          '**/.stt-runtime-build/**',
+          '**/test-results/**',
+          '**/playwright-report/**',
+          '**/release/**',
+        ],
+      },
     },
     build: {
       target: 'es2022',

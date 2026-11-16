@@ -20,6 +20,8 @@ export type AnswerBlock =
       kind: 'quote';
       ref: string;
       sessionId: string | null;
+      /** The quoted turn, when the ref names one that exists. */
+      turnId: string | null;
       modelText: string;
       check: QuoteCheck;
       citation: CitationParts | null;
@@ -136,13 +138,14 @@ const NOT_FOUND: QuoteCheck = { status: 'not_found' };
 function quoteBlock(ref: string, modelText: string, corpus: CorpusReader): AnswerBlock {
   const parsed = parseRef(ref);
   const session = parsed ? corpus.byKey(parsed.sessionKey) : undefined;
+  const turn = session?.text.turns.find((t) => t.id === parsed?.turnId);
   const base = {
     kind: 'quote' as const,
     ref: ref.trim(),
     modelText,
     sessionId: session?.text.sessionId ?? null,
+    turnId: turn?.id ?? null,
   };
-  const turn = session?.text.turns.find((t) => t.id === parsed?.turnId);
   const english = session && turn ? englishText(session.text, turn) : null;
   if (!session || !turn || english === null) return { ...base, check: NOT_FOUND, citation: null };
 

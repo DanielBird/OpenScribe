@@ -195,6 +195,45 @@ describe('TurnList', () => {
     });
   });
 
+  describe("revealing a turn (a quote's Open)", () => {
+    it('scrolls to the turn, marks and focuses it, and says it has', async () => {
+      const scroll = vi.spyOn(Element.prototype, 'scrollIntoView').mockImplementation(() => {});
+      const wrapper = mount(TurnList, {
+        props: { turns: doc.turns, speakers: doc.speakers, revealId: 't3' },
+        attachTo: document.body,
+      });
+      await flushPromises();
+      const turn = wrapper.findAll('li')[2]!;
+      expect(scroll.mock.contexts[0]).toBe(turn.element);
+      expect(scroll.mock.calls[0]?.[0]).toMatchObject({ block: 'center' });
+      expect(turn.classes()).toContain('is-revealed');
+      expect(turn.attributes('tabindex')).toBe('-1');
+      expect(document.activeElement).toBe(turn.element);
+      expect(wrapper.emitted('revealed')).toHaveLength(1);
+
+      // Revealed again later: the mark moves.
+      await wrapper.setProps({ revealId: null });
+      await wrapper.setProps({ revealId: 't5' });
+      await flushPromises();
+      expect(turn.classes()).not.toContain('is-revealed');
+      expect(wrapper.findAll('li')[4]!.classes()).toContain('is-revealed');
+      wrapper.unmount();
+      scroll.mockRestore();
+    });
+
+    it('leaves the list as it is for a turn that has gone', async () => {
+      const scroll = vi.spyOn(Element.prototype, 'scrollIntoView').mockImplementation(() => {});
+      const wrapper = mount(TurnList, {
+        props: { turns: doc.turns, speakers: doc.speakers, revealId: 'gone' },
+      });
+      await flushPromises();
+      expect(scroll).not.toHaveBeenCalled();
+      expect(wrapper.find('.is-revealed').exists()).toBe(false);
+      expect(wrapper.emitted('revealed')).toHaveLength(1);
+      scroll.mockRestore();
+    });
+  });
+
   describe('editing', () => {
     let wrapper: VueWrapper | null = null;
     const original = doc.turns[0]!.text;

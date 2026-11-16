@@ -1,4 +1,4 @@
-import type { Page } from '@playwright/test';
+import type { Locator, Page } from '@playwright/test';
 import {
   agentMessage,
   apiError,
@@ -188,7 +188,7 @@ test('with Gemini, a question runs a function call, streams a checked quote that
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(CITATION);
 });
 
-test('an invented or unsafely cut quote is marked and has no Copy', async ({ page }) => {
+test('an invented or unsafely cut quote is marked, with Open and no Copy', async ({ page }) => {
   await useProjectFolder(page, SEEDED);
   await mockAgent(page, () =>
     says(
@@ -208,11 +208,14 @@ test('an invented or unsafely cut quote is marked and has no Copy', async ({ pag
   const answer = answers(page).first();
   const cards = answer.locator('.quote-card');
   await expect(cards).toHaveCount(4);
+  // No Copy; Open, to check them against their turns.
+  const buttons = (card: Locator) =>
+    card.getByRole('button').evaluateAll((els) => els.map((el) => el.getAttribute('aria-label')));
   await expect(cards.nth(2)).toContainText('Not found in the transcript');
-  await expect(cards.nth(2).getByRole('button')).toHaveCount(0);
+  expect(await buttons(cards.nth(2))).toEqual(['Open in transcript: I never charge them at all']);
   await expect(cards.nth(3)).toContainText('Left-out words may change the meaning');
   await expect(cards.nth(3).locator('blockquote')).toHaveText('“I put … every evening”');
-  await expect(cards.nth(3).getByRole('button')).toHaveCount(0);
+  expect(await buttons(cards.nth(3))).toEqual(['Open in transcript: I put … every evening']);
   await expect(answer).toContainText('Text that looks like <b>HTML</b> stays text.');
   await expect(answer.locator('b')).toHaveCount(0);
   await expect(answer.getByRole('button', { name: 'Copy all quotes' })).toHaveCount(0);
