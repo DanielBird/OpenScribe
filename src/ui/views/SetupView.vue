@@ -30,7 +30,12 @@ const optionsOpen = ref(false);
 // The keys are on Settings (D27); Setup only points there while the required one is missing.
 const keyMissing = computed(() => settings.keyRequired && settings.elevenLabsKey.trim() === '');
 
-const languages = computed(() => [{ code: 'auto', label: 'Auto-detect' }, ...settings.languages]);
+// Auto-detect only where the engine reports what it detected: on this computer a language is chosen (Phase 36).
+const languages = computed(() =>
+  supports.value.autoDetect
+    ? [{ code: 'auto', label: 'Auto-detect' }, ...settings.languages]
+    : settings.languages,
+);
 
 // NaN (an entry that isn't a number) is left out so that re-rendering doesn't wipe what the user typed.
 const speakersValue = computed(() => {

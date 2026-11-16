@@ -235,13 +235,36 @@ export const useSettingsStore = defineStore('settings', () => {
   const languageHint = ref<LanguageHint>(
     transcription.value.languages.includes(prefs.languageHint) ? prefs.languageHint : 'auto',
   );
-  // A language the engine now in use doesn't offer becomes Auto-detect, as one saved earlier does above (D37).
+  // When the engine changes, the language follows it (D37, Phase 36). One it doesn't offer becomes Auto-detect, or
+  // English for an engine that can't report what it detected (this computer), which Setup then asks for. Auto-detect
+  // replaced that way comes back with an engine that can, unless the language was changed in between.
+  let autoReplaced = false;
+  let settingHint = false;
+  function setHint(hint: LanguageHint): void {
+    settingHint = true;
+    languageHint.value = hint;
+    settingHint = false;
+    if (hint === 'auto') autoReplaced = false;
+  }
   watch(
-    () => transcription.value.languages,
-    (offered) => {
-      if (languageHint.value !== 'auto' && !offered.includes(languageHint.value)) {
-        languageHint.value = 'auto';
+    transcription,
+    (provider) => {
+      const hint = languageHint.value;
+      const offered = hint === 'auto' || provider.languages.includes(hint);
+      if (provider.supports.autoDetect) {
+        if (!offered || autoReplaced) setHint('auto');
+        return;
       }
+      if (hint !== 'auto' && offered) return;
+      setHint(provider.languages.includes('en') ? 'en' : (provider.languages[0] ?? 'auto'));
+      autoReplaced = hint === 'auto';
+    },
+    { flush: 'sync', immediate: true },
+  );
+  watch(
+    languageHint,
+    () => {
+      if (!settingHint) autoReplaced = false;
     },
     { flush: 'sync' },
   );

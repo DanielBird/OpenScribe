@@ -215,7 +215,7 @@ describe('SetupView', () => {
       ]);
       expect(wrapper!.text()).toContain('Slower. The recording stays on this computer.');
       expect(wrapper!.get('fieldset').attributes('aria-describedby')).toBeTruthy();
-      expect(wrapper!.get('.band-summary').text()).toBe('Language: Auto-detect');
+      expect(wrapper!.get('.band-summary').text()).toBe('Language: English');
     });
 
     it('lists the pack’s languages with This computer', async () => {
@@ -224,9 +224,11 @@ describe('SetupView', () => {
       const options = byLabel('Language')
         .findAll('option')
         .map((o) => o.attributes('value'));
-      expect(options).toHaveLength(26);
+      expect(options).toHaveLength(25);
       expect(options).toContain('uk');
       expect(options).not.toContain('ja');
+      expect(options).not.toContain('auto');
+      expect((byLabel('Language').element as HTMLSelectElement).value).toBe('en');
       await radio('ElevenLabs').setValue(true);
       expect(
         byLabel('Language')

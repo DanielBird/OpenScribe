@@ -41,7 +41,7 @@ function fakeProvider() {
     id: 'elevenlabs',
     model: 'scribe_v2',
     needsKey: true,
-    supports: { keyterms: true, zeroRetention: true, numSpeakers: true },
+    supports: { keyterms: true, zeroRetention: true, numSpeakers: true, autoDetect: true },
     limits: ELEVENLABS_LIMITS,
     languages: ['de', 'en', 'fr'],
     transcribe: (input, { signal, onProgress }) =>
@@ -448,7 +448,7 @@ describe('job store', () => {
         id: 'local',
         model: 'nvidia-parakeet-nemotron-1',
         needsKey: false,
-        supports: { keyterms: false, zeroRetention: false, numSpeakers: false },
+        supports: { keyterms: false, zeroRetention: false, numSpeakers: false, autoDetect: false },
       });
       setTranscriptionProviderForTests(local.provider, 'local');
       vi.stubGlobal('__DESKTOP__', true);

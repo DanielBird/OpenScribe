@@ -13,7 +13,9 @@ export function createLocalProvider(bridge: LocalSttBridge): TranscriptionProvid
     id: 'local',
     model: localPack().id,
     needsKey: false,
-    supports: { keyterms: false, zeroRetention: false, numSpeakers: false },
+    // Parakeet detects the language but doesn't report it, so a transcript made on Auto-detect would have none
+    // (Phase 34): Setup asks for one instead.
+    supports: { keyterms: false, zeroRetention: false, numSpeakers: false, autoDetect: false },
     limits: localLimits(),
     languages: localPack().languages,
 

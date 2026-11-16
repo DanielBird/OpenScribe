@@ -776,14 +776,38 @@ describe('settings store', () => {
       expect(settings.fileCheck?.ok).toBe(false);
     });
 
-    it('turns a language this computer lacks into Auto-detect', () => {
+    it('asks for a language on this computer: Auto-detect and one it lacks become English', () => {
       const settings = desktop();
       settings.languageHint = 'ja';
       settings.setTranscriptionEngine('local');
-      expect(settings.languageHint).toBe('auto');
+      expect(settings.languageHint).toBe('en');
       settings.languageHint = 'de';
       settings.setTranscriptionEngine('elevenlabs');
       expect(settings.languageHint).toBe('de');
+      settings.setTranscriptionEngine('local');
+      expect(settings.languageHint).toBe('de');
+    });
+
+    it('gives Auto-detect back with ElevenLabs, unless the language was changed meanwhile', () => {
+      const settings = desktop();
+      settings.setTranscriptionEngine('local');
+      expect(settings.languageHint).toBe('en');
+      settings.setTranscriptionEngine('elevenlabs');
+      expect(settings.languageHint).toBe('auto');
+      settings.setTranscriptionEngine('local');
+      settings.languageHint = 'fr';
+      settings.setTranscriptionEngine('elevenlabs');
+      expect(settings.languageHint).toBe('fr');
+    });
+
+    it('asks for a language when it opens on this computer', () => {
+      localStorage.setItem(
+        'describe.v1.prefs',
+        JSON.stringify({ transcriptionEngine: 'local', languageHint: 'auto' }),
+      );
+      const settings = desktop();
+      expect(settings.transcriptionEngine).toBe('local');
+      expect(settings.languageHint).toBe('en');
     });
 
     it('goes back to ElevenLabs when the preferences are reset', () => {

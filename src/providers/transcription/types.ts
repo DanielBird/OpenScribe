@@ -49,7 +49,13 @@ export interface TranscriptionProvider {
   readonly model: string;
   readonly needsKey: boolean;
   /** What a request can ask for. A provider that can't take one is sent none, and the doc records none. */
-  readonly supports: { keyterms: boolean; zeroRetention: boolean; numSpeakers: boolean };
+  readonly supports: {
+    keyterms: boolean;
+    zeroRetention: boolean;
+    numSpeakers: boolean;
+    /** Whether it reports the language it detected. Without it, Setup asks for one (Phase 36). */
+    autoDetect: boolean;
+  };
   readonly limits: {
     maxFileBytes: number;
     maxDurationSec: number;
