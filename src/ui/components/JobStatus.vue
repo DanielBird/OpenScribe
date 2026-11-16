@@ -3,11 +3,13 @@ import { computed } from 'vue';
 import { formatBytes } from '../../domain/filecheck';
 import { formatTimestamp } from '../../domain/transcript';
 import { useJobStore } from '../../stores/job';
+import { useNavStore } from '../../stores/nav';
 import ErrorDetails from './ErrorDetails.vue';
 
 // Progress, error and cancelled states of a transcription run. Only the phase is announced (the
 // status line); the changing percentage and the timer are not, so screen readers aren't flooded.
 const job = useJobStore();
+const nav = useNavStore();
 const desktop = __DESKTOP__;
 
 /** Errors that a retry of the same request can't fix: the key or the request must change first. */
@@ -58,6 +60,11 @@ const audio = computed(() => {
         : `${formatTimestamp(done)} of ${formatTimestamp(total)}`,
   };
 });
+
+/** A failure fixed in Settings (the speech models, Phase 36) offers it. */
+const fixInSettings = computed(
+  () => job.status === 'error' && job.error?.opts.fixIn === 'settings',
+);
 
 const canRetry = computed(
   () => job.status === 'error' && !NEEDS_SETUP_CHANGE.has(job.error?.kind ?? ''),
@@ -114,7 +121,18 @@ const canRetry = computed(
       Long recordings take several minutes. Keep {{ desktop ? 'DeScribe' : 'this tab' }} open.
     </p>
 
-    <div v-if="job.isActive || canRetry || job.status === 'cancelled'" class="actions">
+    <div
+      v-if="job.isActive || canRetry || fixInSettings || job.status === 'cancelled'"
+      class="actions"
+    >
+      <button
+        v-if="fixInSettings"
+        type="button"
+        class="button button-primary"
+        @click="nav.openSettings()"
+      >
+        Open Settings
+      </button>
       <button v-if="job.isActive" type="button" class="button" @click="job.cancel()">Cancel</button>
       <button v-if="canRetry" type="button" class="button button-primary" @click="job.retry()">
         Try again

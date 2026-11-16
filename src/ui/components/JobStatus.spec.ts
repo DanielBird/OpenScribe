@@ -3,6 +3,7 @@ import { createPinia, setActivePinia } from 'pinia';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ProviderError, type ProviderErrorKind } from '../../providers/errors';
 import { useJobStore, type JobStatus as JobStatusValue } from '../../stores/job';
+import { useNavStore } from '../../stores/nav';
 import JobStatus from './JobStatus.vue';
 
 describe('JobStatus', () => {
@@ -145,6 +146,21 @@ describe('JobStatus', () => {
     expect(buttons()).toEqual(['Start again']);
     await wrapper!.get('button').trigger('click');
     expect(retry).toHaveBeenCalledTimes(2);
+  });
+
+  it('offers Settings for a failure fixed there, without Try again (Phase 36)', async () => {
+    const job = mountIn({ status: 'error' });
+    job.error = new ProviderError(
+      'validation',
+      "The speech models aren't on this computer any more.",
+      {
+        fixIn: 'settings',
+      },
+    );
+    await wrapper!.vm.$nextTick();
+    expect(buttons()).toEqual(['Open Settings']);
+    await wrapper!.get('button').trigger('click');
+    expect(useNavStore().mode).toBe('settings');
   });
 
   it('keeps one live region across status changes, so changes are announced', async () => {
