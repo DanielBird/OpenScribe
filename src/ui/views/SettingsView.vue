@@ -6,10 +6,10 @@ import notices from '../../../THIRD-PARTY-NOTICES.txt?raw';
 import { useNavStore } from '../../stores/nav';
 import { useSavedDataStore } from '../../stores/savedData';
 import { useSettingsStore } from '../../stores/settings';
-import { useSpeechPackStore } from '../../stores/speechPack';
 import { useTranscriptStore } from '../../stores/transcript';
 import ApiKeyField from '../components/ApiKeyField.vue';
 import ConfirmDialog from '../components/ConfirmDialog.vue';
+import SpeechModelsCreditImpl from '../components/SpeechModelsCredit.vue';
 import SpeechPackSectionImpl from '../components/SpeechPackSection.vue';
 import StepFooter from '../components/StepFooter.vue';
 import { useConfirm } from '../composables/useConfirm';
@@ -35,6 +35,8 @@ const desktop = __DESKTOP__;
 const keysEl = useTemplateRef<HTMLElement>('keys');
 /** The speech models' band (D54): only in the desktop app. A literal `false` in the web build, which drops it. */
 const SpeechPackSection = __DESKTOP__ ? SpeechPackSectionImpl : null;
+/** About's credit for the speech models (Phase 36), desktop only in the same way. */
+const SpeechModelsCredit = __DESKTOP__ ? SpeechModelsCreditImpl : null;
 
 /**
  * DeScribe's licence, then the notices from scripts/make-notices.mjs. The Rust crates' are only in the desktop build:
@@ -47,10 +49,6 @@ const licencesOpen = ref(false);
 const hasKeys = computed(() =>
   Object.values(settings.keyLocations).some((where) => where !== null),
 );
-
-/** The speech models' credit in About (Phase 36, D54), from pack.json. Empty in the web build. */
-const modelCredits = desktop ? useSpeechPackStore().credits() : [];
-const modelCopyright = [...new Set(modelCredits.map((c) => c.copyright))].join(', ');
 
 /** Hugging Face hosts the speech models' download, so it is listed in the desktop app only (D54). */
 const HUGGING_FACE = {
@@ -227,24 +225,7 @@ async function clearSavedData(): Promise<void> {
               translation.
             </p>
           </div>
-          <div v-if="modelCredits.length > 0" class="part">
-            <h3>Speech models</h3>
-            <p>
-              Transcribing on this computer uses
-              <template v-for="(model, i) in modelCredits" :key="model.name"
-                >{{ i === 0 ? '' : i === modelCredits.length - 1 ? ' and ' : ', '
-                }}<a :href="model.card" target="_blank" rel="noopener noreferrer">{{
-                  model.name
-                }}</a>
-                (<a :href="model.licence.url" target="_blank" rel="noopener noreferrer">{{
-                  model.licence.name
-                }}</a
-                >)</template
-              >, {{ modelCopyright }}. DeScribe downloads them from Hugging Face when you click
-              <strong>Download speech models</strong>, and sends nothing about you or your
-              recordings. DeScribe is not affiliated with or endorsed by NVIDIA.
-            </p>
-          </div>
+          <SpeechModelsCredit v-if="SpeechModelsCredit" />
           <div class="part">
             <h3>Analyse</h3>
             <p>
