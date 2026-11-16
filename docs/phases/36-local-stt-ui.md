@@ -232,8 +232,8 @@ override the tasks where they differ (DECISIONS.md D51). Nothing in this phase h
 **Phase 36, the checkpoint (2026-11-16).** Built on `phase-36-local-stt-ui` (from `phase-35-speech-pack`); the plan was
 Tasks 1–5 and 7, and the Hugging Face parts of Tasks 8 and 9.
 - **Decided with the maintainer:**
-  - **Phase 36 goes ahead in full** (DECISIONS D51): past the floor, Phase 33's list is weighed; the feature isn't
-    dropped.
+  - **Phase 36 goes ahead in full** (DECISIONS D55): the laptop's numbers set the wording and whether D51's list of
+    changes is tried; they don't decide whether the feature ships.
   - **About and PRIVACY.md carry the Hugging Face text already,** because Store certification sees the download.
   - **The Store has 1.1.0,** so the checkpoint package is **1.3.0** (`package.json`); CHANGELOG stays [Unreleased].
 - **As built:**
@@ -273,8 +273,8 @@ Tasks 1–5 and 7, and the Hugging Face parts of Tasks 8 and 9.
   1. **Publish PRIVACY.md** (the Store's privacy URL shows it).
   2. **Submit `release/DeScribe-v1.3.0-x64.msix`** to the hidden listing, with Phase 35's description and
      certification note (reference/desktop.md, *The Store*). Record Partner Center's wording.
-  3. **On the work laptop, from the Store: Phase 35's S1, S2, S5, S6 and S8.** If S1 fails, the download needs
-     fixing before L9.
+  3. **On the work laptop, from the Store: Phase 35's S1, S2, S5, S6 and S8.** If S1 fails, L9 can't run there, and
+     installing the models from files is the follow-up to plan (D55).
   4. **L9:** the one-hour recording plugged in, the three-hour one, the one-hour one on battery, and the one-hour one
      during a Teams call with Edge open. After each, copy Settings' line and Timings into reference/local-stt.md's
      table, and note fans, heat, other apps and whether it slept.

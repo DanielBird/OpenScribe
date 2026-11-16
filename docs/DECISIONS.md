@@ -1031,8 +1031,6 @@ summarise them.
     precision (converted and hosted by Dtype, D2), then steering long recordings to ElevenLabs.
   - **Not settled:** D8's network and sleep interruptions, and the C API's words speed against the CLI's
     (Phase 34 checks it).
-- **The maintainer (2026-11-16): transcribing on the computer will ship.** Phase 36's laptop checkpoint no longer
-  decides whether it does. It sets the wording and whether a change from the list above comes first.
 - **The maintainer's follow-up (2026-11-15):** clean up the verbatim text, removing repeats ("Yeah Yeah") and fillers
   ("um um"). It is a task in Phase 34's mapper; whether it is on by default is for the maintainer to decide there.
 

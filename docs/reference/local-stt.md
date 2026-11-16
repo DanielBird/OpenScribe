@@ -415,8 +415,8 @@ Recordings: `scripts/spikes/local-stt/out/test-set/test_audio.1h.m4a` and `test_
 
 - **At the target** (an hour in 10 minutes or less, under 4 GB): carry on.
 - **10 to 15 minutes:** carry on; the texts promise no more than the number.
-- **Past 15 minutes or 4 GB:** Phase 33's list (D51) goes to the maintainer with what each costs. The feature stays
-  (the maintainer, 2026-11-16).
+- **Past 15 minutes or 4 GB:** D51's list goes to the maintainer with what each costs. The feature ships either way
+  (D55).
 - **In every case:** correct the emulation's caps from the real numbers (`calibrate.ps1`), and record the new caps
   here.
 
