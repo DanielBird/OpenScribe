@@ -154,7 +154,8 @@ same three hosts, or if this CSP loses `default-src 'none'` or gains `'unsafe-ev
 
 ## The Store
 
-*Not done yet: Task 8 of Phase 24, by the maintainer.* Record each step's exact Partner Center wording here.
+**On the Store: 1.1.0** (the maintainer, 2026-11-16). The steps below weren't recorded when it was submitted; record
+Partner Center's exact wording with the next submission.
 
 | Step | What was done, and Partner Center's wording |
 |---|---|
@@ -167,6 +168,7 @@ same three hosts, or if this CSP loses `default-src 'none'` or gains `'unsafe-ev
 | Certification notes | *The app needs the user's own API keys (ElevenLabs, and Claude or Gemini to translate).* From Phase 35, add the speech models' note below. |
 | Description (from Phase 35) | The draft below, at the start of the description (Policy 10.2.4). *Record the submitted wording.* |
 | Direct link | *The listing's URL, for the work laptop.* |
+| Phase 36's checkpoint | `release/DeScribe-v1.3.0-x64.msix` (2026-11-16): unsigned, 5.4 MB, version 1.3.0.0. It has Phases 34–35 and Phase 36's checkpoint: the choice on Setup, progress, the last run in Settings, and About's Hugging Face text. *Submit it with Phase 35's description and certification note, after publishing PRIVACY.md.* |
 
 ### The certification kit
 
@@ -302,6 +304,26 @@ DECISIONS.md D54; the downloader as built and the S checks in [local-stt.md](loc
   `CARGO_TARGET_DIR=<repo>/src-tauri/target/cdp npx tauri build --debug --no-bundle` (an absolute path: Tauri runs
   cargo in `src-tauri/`, so a relative one lands in `src-tauri/src-tauri/`), against the stand-in, over CDP as
   above.
+
+## Transcribe on this computer: the choice (Phase 36)
+
+DECISIONS.md D50; the phase file's L checks. The agent's rows ran on the debug exe over CDP, with an empty pack folder
+(`DESCRIBE_SPEECH_PACK_DIR`), the stand-in's list (`DESCRIBE_SPEECH_PACK_TEST_LIST`, scenario `fast`) and
+`DESCRIBE_STT_PICK`. **With `DESCRIBE_STT_FAKE` set, `stt_status` always answers *ready*,** so the download, the choice
+and Remove ran without it, and the run with `fake-slow.json` in a second launch on the same data folder.
+
+| ID | Check | Maintainer's PC | Work laptop |
+|---|---|---|---|
+| L1 | Before the models are downloaded: Setup has no choice, and Settings offers **Download speech models**. | **Pass (the agent, 2026-11-16):** Setup's bands Recording, API key, Options. | |
+| L2 | With the models downloaded: Setup offers the choice; ElevenLabs is chosen the first time; the choice survives a restart. | **Pass (the agent):** a group named "Transcribe with", ElevenLabs checked; This computer still checked after closing and reopening. | |
+| L3 | This computer with no ElevenLabs key saved: Setup doesn't ask for one, and the run works with the network off. | **Pass from the page (the agent):** no API key band, no Zero retention or Number of speakers, 26 languages; the fake run made requests only to the app and IPC. *The network off: the maintainer.* | |
+| L5 | Progress moves and reads sensibly with a screen reader; Cancel; Try again. | **Progress (the agent, fake engine):** "Transcribing… 00:00:02", a bar and "00:00:20 of 00:10:00"; the Glossary line shown. *A screen reader, Cancel and Try again: after the checkpoint.* | |
+| L6 | The models removed after choosing This computer: Setup falls back to ElevenLabs; Settings offers the download again. | **Pass (the agent):** after Remove, Setup's bands Recording, API key, Options; after a new download, This computer was chosen again. | |
+| L8 | About shows the Speech models part, says the models come from Hugging Face, and lists Hugging Face under Privacy and terms. The same before and after the download. | **Pass (the agent)** before and after. *Licences' read-through: after the checkpoint.* | |
+| L9 | The work laptop's real numbers. | | *The maintainer: [local-stt.md](local-stt.md#the-work-laptops-numbers-phase-36-l9).* |
+
+Also checked: after the fake run, Settings showed "Last recording: 00:10:00 of audio in 00:01:00." with its Timings;
+no console errors.
 
 ## Input for Phase 25
 

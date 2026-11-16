@@ -11,6 +11,10 @@ All notable changes to DeScribe are recorded here. The format follows
 - **Choose the project in Add to project:** DeScribe remembers the last ten project folders on each computer. The
   dialog offers them in a **Project** list, with **Open another project…** and **New project…** beside it, and
   **Change** in Analyse lists them too.
+- **Desktop app: transcribe on this computer.** After **Download speech models** in Settings (about 0.8 GB from
+  Hugging Face), Setup asks whether to transcribe with **ElevenLabs** or **This computer**. On this computer the
+  recording isn't sent anywhere, and no ElevenLabs key is needed. Output shows how much of the recording is done, and
+  Settings shows how long the last one took.
 - **Desktop app launch:** the DeScribe mark appears at once, and the app then opens already maximised and drawn, with
   no blank window first.
 

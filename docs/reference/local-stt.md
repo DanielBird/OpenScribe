@@ -398,6 +398,28 @@ DECISIONS.md D54; the commands, folders and debug switches in [desktop.md](deskt
 | S9 | Network panel and a capture of the app's connections during a download: only `huggingface.co` and its redirect hosts, and the three API hosts. Nothing at launch. | **The agent, stand-in:** no request to it at launch; the page's 29 requests all to the app itself and IPC. *A capture of Rust's connections to Hugging Face: the maintainer.* | |
 | S10 | The Windows App Certification Kit on the build. | *The maintainer.* | |
 
+## The work laptop's numbers (Phase 36, L9)
+
+The first real measurement (Phase 36's Task 1). On the work laptop, with the 1.3.0 build from the Store and the models
+downloaded in Settings. Each run's numbers are in Settings → **Transcribe on this computer**: the *Last recording*
+line, and **Timings** under it. Settings keeps only the last run, so write each one down before the next.
+
+Recordings: `scripts/spikes/local-stt/out/test-set/test_audio.1h.m4a` and `test_audio.3h.m4a`, copied to the laptop.
+
+| Run | Phase 33's estimate | Last recording | Speed | Reading the audio | Words | Speakers | Total | Threads | Peak memory | Fans, heat, other apps, sleep |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 1 h, plugged in | 334 s (*Laptop*) | | | | | | | | | |
+| 3 h, plugged in | 998 s (*Laptop*) | | | | | | | | | |
+| 1 h, on battery | 567 s (*Throttled*) | | | | | | | | | |
+| 1 h, during a Teams call with Edge open | – | | | | | | | | | |
+
+- **At the target** (an hour in 10 minutes or less, under 4 GB): carry on.
+- **10 to 15 minutes:** carry on; the texts promise no more than the number.
+- **Past 15 minutes or 4 GB:** Phase 33's list (D51) goes to the maintainer with what each costs. The feature stays
+  (the maintainer, 2026-11-16).
+- **In every case:** correct the emulation's caps from the real numbers (`calibrate.ps1`), and record the new caps
+  here.
+
 ## Verification log
 
 | Date | Where | What | Result |

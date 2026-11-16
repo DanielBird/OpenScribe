@@ -228,3 +228,67 @@ debug build).
 
 **Phase 33 (2026-11-15):** updated this file with *Phase 33's findings* above, which
 override the tasks where they differ (DECISIONS.md D51). Nothing in this phase has been built.
+
+**Phase 36, the checkpoint (2026-11-16).** Built on `phase-36-local-stt-ui` (from `phase-35-speech-pack`); the plan was
+Tasks 1–5 and 7, and the Hugging Face parts of Tasks 8 and 9.
+- **Decided with the maintainer:**
+  - **Phase 36 goes ahead in full** (DECISIONS D51): past the floor, Phase 33's list is weighed; the feature isn't
+    dropped.
+  - **About and PRIVACY.md carry the Hugging Face text already,** because Store certification sees the download.
+  - **The Store has 1.1.0,** so the checkpoint package is **1.3.0** (`package.json`); CHANGELOG stays [Unreleased].
+- **As built:**
+  - **The settings store:**
+    - the saved choice (`prefs.transcriptionEngine`, set with `setTranscriptionEngine`) is apart from the engine in
+      use (`transcriptionEngine`, a computed: `'local'` only while `localAvailable`, i.e. desktop and the models
+      *ready*);
+    - the saved choice survives the models' removal, so a new download brings This computer back;
+    - a language the engine in use lacks becomes Auto-detect when the choice changes;
+    - the number of speakers is ignored when the engine takes none.
+  - **Setup:** a "Transcribe with" band (a `<fieldset>` named by the band's heading) after Recording, because the API
+    key band below it depends on the choice. With This computer: "Slower. The recording stays on this computer.", and
+    no key band, Zero retention or Number of speakers. Setup asks Rust for the status when it opens.
+  - **Glossary:** the line as drafted. The editor's empty hint ("…can help the transcription…") is hidden with This
+    computer, because it would contradict the line.
+  - **Output:** "Preparing…", then "Transcribing…" with the elapsed time, and under it a bar with "00:12:30 of
+    00:58:10" (out of the live region). The hint "Keep DeScribe open. You can use other apps." The job store's
+    `runEngine` tells Output which engine runs. With ElevenLabs on desktop the hint says "Keep DeScribe open".
+  - **Settings:** "Last recording: 01:02:10 of audio in 00:14:32." and a closed **Timings** with Speed (× real time),
+    Reading the audio, Words, Speakers, Total, Threads and Peak memory.
+  - **About (desktop):**
+    - the Transcribe sentence as drafted;
+    - "ElevenLabs, to transcribe with ElevenLabs";
+    - **Speech models** from `pack.json` through `speechModelCredits()`, with the licence links in `MODEL_LICENCES`
+      (a test fails for a licence without one), in its own component `SpeechModelsCredit.vue` so the web build drops
+      it (`verify:single-file` rejects "Download speech models");
+    - Hugging Face under Privacy and terms.
+  - **PRIVACY.md:** dated 16 November 2026. It adds:
+    - transcribing on the computer, with no copy written;
+    - Hugging Face as the fourth service;
+    - the models' storage and **Remove**;
+    - NVIDIA's models in the AI section;
+    - the pinned, checked download in Security.
+- **Checks:** typecheck, lint, Vitest (1,996 at the time), build, `verify:single-file`, e2e (157), `cargo test` (69).
+  L1, L2, L3 (page side), L5 (progress), L6 and L8 by the agent over CDP (reference/desktop.md).
+- **For the maintainer, in this order:**
+  1. **Publish PRIVACY.md** (the Store's privacy URL shows it).
+  2. **Submit `release/DeScribe-v1.3.0-x64.msix`** to the hidden listing, with Phase 35's description and
+     certification note (reference/desktop.md, *The Store*). Record Partner Center's wording.
+  3. **On the work laptop, from the Store: Phase 35's S1, S2, S5, S6 and S8.** If S1 fails, the download needs
+     fixing before L9.
+  4. **L9:** the one-hour recording plugged in, the three-hour one, the one-hour one on battery, and the one-hour one
+     during a Teams call with Edge open. After each, copy Settings' line and Timings into reference/local-stt.md's
+     table, and note fans, heat, other apps and whether it slept.
+  5. The PC's open rows: S1–S10 as Phase 35 lists them, the licence reading, and L3 with the network off.
+- **Still to do in this phase (after the numbers):**
+  - correct the emulation's calibration;
+  - the final "Slower" wording;
+  - Task 5's error texts and the Settings link;
+  - Task 6, the engine in the header and the `.docx`;
+  - whether Timings ships;
+  - Parakeet's missing language (Phase 34's open item);
+  - the Licences read-through;
+  - USER_GUIDE;
+  - the Store listing text;
+  - Task 12's docs;
+  - L4, L5's screen reader, Cancel and Try again, L7, L10;
+  - the Phase 34 e2e spec and axe.
