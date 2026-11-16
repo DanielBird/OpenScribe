@@ -6,6 +6,7 @@ import notices from '../../../THIRD-PARTY-NOTICES.txt?raw';
 import { useNavStore } from '../../stores/nav';
 import { useSavedDataStore } from '../../stores/savedData';
 import { useSettingsStore } from '../../stores/settings';
+import { useSpeechPackStore } from '../../stores/speechPack';
 import { useTranscriptStore } from '../../stores/transcript';
 import ApiKeyField from '../components/ApiKeyField.vue';
 import ConfirmDialog from '../components/ConfirmDialog.vue';
@@ -47,6 +48,17 @@ const hasKeys = computed(() =>
   Object.values(settings.keyLocations).some((where) => where !== null),
 );
 
+/** The speech models' credit in About (Phase 36, D54), from pack.json. Empty in the web build. */
+const modelCredits = desktop ? useSpeechPackStore().credits() : [];
+const modelCopyright = [...new Set(modelCredits.map((c) => c.copyright))].join(', ');
+
+/** Hugging Face hosts the speech models' download, so it is listed in the desktop app only (D54). */
+const HUGGING_FACE = {
+  name: 'Hugging Face (speech models)',
+  privacy: 'https://huggingface.co/privacy',
+  terms: 'https://huggingface.co/terms-of-service',
+} as const;
+
 const LINKS = [
   {
     name: 'ElevenLabs',
@@ -64,6 +76,7 @@ const LINKS = [
     terms: 'https://ai.google.dev/gemini-api/terms',
   },
 ] as const;
+const links = desktop ? [...LINKS, HUGGING_FACE] : LINKS;
 
 /** For screen readers only: results that aren't visible where focus is. */
 const announcement = ref('');
@@ -176,7 +189,7 @@ async function clearSavedData(): Promise<void> {
             <h3>Getting API keys</h3>
             <ul class="list">
               <li>
-                ElevenLabs, to transcribe: create one on the
+                ElevenLabs, to transcribe{{ desktop ? ' with ElevenLabs' : '' }}: create one on the
                 <a
                   href="https://elevenlabs.io/app/settings/api-keys"
                   target="_blank"
@@ -200,10 +213,36 @@ async function clearSavedData(): Promise<void> {
           <div class="part">
             <h3>Transcribe</h3>
             <p>
-              Your recording and glossary are sent to ElevenLabs for transcription. If you choose
+              <template v-if="desktop">
+                Your recording and glossary are sent to ElevenLabs for transcription, or, if you
+                choose <strong>This computer</strong> on Setup, the recording is transcribed here
+                and isn't sent anywhere.
+              </template>
+              <template v-else>
+                Your recording and glossary are sent to ElevenLabs for transcription.
+              </template>
+              If you choose
               <strong>Translate to English</strong>, the transcript text and glossary (not the
               audio) are sent to the provider you pick, Anthropic (Claude) or Google (Gemini), for
               translation.
+            </p>
+          </div>
+          <div v-if="modelCredits.length > 0" class="part">
+            <h3>Speech models</h3>
+            <p>
+              Transcribing on this computer uses
+              <template v-for="(model, i) in modelCredits" :key="model.name"
+                >{{ i === 0 ? '' : i === modelCredits.length - 1 ? ' and ' : ', '
+                }}<a :href="model.card" target="_blank" rel="noopener noreferrer">{{
+                  model.name
+                }}</a>
+                (<a :href="model.licence.url" target="_blank" rel="noopener noreferrer">{{
+                  model.licence.name
+                }}</a
+                >)</template
+              >, {{ modelCopyright }}. DeScribe downloads them from Hugging Face when you click
+              <strong>Download speech models</strong>, and sends nothing about you or your
+              recordings. DeScribe is not affiliated with or endorsed by NVIDIA.
             </p>
           </div>
           <div class="part">
@@ -233,7 +272,7 @@ async function clearSavedData(): Promise<void> {
           <div class="part">
             <h3>Privacy and terms</h3>
             <ul class="list">
-              <li v-for="link in LINKS" :key="link.name">
+              <li v-for="link in links" :key="link.name">
                 {{ link.name }}:
                 <a :href="link.privacy" target="_blank" rel="noopener noreferrer">privacy</a> ·
                 <a :href="link.terms" target="_blank" rel="noopener noreferrer">terms</a>

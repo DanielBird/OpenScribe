@@ -5,6 +5,10 @@ import type { ProviderError } from '../providers/errors';
 import { getLocalSttBridge } from '../providers';
 import { toSpeechPackError, type LocalSttStatus } from '../providers/transcription/local/bridge';
 import {
+  speechModelCredits,
+  type SpeechModelCredit,
+} from '../providers/transcription/local/limits';
+import {
   toDownloadProviderError,
   toRemoveProviderError,
 } from '../providers/transcription/local/downloadErrors';
@@ -30,6 +34,11 @@ export const useSpeechPackStore = defineStore('speechPack', () => {
   const size = computed(() =>
     status.value ? formatDownloadSize(status.value.pack.downloadBytes, true) : '',
   );
+
+  /** About's credit for the models (Phase 36): the same before and after the download. None in the web build. */
+  function credits(): readonly SpeechModelCredit[] {
+    return __DESKTOP__ ? speechModelCredits() : [];
+  }
 
   /** Asks Rust for the status. The first time it hashes the files, which takes about a second. */
   function refresh(): Promise<void> {
@@ -110,5 +119,5 @@ export const useSpeechPackStore = defineStore('speechPack', () => {
     return outcome;
   }
 
-  return { status, progress, error, busy, size, refresh, download, cancel, remove };
+  return { status, progress, error, busy, size, credits, refresh, download, cancel, remove };
 });
