@@ -361,6 +361,43 @@ DECISIONS.md D53; the app's commands and debug switches in [desktop.md](desktop.
   - Word times at the end of the 3-hour file match the first copy: 1,533 of 1,644 words paired, all within 0.5 s.
   - Phase 36's laptop column is still to run.
 
+## The download as built (Phase 35)
+
+DECISIONS.md D54; the commands, folders and debug switches in [desktop.md](desktop.md#the-speech-models-download-phase-35).
+
+- **`src-tauri/src/stt/download.rs`** is `hf-fetch`'s WinHTTP stack made into app code:
+  - `WinHttpOpen` with `WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY`, user agent `DeScribe/<version>`; timeouts 30 s to
+    resolve, connect and send, 60 s with nothing received. No revocation check.
+  - Redirects disabled in WinHTTP and followed by hand, up to 10, HTTPS only. The first URL must be the pinned one.
+  - Each file to `<file>.part`; `Range: bytes=<part>-` when a part is there. A `206` must carry
+    `Content-Range: bytes <part>-…/<size>`, else the part is dropped (`blocked`); a `200` starts the file again.
+  - The size on offer, then the size received, then the SHA-256, and only then the file's name and its receipt entry.
+  - **A synchronous `WinHttpReadData` waits until its whole buffer is full,** so the first build's progress moved a
+    megabyte at a time and Cancel kept only whole megabytes. The reader asks `WinHttpQueryDataAvailable` first and
+    reads what has arrived.
+  - Cancel sets a flag and closes the request handle, so a read that waits returns at once (`cargo test`: a stalled
+    server, cancelled after 0.4 s).
+  - Free space checked first: the files still to fetch plus 100 MB.
+- **What a detail says:** the file, the status and each hop's host (`words.gguf: HTTP 403 (huggingface.co 302 →
+  us.aws.cdn.hf.co 403)`), never a signed URL; folders as `<speech-pack>` or `%USERPROFILE%`.
+- **Tests:** `src-tauri/src/stt/download_tests.rs`, against a small HTTP server in the test on 127.0.0.1: a whole
+  download, a redirect, resume, a server ignoring Range, a bad Content-Range, wrong sizes both ways, a wrong hash, a
+  web page, every status, a cut connection, nothing listening, cancel, a full disk, a skipped verified file, a
+  damaged and an outdated pack, an unpinned URL, progress as bytes arrive.
+
+| ID | Check | Maintainer's PC | Work laptop (from the Store) |
+|---|---|---|---|
+| S1 | A fresh install: Settings says the models are missing, with the size. **Download** runs to *installed*. Record the time and the speed. **On the work laptop this proves the download works on its network.** | **The agent, against the stand-in:** missing with "8 MB from huggingface.co"; Download ran to *installed* with both files and the receipt. *The real download: the maintainer.* | *not run* |
+| S2 | During a download: leave Settings and come back; the progress is still there. **Cancel**, then **Download** again: it carries on. | **Pass (the agent, stand-in at 400 kB/s):** "926 kB of 8 MB", Back to Home and Settings again, "1 MB of 8 MB" with Cancel; Cancel kept 1,966,080 bytes in `words.gguf.part`; Download again asked `Range: bytes=1966080-` and finished. *With Hugging Face: the maintainer.* | *not run* |
+| S3 | The network cable out mid-download, the PC put to sleep, the app closed (it asks first), then resumed each time. No partial file is ever loaded. | *The maintainer.* A cut connection (the stand-in's `drop`) ends in "Couldn't reach huggingface.co", the part kept and the pack still *missing*. | |
+| S4 | Failures, each with its own message: the host blocked, a full disk, a model file altered on disk, a URL that answers 404. | **The agent, stand-in:** 403, an HTML page and a redirect to plain HTTP → "Your network didn't allow…"; 404 → "…can't download its speech models any more"; 429 → "Hugging Face is busy" (detail: `Retry-After 120`); one byte altered → "didn't arrive intact"; a cut → "Couldn't reach…". Each with Technical details and the button again; no file named. A file altered on disk after a download: *damaged*, **Download again** → *installed*. Full disk: `cargo test` only. *The `hosts` file, a firewall rule and a small virtual disk: the maintainer.* | |
+| S5 | **Remove:** the files are gone and the disk space is back; Setup offers no choice (Phase 36); ElevenLabs still works. | **Pass (the agent):** confirmation first; the pack folder gone. *Disk space and ElevenLabs: the maintainer.* | *not run* |
+| S6 | Restart the app: *installed* at once, without hashing again. | **Pass (the agent):** *installed* 67 ms after opening Settings. | *not run* |
+| S7 | Update to a build with the same list: still installed. To one with a different list: *outdated*, and the old files go once the new ones are in. | *The maintainer* (`cargo test` covers both). | |
+| S8 | Uninstall: the models' folder is gone (record where it was). | *The maintainer.* | *not run* |
+| S9 | Network panel and a capture of the app's connections during a download: only `huggingface.co` and its redirect hosts, and the three API hosts. Nothing at launch. | **The agent, stand-in:** no request to it at launch; the page's 29 requests all to the app itself and IPC. *A capture of Rust's connections to Hugging Face: the maintainer.* | |
+| S10 | The Windows App Certification Kit on the build. | *The maintainer.* | |
+
 ## Verification log
 
 | Date | Where | What | Result |
@@ -387,3 +424,4 @@ DECISIONS.md D53; the app's commands and debug switches in [desktop.md](desktop.
 | 2026-11-15 | Maintainer's PC, debug exe over CDP (the agent) | E1–E5, E8 | As in desktop.md's E rows. |
 | 2026-11-15 | Maintainer's PC, *Laptop* profile (the maintainer switched the scheme) | E6: the release worker on 1 h and 3 h | 328.3 s and 972.6 s; GPU 0.0 %. |
 | 2026-11-15 | Maintainer's PC | `ipc-probe/pack.ps1` | `DeScribe.SttProbe` 1.0.0.0 and 2.0.0.0, 2.7 MB each, signed with a new `devcert.pfx` (gitignored, not trusted yet: guide task 6). |
+| 2026-11-16 | Maintainer's PC, debug exe over CDP, `speech-pack-test-server.mjs` (the agent) | Phase 35's S1, S2, S4, S5, S6, S9 | As in [the S table](#the-download-as-built-phase-35). No console errors. |

@@ -251,3 +251,44 @@ what Phase 36 needs.)*
 
 **Phase 33 (2026-11-15):** updated this file with *Phase 33's findings* above, which
 override the tasks where they differ (DECISIONS.md D51). Nothing in this phase has been built.
+
+**Phase 35 (2026-11-16).** Built on `phase-35-speech-pack`. DECISIONS D54. The downloader as built and the S table are
+in reference/local-stt.md (*The download as built*); the commands, folders and switches in reference/desktop.md.
+- **As built:**
+  - The models live in the package's `LocalCache\speech-pack\<pack id>\` (unpackaged:
+    `%LOCALAPPDATA%\io.github.danielbird.describe\speech-pack\`).
+  - WinHTTP, as Phase 33 chose. One finding: a synchronous `WinHttpReadData` fills its whole buffer before it
+    returns, so the reader asks `WinHttpQueryDataAvailable` first (otherwise progress moved a megabyte at a time).
+  - Commands `stt_download`, `stt_download_cancel`, `stt_remove_models`; `stt_status` gains `downloading`.
+  - Settings' band **Transcribe on this computer**, after API keys, with Task 5's texts as drafted, except that
+    "0.8 GB from huggingface.co" sits beside every download button (**Download again** included), and Cancel
+    and Remove announce their end only to screen readers (D13).
+- **Different from this file:**
+  - **A partly downloaded pack is *missing*, not *damaged*** (Phase 34's check called a missing file damaged). So
+    after Cancel the band offers the download again.
+  - **F5 cancels a download,** as it cancels a run.
+  - **Task 2's kinds, mapped:** 500, 502 and 504 count as `busy` with 429 and 503; any other 4xx as `blocked`; a
+    redirect to plain HTTP and more than ten redirects as `blocked`; a body that ends short as `offline`; a body
+    longer than listed as `blocked`.
+  - **The release check:** `release.mjs` runs `notices --check --web`, which now also checks the desktop file's
+    Speech models part, without cargo.
+- **The licences:** CC BY 4.0 from Creative Commons' plain text, OpenMDW-1.1 from its GitHub repository at a pinned
+  commit (its page is HTML), both retrieved 2026-11-15. **The maintainer still has to confirm the reading**
+  (reference/local-stt.md, *The licences*).
+- **Checks:** `cargo test` (69), Vitest, lint, typecheck, build and `verify:single-file` pass. The agent's S rows ran
+  on the debug exe against `scripts/speech-pack-test-server.mjs`, with no real download.
+- **Open, for the maintainer:**
+  - S1 and S2 with Hugging Face; S3, S4's blocked host, firewall and full disk, S5's disk space, S7, S8, S9's capture
+    and S10, on the PC with the development-signed app.
+  - The Store: submit a build with this phase to the hidden listing, with the description and certification-note
+    wording drafted in reference/desktop.md (*The Store*), and record what Partner Center took.
+  - **On the work laptop, from the Store: S1, S2, S5, S6 and S8.** If S1 fails there, stop and take it to the
+    maintainer before Phase 36.
+  - Before colleagues get this: About's data-flow text and PRIVACY.md must say the app downloads from Hugging Face
+    (Phase 36 writes both).
+- **For Phase 36:**
+  - The models' status is in `useSpeechPackStore().status` (not the settings store, as Phase 36's Task 2 says).
+    `refresh()` asks Rust; download and remove update it.
+  - Settings' band is `src/ui/components/SpeechPackSection.vue`; the last run's line (Phase 36, Task 7) goes in its
+    *ready* state.
+  - The "models missing" error in `local/errors.ts` can now point at the band.
