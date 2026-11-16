@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import pack from '../../src-tauri/speech-pack/pack.json';
 import {
   cleanTurnText,
   defaultSpeakerLabel,
@@ -141,8 +142,15 @@ describe('transcriptionEngineName', () => {
     );
     expect(
       transcriptionEngineName({ provider: 'local', model: 'nvidia-parakeet-nemotron-1' }),
-    ).toBe('On this computer (nvidia-parakeet-nemotron-1)');
+    ).toBe('On this computer (NVIDIA Parakeet, Nemotron Diarization)');
+    expect(transcriptionEngineName({ provider: 'local', model: pack.id })).not.toContain(pack.id);
     expect(transcriptionEngineName({ provider: 'local', model: '' })).toBe('On this computer');
+  });
+
+  it('shows a speech pack it does not know by its id', () => {
+    expect(transcriptionEngineName({ provider: 'local', model: 'nvidia-later-pack-2' })).toBe(
+      'On this computer (nvidia-later-pack-2)',
+    );
   });
 
   it('shows an engine it does not know as it was saved', () => {

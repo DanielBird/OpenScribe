@@ -15,7 +15,9 @@ import { useGlossaryStore } from './glossary';
 import { useJobStore } from './job';
 import { useNavStore } from './nav';
 import { usePlaybackStore } from './playback';
+import { TEST_PACK } from '../testing/localBridge';
 import { useSettingsStore } from './settings';
+import { useSpeechPackStore } from './speechPack';
 import { useTranscriptStore } from './transcript';
 
 vi.mock('../storage/idb', () => ({
@@ -39,7 +41,7 @@ function fakeProvider() {
     id: 'elevenlabs',
     model: 'scribe_v2',
     needsKey: true,
-    supports: { keyterms: true, zeroRetention: true, numSpeakers: true },
+    supports: { keyterms: true, zeroRetention: true, numSpeakers: true, autoDetect: true },
     limits: ELEVENLABS_LIMITS,
     languages: ['de', 'en', 'fr'],
     transcribe: (input, { signal, onProgress }) =>
@@ -446,17 +448,22 @@ describe('job store', () => {
         id: 'local',
         model: 'nvidia-parakeet-nemotron-1',
         needsKey: false,
-        supports: { keyterms: false, zeroRetention: false, numSpeakers: false },
+        supports: { keyterms: false, zeroRetention: false, numSpeakers: false, autoDetect: false },
       });
       setTranscriptionProviderForTests(local.provider, 'local');
+      vi.stubGlobal('__DESKTOP__', true);
     });
 
-    afterEach(() => setTranscriptionProviderForTests(null, 'local'));
+    afterEach(() => {
+      setTranscriptionProviderForTests(null, 'local');
+      vi.unstubAllGlobals();
+    });
 
     function makeLocalReady() {
       const settings = makeReady();
       settings.elevenLabsKey = '';
-      settings.transcriptionEngine = 'local';
+      useSpeechPackStore().status = { state: 'ready', pack: TEST_PACK };
+      settings.setTranscriptionEngine('local');
       return settings;
     }
 

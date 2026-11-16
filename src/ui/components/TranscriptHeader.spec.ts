@@ -70,4 +70,20 @@ describe('TranscriptHeader', () => {
       'Zero retention',
     ]);
   });
+
+  it('names an engine other than ElevenLabs, by its models when the pack is known (Phase 36)', () => {
+    const local = (model: string) =>
+      makeDoc({ request: { ...TEST_REQUEST, provider: 'local', model } });
+    const wrapper = mount(TranscriptHeader, {
+      props: { doc: local('nvidia-parakeet-nemotron-1') },
+    });
+    expect(wrapper.findAll('dt').map((dt) => dt.text())).toContain('Transcription');
+    expect(values(local('nvidia-parakeet-nemotron-1'))).toContain(
+      'On this computer (NVIDIA Parakeet, Nemotron Diarization)',
+    );
+    expect(values(local('nvidia-later-pack-2'))).toContain(
+      'On this computer (nvidia-later-pack-2)',
+    );
+    expect(values()).not.toContain(expect.stringContaining('ElevenLabs'));
+  });
 });

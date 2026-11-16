@@ -9,6 +9,7 @@ import { useSettingsStore } from '../../stores/settings';
 import { useTranscriptStore } from '../../stores/transcript';
 import ApiKeyField from '../components/ApiKeyField.vue';
 import ConfirmDialog from '../components/ConfirmDialog.vue';
+import SpeechModelsCreditImpl from '../components/SpeechModelsCredit.vue';
 import SpeechPackSectionImpl from '../components/SpeechPackSection.vue';
 import StepFooter from '../components/StepFooter.vue';
 import { useConfirm } from '../composables/useConfirm';
@@ -34,6 +35,8 @@ const desktop = __DESKTOP__;
 const keysEl = useTemplateRef<HTMLElement>('keys');
 /** The speech models' band (D54): only in the desktop app. A literal `false` in the web build, which drops it. */
 const SpeechPackSection = __DESKTOP__ ? SpeechPackSectionImpl : null;
+/** About's credit for the speech models (Phase 36), desktop only in the same way. */
+const SpeechModelsCredit = __DESKTOP__ ? SpeechModelsCreditImpl : null;
 
 /**
  * DeScribe's licence, then the notices from scripts/make-notices.mjs. The Rust crates' are only in the desktop build:
@@ -46,6 +49,13 @@ const licencesOpen = ref(false);
 const hasKeys = computed(() =>
   Object.values(settings.keyLocations).some((where) => where !== null),
 );
+
+/** Hugging Face hosts the speech models' download, so it is listed in the desktop app only (D54). */
+const HUGGING_FACE = {
+  name: 'Hugging Face (speech models)',
+  privacy: 'https://huggingface.co/privacy',
+  terms: 'https://huggingface.co/terms-of-service',
+} as const;
 
 const LINKS = [
   {
@@ -64,6 +74,7 @@ const LINKS = [
     terms: 'https://ai.google.dev/gemini-api/terms',
   },
 ] as const;
+const links = desktop ? [...LINKS, HUGGING_FACE] : LINKS;
 
 /** For screen readers only: results that aren't visible where focus is. */
 const announcement = ref('');
@@ -176,7 +187,7 @@ async function clearSavedData(): Promise<void> {
             <h3>Getting API keys</h3>
             <ul class="list">
               <li>
-                ElevenLabs, to transcribe: create one on the
+                ElevenLabs, to transcribe{{ desktop ? ' with ElevenLabs' : '' }}: create one on the
                 <a
                   href="https://elevenlabs.io/app/settings/api-keys"
                   target="_blank"
@@ -200,12 +211,21 @@ async function clearSavedData(): Promise<void> {
           <div class="part">
             <h3>Transcribe</h3>
             <p>
-              Your recording and glossary are sent to ElevenLabs for transcription. If you choose
+              <template v-if="desktop">
+                Your recording and glossary are sent to ElevenLabs for transcription, or, if you
+                choose <strong>This computer</strong> on Setup, the recording is transcribed here
+                and isn't sent anywhere.
+              </template>
+              <template v-else>
+                Your recording and glossary are sent to ElevenLabs for transcription.
+              </template>
+              If you choose
               <strong>Translate to English</strong>, the transcript text and glossary (not the
               audio) are sent to the provider you pick, Anthropic (Claude) or Google (Gemini), for
               translation.
             </p>
           </div>
+          <SpeechModelsCredit v-if="SpeechModelsCredit" />
           <div class="part">
             <h3>Analyse</h3>
             <p>
@@ -233,7 +253,7 @@ async function clearSavedData(): Promise<void> {
           <div class="part">
             <h3>Privacy and terms</h3>
             <ul class="list">
-              <li v-for="link in LINKS" :key="link.name">
+              <li v-for="link in links" :key="link.name">
                 {{ link.name }}:
                 <a :href="link.privacy" target="_blank" rel="noopener noreferrer">privacy</a> ·
                 <a :href="link.terms" target="_blank" rel="noopener noreferrer">terms</a>

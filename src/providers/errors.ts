@@ -15,7 +15,13 @@ export class ProviderError extends Error {
   constructor(
     public readonly kind: ProviderErrorKind,
     public readonly userMessage: string, // safe to show; never contains secrets
-    public readonly opts: { status?: number; retryable?: boolean; detail?: string } = {},
+    public readonly opts: {
+      status?: number;
+      retryable?: boolean;
+      detail?: string;
+      /** Where the user can fix it, when that's a place in the app: Settings (Phase 36). */
+      fixIn?: 'settings';
+    } = {},
   ) {
     super(userMessage);
     this.name = 'ProviderError';

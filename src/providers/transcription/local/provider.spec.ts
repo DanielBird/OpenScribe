@@ -79,7 +79,7 @@ describe('createLocalProvider', () => {
       id: 'local',
       model: 'nvidia-parakeet-nemotron-1',
       needsKey: false,
-      supports: { keyterms: false, zeroRetention: false, numSpeakers: false },
+      supports: { keyterms: false, zeroRetention: false, numSpeakers: false, autoDetect: false },
     });
     expect(provider.limits.maxSpeakers).toBe(8);
     expect(provider.limits.maxDurationSec).toBe(Number.POSITIVE_INFINITY);

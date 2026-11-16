@@ -216,7 +216,7 @@ export interface LocalSttBridge {
       `verify:single-file` passes.
 - [ ] `npm run notices -- --check` fails when a model in `pack.json` has no licence text.
 - [ ] S1–S10 have results on the maintainer's PC. **On the work laptop, from the Store: S1, S2, S5, S6 and S8,** or
-      *not run* with the reason. If S1 fails there, stop and take it to the maintainer before Phase 36.
+      *not run* with the reason. If S1 fails there, take it to the maintainer (D55: it no longer stops Phase 36).
 - [ ] The maintainer has confirmed the licence reading, and the listing says what is downloaded.
 - [ ] New UI reviewed against D13 and for keyboard and screen-reader use.
 - [ ] The Definition of Done in AGENTS.md, and `cargo test`.
@@ -282,8 +282,8 @@ in reference/local-stt.md (*The download as built*); the commands, folders and s
     and S10, on the PC with the development-signed app.
   - The Store: submit a build with this phase to the hidden listing, with the description and certification-note
     wording drafted in reference/desktop.md (*The Store*), and record what Partner Center took.
-  - **On the work laptop, from the Store: S1, S2, S5, S6 and S8.** If S1 fails there, stop and take it to the
-    maintainer before Phase 36.
+  - **On the work laptop, from the Store: S1, S2, S5, S6 and S8.** If S1 fails there, take it to the maintainer,
+    with installing the models from files as the follow-up. It no longer stops Phase 36 (D55, 2026-11-16).
   - Before colleagues get this: About's data-flow text and PRIVACY.md must say the app downloads from Hugging Face
     (Phase 36 writes both).
 - **For Phase 36:**

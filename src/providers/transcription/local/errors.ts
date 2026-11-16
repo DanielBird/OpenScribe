@@ -1,10 +1,13 @@
 // Local failures as ProviderErrors, each with a message that says what to do (DECISIONS.md D41: the technical detail
-// stays behind Technical details). Drafts: Phase 36 words them. Kinds that need a change before trying again are
-// 'validation', which hides Try again (JobStatus); the rest keep it.
+// stays behind Technical details). Kinds that need a change before trying again are 'validation', which hides Try
+// again (JobStatus); the rest keep it. The speech models' own failures offer Settings, where they are downloaded.
 import { ProviderError, type ProviderErrorKind } from '../../errors';
 import type { LocalErrorKind, LocalSttError } from './bridge';
 
-const MESSAGES: Record<LocalErrorKind, { kind: ProviderErrorKind; message: string }> = {
+const MESSAGES: Record<
+  LocalErrorKind,
+  { kind: ProviderErrorKind; message: string; fixIn?: 'settings' }
+> = {
   busy: { kind: 'unknown', message: 'Another transcription is already running on this computer.' },
   downloading: {
     kind: 'unknown',
@@ -16,15 +19,19 @@ const MESSAGES: Record<LocalErrorKind, { kind: ProviderErrorKind; message: strin
   },
   'pack-missing': {
     kind: 'validation',
-    message: "The speech models for transcribing on this computer aren't installed.",
+    message:
+      "The speech models aren't on this computer any more. Download them in Settings, or transcribe with ElevenLabs.",
+    fixIn: 'settings',
   },
   'pack-damaged': {
     kind: 'validation',
     message: 'The speech models on this computer are damaged. Download them again in Settings.',
+    fixIn: 'settings',
   },
   'pack-outdated': {
     kind: 'validation',
     message: 'This version of DeScribe needs newer speech models. Download them in Settings.',
+    fixIn: 'settings',
   },
   cpu: {
     kind: 'validation',
@@ -51,9 +58,10 @@ const OPUS_MESSAGE =
 
 /** `error` as the ProviderError the job store shows. `fileName` names an Ogg Opus file in its message. */
 export function toProviderError(error: LocalSttError, fileName: string): ProviderError {
-  const { kind, message } = MESSAGES[error.kind];
+  const { kind, message, fixIn } = MESSAGES[error.kind];
   const opus = error.kind === 'unreadable' && /\.opus$/i.test(fileName);
   return new ProviderError(kind, opus ? OPUS_MESSAGE : message, {
     detail: `${error.kind}: ${error.detail}`.trim(),
+    fixIn,
   });
 }

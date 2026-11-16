@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref, useId, useTemplateRef } from 'vue';
 import { formatDownloadSize } from '../../domain/filecheck';
+import { formatTimestamp } from '../../domain/transcript';
+import { useJobStore } from '../../stores/job';
 import { useSpeechPackStore, type SpeechPackOutcome } from '../../stores/speechPack';
 import { useConfirm } from '../composables/useConfirm';
 import ConfirmDialog from './ConfirmDialog.vue';
@@ -9,6 +11,7 @@ import ErrorDetails from './ErrorDetails.vue';
 // Settings' band for the speech models (DECISIONS.md D50, D54), desktop only: SettingsView renders it only when
 // `__DESKTOP__` is true. Download, its progress and Cancel, Remove; one state at a time (D13).
 const store = useSpeechPackStore();
+const job = useJobStore();
 const { confirm, dialog: confirmDialog } = useConfirm();
 
 const id = useId();
@@ -31,6 +34,36 @@ const progressText = computed(() => {
   const p = store.progress;
   if (!p) return '';
   return `${formatDownloadSize(p.received)} of ${formatDownloadSize(p.total, true)}`;
+});
+
+const seconds = (sec: number) => `${sec.toFixed(1)} s`;
+
+/** The last run on this computer: what a colleague can expect, and how the work laptop is measured (Phase 36). */
+const lastRun = computed(() => {
+  const run = job.lastLocalRun;
+  if (!run || run.audioSec === null || run.audioSec <= 0) return null;
+  const t = run.timings;
+  return {
+    line: `Last recording: ${formatTimestamp(run.audioSec)} of audio in ${formatTimestamp(t.totalSec)}.`,
+    timings: [
+      {
+        label: 'Speed',
+        value: t.totalSec > 0 ? `${(run.audioSec / t.totalSec).toFixed(1)}× real time` : '–',
+      },
+      { label: 'Reading the audio', value: seconds(t.decodeSec) },
+      { label: 'Words', value: seconds(t.wordsSec) },
+      { label: 'Speakers', value: seconds(t.speakersSec) },
+      { label: 'Total', value: seconds(t.totalSec) },
+      { label: 'Threads', value: String(t.threads) },
+      {
+        label: 'Peak memory',
+        value:
+          t.peakMemoryBytes === null
+            ? 'Not measured'
+            : `${(t.peakMemoryBytes / 1e9).toFixed(2)} GB`,
+      },
+    ],
+  };
 });
 
 /** For screen readers only: the start and the end, not every tick. A failure is announced by its own alert. */
@@ -97,6 +130,18 @@ async function remove(): Promise<void> {
 
       <template v-else-if="view === 'ready'">
         <p>Speech models are installed.</p>
+        <div v-if="lastRun" class="last-run">
+          <p>{{ lastRun.line }}</p>
+          <details>
+            <summary>Timings</summary>
+            <dl class="timings">
+              <template v-for="item in lastRun.timings" :key="item.label">
+                <dt>{{ item.label }}</dt>
+                <dd>{{ item.value }}</dd>
+              </template>
+            </dl>
+          </details>
+        </div>
         <div>
           <button
             ref="action"
@@ -146,6 +191,27 @@ async function remove(): Promise<void> {
 </template>
 
 <style scoped>
+.last-run {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.timings {
+  display: grid;
+  grid-template-columns: max-content auto;
+  gap: var(--space-1) var(--space-4);
+  margin: var(--space-2) 0 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.timings dt {
+  color: var(--color-text-muted);
+}
+
+.timings dd {
+  margin: 0;
+}
+
 .downloading {
   display: grid;
   gap: var(--space-2);

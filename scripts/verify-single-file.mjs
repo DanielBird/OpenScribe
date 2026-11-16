@@ -18,7 +18,8 @@ const ALLOWED_HOSTS = [
 const TAURI_IPC_SOURCES = ['ipc:', 'http://ipc.localhost'];
 /** Strings that only Tauri's JavaScript contains: the web build must never include it. */
 // Tauri's own globals and IPC host, the desktop app's local transcription (DECISIONS.md D53), and the speech models'
-// download and its Settings band (D54).
+// download and its Settings band (D54). The pack's id isn't one: both builds name a local transcript's models from it
+// (Phase 36). The pack list itself is, by a model's file name.
 const TAURI_MARKERS = [
   '__TAURI__',
   '__TAURI_INTERNALS__',
@@ -26,7 +27,7 @@ const TAURI_MARKERS = [
   'postMessageWithAdditionalObjects',
   'stt_start',
   'stt_download',
-  'nvidia-parakeet-nemotron',
+  'parakeet-tdt-0.6b-v3.q8_0.gguf',
   'Download speech models',
 ];
 const EXPECTED_FILE = 'describe.html';

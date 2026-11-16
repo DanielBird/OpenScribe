@@ -4,7 +4,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useJobStore } from '../../stores/job';
 import { useNavStore } from '../../stores/nav';
 import { useSettingsStore } from '../../stores/settings';
+import { useSpeechPackStore } from '../../stores/speechPack';
 import { useTranscriptStore } from '../../stores/transcript';
+import { TEST_PACK } from '../../testing/localBridge';
 import { makeDoc } from '../../testing/transcriptDoc';
 import GlossaryEditor from '../components/GlossaryEditor.vue';
 import GlossaryView from './GlossaryView.vue';
@@ -40,6 +42,22 @@ describe('GlossaryView', () => {
 
   const button = (name: string) =>
     wrapper!.findAll('[data-testid="step-footer"] button').find((b) => b.text().includes(name))!;
+
+  it('says the terms are not used when transcribing on this computer (Phase 36)', () => {
+    const note = "Used when you translate. Transcribing on this computer doesn't use terms.";
+    wrapper = mount(GlossaryView);
+    expect(wrapper.text()).not.toContain(note);
+    expect(wrapper.text()).toContain('it can help the transcription');
+    wrapper.unmount();
+    vi.stubGlobal('__DESKTOP__', true);
+    setActivePinia(createPinia());
+    useSpeechPackStore().status = { state: 'ready', pack: TEST_PACK };
+    useSettingsStore().setTranscriptionEngine('local');
+    wrapper = mount(GlossaryView);
+    expect(wrapper.text()).toContain(note);
+    expect(wrapper.text()).not.toContain('it can help the transcription');
+    vi.unstubAllGlobals();
+  });
 
   it('keeps the hidden h1 that takes focus on step change, and shows the editor', () => {
     wrapper = mount(GlossaryView);

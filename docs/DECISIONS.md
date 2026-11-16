@@ -932,7 +932,7 @@ summarise them.
   - The benchmark is the work laptop: AMD Ryzen 5 PRO 215 with Radeon 740M graphics and 32 GB of RAM, with no NPU.
     Install size, memory and what the models can do are traded off for that machine.
   - Speed on that laptop: the target is an hour of audio in 10 minutes, and the floor is 15 minutes, with speaker
-    labels, start to finish.
+    labels, start to finish. *Changed by D55: these are measured against, but no longer gate shipping.*
   - That laptop can't run benchmarks. They run on the maintainer's PC (an i7-13700K desktop with a dedicated RTX
     2070 SUPER), held back to behave like it: a CPU-only build using only instructions the laptop has, pinned to six
     cores and twelve threads, with the clock capped until Cinebench matches the laptop's published scores, and a
@@ -977,7 +977,7 @@ summarise them.
   an hour of audio in 5.6 minutes (10.8×) and three hours in 16.6 in the emulated laptop's profile, 9.5 minutes an
   hour throttled, against a target of 10 and a floor of 15. The maintainer judged the transcripts sufficient
   (2026-11-15) and **agreed to the provisional go** (2026-11-15). It completes D50, and holds until Phase 36's run
-  on the work laptop.
+  on the work laptop. *Changed by D55: the go no longer depends on that run.*
 - **What the app uses:**
   - **Models:**
     - words: **Parakeet TDT 0.6B v3** (CC-BY-4.0);
@@ -1143,3 +1143,45 @@ summarise them.
   - A new set of models means a new app version and a new download for everyone (RELEASING.md).
   - Phase 36's Setup reads `speechPack.status` to decide whether to offer the choice (its Task 2 says the settings
     store).
+
+### D55 — Local transcription ships whatever the work laptop's speed (2026-11-16; Phases 35–36)
+- **Decision** (maintainer): DeScribe goes ahead with transcribing on the computer even if it doesn't run well on the
+  work laptop, the target platform D50 named.
+  - **The laptop's speed no longer gates anything.** D51's go stops being provisional on Phase 36's run, and D50's
+    target and floor (an hour of audio in 10 and 15 minutes) become what the app is measured against, not conditions
+    for shipping it.
+  - **Phase 36 doesn't wait for the laptop.** Its Task 1 timing run, and Phase 35's laptop rows (S1, S2, S5, S6, S8),
+    can happen whenever the maintainer next has the Store build on the laptop, before or after Phase 36 is built.
+  - **The laptop run is still wanted, for three things:**
+    - **The download on the company network** (Phase 35's S1). If Hugging Face is blocked there, local
+      transcription can't be set up on work laptops, however fast they are; installing the models from files (Phase
+      35's *Out of scope*) is then the follow-up to plan.
+    - **Honest wording:** what Setup and the User Guide say about speed. Until the laptop's numbers exist, they say
+      only what holds everywhere ("Slower"), or give Phase 33's estimate as an estimate.
+    - **The calibration** of the emulated laptop, for later work on the engine.
+  - **A slow laptop is the maintainer's call, not a stop:** the result is recorded beside Phase 33's estimates, and
+    the maintainer decides whether to try D51's list of changes (an AVX-512 build, threads, a lighter precision,
+    steering long recordings to ElevenLabs).
+- **Why:** the maintainer's choice, 2026-11-16.
+- **Consequences:**
+  - Phase 36's file is updated: Task 1 is no longer first or a gate, and its acceptance criterion asks for the laptop's
+    numbers (or *not run* with a reason), not for a result within the floor.
+  - Phase 35's "if S1 fails on the laptop, stop before Phase 36" no longer stops Phase 36. A failed S1 still goes to
+    the maintainer, with the file-install follow-up.
+
+### D56 — Setup's choice of engine, and a language on this computer (2026-11-16; Phase 36)
+- **Decision:**
+  - **Setup's options (D5) gain Transcribe with:** **ElevenLabs** or **This computer**, only in the desktop app
+    with the speech models *ready*. It is a band after Recording, because the API key band below depends on it.
+  - **The saved choice is kept apart from the engine in use:** while the models are missing, Setup uses ElevenLabs
+    without a message, and a new download brings This computer back.
+  - **With This computer, Setup asks for a language** (the maintainer, 2026-11-16): Language has no Auto-detect.
+    Parakeet detects the language but doesn't report it, so a transcript made on Auto-detect had none, and Add to
+    project translated even English (Phase 34). Auto-detect becomes English, and comes back when ElevenLabs is chosen
+    again, unless the language was changed in between. A provider says whether it reports what it detected
+    (`supports.autoDetect`).
+  - **What doesn't apply locally is hidden, not disabled:** the API key band, Number of speakers and Zero retention.
+  - **Settings' last run:** the line, and its **Timings** behind a closed disclosure. They ship (the maintainer,
+    2026-11-16): they cost nothing on screen and help when a colleague reports slowness.
+- **Why:** each thing in the user's terms (D13); a transcript that always knows its language.
+- **Consequences:** D37's "Auto-detect is first in the list" holds for ElevenLabs only.

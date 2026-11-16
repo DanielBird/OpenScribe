@@ -7,6 +7,8 @@ import { writeClipboard } from '../clipboard';
 import { useConfirm } from '../composables/useConfirm';
 import ConfirmDialog from './ConfirmDialog.vue';
 
+/** `emptyHint: false` when the terms don't help the transcription (on this computer), so the hint would mislead. */
+const { emptyHint = true } = defineProps<{ emptyHint?: boolean }>();
 const glossary = useGlossaryStore();
 const { confirm, dialog } = useConfirm();
 const id = useId();
@@ -333,7 +335,7 @@ async function clearAll(): Promise<void> {
         </li>
       </ul>
     </section>
-    <p v-else class="empty">
+    <p v-else-if="emptyHint" class="empty">
       A glossary is optional, but it can help the transcription spell product names and jargon
       correctly.
     </p>

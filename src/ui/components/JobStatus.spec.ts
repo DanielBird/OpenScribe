@@ -3,6 +3,7 @@ import { createPinia, setActivePinia } from 'pinia';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ProviderError, type ProviderErrorKind } from '../../providers/errors';
 import { useJobStore, type JobStatus as JobStatusValue } from '../../stores/job';
+import { useNavStore } from '../../stores/nav';
 import JobStatus from './JobStatus.vue';
 
 describe('JobStatus', () => {
@@ -51,6 +52,47 @@ describe('JobStatus', () => {
     expect(wrapper!.text()).toContain('Keep this tab open.');
     expect(wrapper!.find('progress').exists()).toBe(false);
     expect(buttons()).toEqual(['Cancel']);
+  });
+
+  describe('on this computer (Phase 36)', () => {
+    function mountLocal(progress: { doneSec: number; totalSec: number | null } | null) {
+      const job = useJobStore();
+      job.runEngine = 'local';
+      job.localProgress = progress;
+      return mountIn({ status: 'processing', elapsedSec: 5 });
+    }
+
+    it('says it is preparing until the first seconds are done, with no bar', () => {
+      mountLocal(null);
+      expect(status()).toBe('Preparing…');
+      expect(wrapper!.find('progress').exists()).toBe(false);
+      expect(wrapper!.text()).toContain('Keep DeScribe open. You can use other apps.');
+      expect(wrapper!.text()).not.toContain('Keep this tab open.');
+    });
+
+    it('shows the audio done out of the total on a bar, outside the live region', async () => {
+      const job = mountLocal(null);
+      const region = wrapper!.get('[role="status"]').element;
+      job.localProgress = { doneSec: 750, totalSec: 3490 };
+      await wrapper!.vm.$nextTick();
+      expect(status()).toBe('Transcribing…');
+      expect(wrapper!.get('[role="status"]').element).toBe(region);
+      const bar = wrapper!.get('progress');
+      expect(bar.attributes('aria-label')).toBe('Transcription progress');
+      expect(bar.attributes('value')).toBe('750');
+      expect(bar.attributes('max')).toBe('3490');
+      expect(wrapper!.get('.audio').text()).toBe('00:12:30 of 00:58:10');
+      job.localProgress = { doneSec: 800, totalSec: 3490 };
+      await wrapper!.vm.$nextTick();
+      expect(status()).toBe('Transcribing…');
+      expect(wrapper!.get('.audio').text()).toBe('00:13:20 of 00:58:10');
+    });
+
+    it('shows the seconds done alone when the total is unknown', () => {
+      mountLocal({ doneSec: 61, totalSec: null });
+      expect(wrapper!.get('.audio').text()).toBe('00:01:01');
+      expect(wrapper!.get('progress').attributes('value')).toBeUndefined();
+    });
   });
 
   it('Cancel cancels the job', async () => {
@@ -104,6 +146,21 @@ describe('JobStatus', () => {
     expect(buttons()).toEqual(['Start again']);
     await wrapper!.get('button').trigger('click');
     expect(retry).toHaveBeenCalledTimes(2);
+  });
+
+  it('offers Settings for a failure fixed there, without Try again (Phase 36)', async () => {
+    const job = mountIn({ status: 'error' });
+    job.error = new ProviderError(
+      'validation',
+      "The speech models aren't on this computer any more.",
+      {
+        fixIn: 'settings',
+      },
+    );
+    await wrapper!.vm.$nextTick();
+    expect(buttons()).toEqual(['Open Settings']);
+    await wrapper!.get('button').trigger('click');
+    expect(useNavStore().mode).toBe('settings');
   });
 
   it('keeps one live region across status changes, so changes are announced', async () => {

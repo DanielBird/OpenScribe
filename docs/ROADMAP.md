@@ -26,6 +26,8 @@ with WebView2, packed as MSIX. The HTML file stays.
 - `.docx` export (original or English)
 - On-demand English translation via Claude or Gemini
 - Click a turn to play the audio from that point
+- In the desktop app: transcribing on the computer with NVIDIA's speech models, downloaded from Hugging Face when
+  asked (D50, D55, D56; Phases 33–36)
 
 ### Out of scope for v1 (see [phases/future.md](phases/future.md))
 - AI audit / auto-correction of transcripts
@@ -40,6 +42,7 @@ with WebView2, packed as MSIX. The HTML file stays.
 │ ElevenLabs API key [remember ☐]  │   │ Paste terms → [Add]         │   │ Uploading 45% → Transcribing 01:12      │
 │ (Translation keys, optional)     │──▶│ term list: edit / delete    │──▶│ File · duration · language · speakers   │
 │ Audio/video file  [Choose…]      │   │ [Clear all]  [Copy list]    │   │ Speakers: Speaker 1 → "Interviewer"…    │
+│ (Desktop: ElevenLabs ◉ This PC ○)│
 │ Language: Auto ▾  Speakers: Auto │   │                             │   │ [00:00:03] Interviewer: …  (click=play) │
 │ ☐ Zero retention (Enterprise)    │   │                             │   │ [Translate to English] [Original|English]│
 │                         [Next ▶] │   │ [◀ Back]           [Run ▶]  │   │ [Download .docx]     ▶ audio bar        │
@@ -366,12 +369,12 @@ MVP = Phases 0–5. Each phase is sized for one agent session (or a few) and end
 | 33 | [Spike: local speech models, and downloading them](phases/33-local-stt-spike.md) | 24 | 23, 25 | ☑ Done: provisional go at the target (D51); D8's network and sleep steps open, and the real check on the work laptop is Phase 36's |
 | 34 | [Local transcription engine](phases/34-local-stt-engine.md) | 33 | – | ☑ Done (Translate on Output with a local transcript by hand, and a local transcript's language for Phase 36, open) |
 | 35 | [The speech pack: downloading the models](phases/35-speech-pack.md) | 33, 34 | – | ◐ Built; the maintainer's checks open (S1–S10 on the PC, S1, S2, S5, S6 and S8 on the work laptop from the Store, the licence reading, the Store submission) |
-| 36 | [Transcribe on this computer: the choice, progress and About](phases/36-local-stt-ui.md) | 34, 35 | – | ☐ Not started |
+| 36 | [Transcribe on this computer: the choice, progress and About](phases/36-local-stt-ui.md) | 34, 35 | – | ◐ Built; the maintainer's checks open (L9 on the work laptop, L3's network off, L4, L5's screen reader, L7 and L10 with the real models, the Store submission) |
 
 Status values: ☐ Not started · ◐ In progress · ☑ Done.
 
-Phases 33–36 add transcription on the computer to the desktop app (D50). Phase 33 is a spike, and its go/no-go gates
-the other three.
+Phases 33–36 add transcription on the computer to the desktop app (D50). Phase 33 is a spike, and its go/no-go gated
+the other three. The work laptop's own speed gates nothing (D55): it is measured when the maintainer can.
 
 Phases 0–9 are release 1. Phases 10–22 are release 2 (Projects). Their dependency
 graph is in [PROJECTS.md](PROJECTS.md) §8, and the graph below covers release 1 only. Release 2 is in 1.1.0, with

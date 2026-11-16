@@ -286,6 +286,17 @@ describe('SettingsView', () => {
     expect(nav.mode).toBe('project');
   });
 
+  it('says nothing of the speech models or Hugging Face in the web build', () => {
+    mountView();
+    const text = wrapper!.text().replace(/\s+/g, ' ');
+    expect(text).toContain(
+      'Your recording and glossary are sent to ElevenLabs for transcription. If you choose',
+    );
+    expect(text).toContain('ElevenLabs, to transcribe:');
+    expect(text).not.toContain('Speech models');
+    expect(text).not.toContain('Hugging Face');
+  });
+
   // Vitest exposes Vite's defines as globals, so the desktop build's texts can be checked here (D35).
   describe('in the desktop app', () => {
     beforeEach(() => {
@@ -315,6 +326,28 @@ describe('SettingsView', () => {
       expect(text).toContain('On this computer');
       expect(text).toContain("transcript text are saved in DeScribe's own storage.");
       expect(text).not.toContain('browser');
+    });
+
+    it('says where the recording goes with each engine, and credits the speech models (Phase 36)', () => {
+      mountView();
+      const text = wrapper!.text().replace(/\s+/g, ' ');
+      expect(text).toContain(
+        "Your recording and glossary are sent to ElevenLabs for transcription, or, if you choose This computer on Setup, the recording is transcribed here and isn't sent anywhere.",
+      );
+      expect(text).toContain('ElevenLabs, to transcribe with ElevenLabs:');
+      expect(text).toContain(
+        'Transcribing on this computer uses NVIDIA Parakeet TDT 0.6B v3 (CC BY 4.0) and NVIDIA Nemotron 3 Diarization (OpenMDW 1.1), © NVIDIA Corporation. DeScribe downloads them from Hugging Face when you click Download speech models, and sends nothing about you or your recordings. DeScribe is not affiliated with or endorsed by NVIDIA.',
+      );
+      const href = (name: string) =>
+        wrapper!
+          .findAll('a')
+          .find((a) => a.text() === name)
+          ?.attributes('href');
+      expect(href('NVIDIA Parakeet TDT 0.6B v3')).toBe(
+        'https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3',
+      );
+      expect(href('OpenMDW 1.1')).toBe('https://openmdw.ai/license/1-1/');
+      expect(text).toContain('Hugging Face (speech models): privacy · terms');
     });
 
     it('drops the warning about web pages opened from files, which only applies to the HTML file', () => {

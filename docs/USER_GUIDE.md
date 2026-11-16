@@ -5,7 +5,8 @@ speaker names and timestamps. You can listen from any point, correct the text, t
 it as a Word file.
 
 DeScribe is one HTML file. It runs in your browser, with nothing to install. It uses your own API keys to send the
-recording to ElevenLabs, which does the transcription.
+recording to ElevenLabs, which does the transcription. DeScribe is also a Windows app from the Microsoft Store, which
+can transcribe on your computer instead: see [Transcribe on this computer](#transcribe-on-this-computer-windows-app).
 
 ## 1. Get the file
 
@@ -17,7 +18,7 @@ Use Edge or Chrome. Firefox isn't supported.
 
 ## 2. Get your API keys
 
-### ElevenLabs (required)
+### ElevenLabs (required, unless the Windows app transcribes on your computer)
 
 Your keys are on **Settings**: the link at the bottom of every page.
 
@@ -78,6 +79,31 @@ move between pages.
 
 DeScribe keeps your **latest** transcript in the browser. After a reload, Setup offers it under **Last transcript**:
 click **Open**. A new run replaces it, and DeScribe asks first.
+
+### Transcribe on this computer (Windows app)
+
+The Windows app can transcribe without ElevenLabs, using NVIDIA's speech models on your computer. The recording isn't
+sent anywhere, and you don't need an ElevenLabs key.
+
+1. **Download the models once:** on **Settings → Transcribe on this computer**, click **Download speech models**
+   (about 0.8 GB from Hugging Face). You can leave Settings while it downloads. If it's interrupted, click it again:
+   it carries on where it stopped.
+2. **Choose it on Setup:** under **Transcribe with**, choose **This computer**. DeScribe remembers your choice.
+   **ElevenLabs** is still there whenever you want it.
+3. Click **Next**, then **Run**. Output shows how much of the recording is done. Keep DeScribe open; you can use
+   other apps meanwhile.
+
+What's different on this computer:
+- **It's slower.** Settings shows how long your last recording took (**Last recording**), so you know what to expect
+  on your computer.
+- **Choose the language.** There's no Auto-detect: pick the recording's language under **Options**. The list has
+  the 25 European languages the models know.
+- **No glossary for transcribing.** The terms are still used when you translate.
+- **Up to 8 speakers.** Number of speakers and Zero retention aren't offered.
+- **Ogg Opus files can't be read.** Convert them to MP3, or transcribe them with ElevenLabs.
+
+To free the space, click **Remove** on Settings. Setup then goes back to ElevenLabs. Uninstalling DeScribe removes the
+models too.
 
 ## 4. Correct the text
 
@@ -272,6 +298,8 @@ what it finds, and uses the summaries for an overview. Then it answers in Englis
   copy of the transcripts' text (so the project opens quickly), and which project file the last transcript belongs
   to. **Clear saved data** removes them, never the files in the folder.
 - See [Remember keys on this computer](#remember-keys-on-this-computer) before you save a key on a shared computer.
+- **On this computer** (Windows app): the recording isn't sent anywhere. Downloading the speech models connects to
+  Hugging Face, which receives the request and your computer's address, as any website does, and none of your data.
 
 ## 10. Troubleshooting
 
@@ -288,6 +316,9 @@ what it finds, and uses the summaries for an overview. Then it answers in Englis
 | "ElevenLabs rejected the API key" | Check the key on Setup, or create a new one. |
 | "Zero retention is only available on ElevenLabs Enterprise plans" | Switch off **Zero retention** on Setup and run again. |
 | "Your ElevenLabs account has no remaining credits" | Top up your ElevenLabs account, raise the key's credit limit, or enter another key in Settings. Then click **Try again**. |
+| The speech models don't download: "Your network didn't allow the download from huggingface.co" | A company network may block Hugging Face. Try another network (at home, or a phone's hotspot), or ask IT to allow `huggingface.co` and `us.aws.cdn.hf.co`. |
+| "The speech models aren't on this computer any more" | Click **Open Settings** and download them again, or choose **ElevenLabs** on Setup. |
+| "This computer ran out of memory while transcribing" | Close other apps and click **Try again**, or transcribe with ElevenLabs. |
 | "This browser can't open project folders" | Open DeScribe in Edge or Chrome. |
 | "This folder isn't a DeScribe project" | Choose the folder that has `describe-project.json` in it, or use **New project…**. |
 | "This file is only in OneDrive and the computer is offline" | Connect to the internet, or set the project folder to **Always keep on this device**. |

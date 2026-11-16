@@ -6,8 +6,9 @@ recording goes in each case, that the models are downloaded from Hugging Face, a
 their licences. Without the models, and in the HTML file, nothing changes.
 
 **Status of the plan:** drafted on 2026-11-14 (DECISIONS.md **D50**). Phase 33 ran on 2026-11-15 (**D51**) and chose
-the models named below. Its findings, below, override the text where they differ. All UI text here is a draft
-(D13).
+the models named below. Its findings, below, override the text where they differ. **On 2026-11-16 the maintainer
+decided local transcription ships whatever the work laptop's speed (D55):** the laptop run below is a measurement,
+not a gate, and the phase doesn't wait for it. All UI text here is a draft (D13).
 
 ## Phase 33's findings (2026-11-15; DECISIONS.md D51)
 
@@ -35,8 +36,9 @@ They override the text below where they differ ([reference/local-stt.md](../refe
   becomes a choice, it belongs here.
 - **About:** the two models, NVIDIA's own files from Hugging Face. No copy hosted by Dtype.
 
-**Depends on:** Phases 34 and 35. Phase 35's download must have worked on the work laptop (its S1), because Task 1
-transcribes there.
+**Depends on:** Phases 34 and 35 (built). Not on the laptop: Phase 35's laptop rows and this phase's Task 1 can run
+whenever the maintainer next has the Store build on it (D55). Task 1 needs Phase 35's S1 to have worked there
+first, since it transcribes with downloaded models.
 
 **Read first:**
 - [DECISIONS.md](../DECISIONS.md) D3, D5, D6, D13, D27, D36, D37, D41, D50 and the entries of Phases 33–35;
@@ -63,30 +65,32 @@ transcribes there.
 7. **About's credit comes from the build:** the names, licences and links from `pack.json`, and the full texts from
    the notices Phase 35 generates. It is the same whether or not the models are downloaded, and it can't disagree
    with what the app would download.
-8. **This phase holds the first real measurement.** The work laptop can't run a benchmark, so Phase 33's go rests
-   on an emulation on the maintainer's PC. The laptop's first local run comes from this phase's build, installed
-   from the Store, which the maintainer confirmed may transcribe real recordings there (2026-11-14). It happens
-   **early** (Task 1), before the wording, About and the docs are polished, so that a laptop slower than estimated
-   is found while the plan can still change.
+8. **This phase holds the first real measurement, but doesn't wait for it** (D55). The work laptop can't run a
+   benchmark, so Phase 33's numbers come from an emulation on the maintainer's PC. The laptop's first local run comes
+   from this phase's build, installed from the Store, which the maintainer confirmed may transcribe real recordings
+   there (2026-11-14). It runs when the maintainer can, before or after the rest of the phase. Its result changes
+   only what the texts say about speed; a slow laptop is the maintainer's call, not a stop.
 
 ## Tasks
 
-1. **The timing checkpoint, before anything else is polished.** Build the least that lets the laptop run locally:
-   the choice on Setup (Tasks 3 and 4, rough wording is fine) and the last run's timings in Settings (Task 7).
-   Submit the app to the hidden listing. Then the maintainer, on the work laptop, with the models downloaded in
-   Settings and the laptop plugged in:
+1. **The laptop run: a measurement, whenever the maintainer can** (D55; no longer a gate). Any build of this phase
+   with the choice on Setup and the last run's timings in Settings (Tasks 3, 4 and 7) will do, submitted to the
+   hidden listing. The maintainer, on the work laptop, with the models downloaded in Settings and the laptop plugged
+   in:
    - transcribes the same one-hour recording Phase 33 used, and reads off the timings; then the three-hour one;
    - once more on battery, and once during ordinary work (a Teams call, Edge open);
    - notes how the laptop behaves meanwhile: fans, heat, whether other apps stay usable, whether it tries to sleep.
 
-   Write the numbers beside Phase 33's estimates in reference/local-stt.md, with how far off the emulation was.
-   - **At the target** (an hour in 10 minutes or less, under 4 GB): carry on.
-   - **Between the target and the floor** (10 to 15 minutes): carry on, and tell the maintainer the number. The
-     user-facing texts must not promise more than it (Task 3's "Slower", the User Guide).
-   - **Past the floor** (more than 15 minutes, or over 4 GB): stop and take it to the maintainer, with the changes
-     Phase 33 listed for this case and what each costs. Don't tune by guesswork on the PC: correct the emulation's
-     calibration from the real numbers first, so the next attempt is measured against a better stand-in.
-   - In every case, record the corrected calibration: later work on the engine needs it.
+   Write the numbers beside Phase 33's estimates in reference/local-stt.md, with how far off the emulation was, and
+   the corrected calibration: later work on the engine needs it.
+   - **What the numbers change:** only what the texts say about speed (Task 3's "Slower", the User Guide), which
+     must never promise more than the laptop showed. Until the run, they say only "Slower", or give Phase 33's
+     estimate as an estimate.
+   - **Past the floor** (more than 15 minutes for an hour, or over 4 GB): tell the maintainer, with the changes Phase
+     33 listed for this case and what each costs. The maintainer decides whether to try them; the phase doesn't stop.
+     Don't tune by guesswork on the PC: correct the emulation's calibration from the real numbers first.
+   - **If the download fails on the laptop** (Phase 35's S1), this run can't happen: take it to the maintainer, with
+     installing the models from files as the follow-up.
 2. **The settings store:** `transcriptionEngine` gets its public setter and the rules of decisions 2 and 3. It holds
    the models' status from the bridge (asked on Setup's opening, and updated by Phase 35's download and removal),
    behind `__DESKTOP__`.
@@ -119,8 +123,7 @@ transcribes there.
 
    It comes from Phase 34's timings. It tells a colleague what to expect of their own computer, and it is how
    the maintainer reads the work laptop's speed (Task 1). The stage times, threads and peak memory sit behind a
-   `<details>` under it, for the checkpoint; the maintainer decides after the checkpoint whether that disclosure
-   ships or goes. **Clear saved data** clears the line and resets the choice to ElevenLabs. It leaves the models
+   `<details>` under it, for the laptop run; the maintainer decides whether that disclosure ships or goes. **Clear saved data** clears the line and resets the choice to ElevenLabs. It leaves the models
    (Phase 35).
 8. **About** (`SettingsView.vue`, under `__DESKTOP__`):
    - **Transcribe:** "Your recording and glossary are sent to ElevenLabs for transcription, or, if you choose **This
@@ -193,9 +196,9 @@ debug build).
 - [ ] A local transcript's details and export name the engine, in both builds.
 - [ ] New UI reviewed against D13, and for keyboard and screen-reader use (the radio group, the progress bar, the
       status in Settings).
-- [ ] The timing checkpoint ran on the work laptop before the rest of the phase was finished. Its numbers are in
-      reference/local-stt.md beside Phase 33's estimates, with the corrected calibration, and they are within the
-      floor (an hour in 15 minutes), or the maintainer has decided what changes.
+- [ ] The laptop run (Task 1) has its numbers in reference/local-stt.md beside Phase 33's estimates, with the
+      corrected calibration, or *not run* with the reason (D55: it doesn't gate the phase). The texts about speed
+      promise no more than what was measured.
 - [ ] L1–L10 have results on the maintainer's PC, and on the work laptop from the Store, or *not run* with a reason.
 - [ ] The Definition of Done in AGENTS.md.
 
@@ -225,3 +228,109 @@ debug build).
 
 **Phase 33 (2026-11-15):** updated this file with *Phase 33's findings* above, which
 override the tasks where they differ (DECISIONS.md D51). Nothing in this phase has been built.
+
+**Phase 36, the checkpoint (2026-11-16).** Built on `phase-36-local-stt-ui` (from `phase-35-speech-pack`); the plan was
+Tasks 1–5 and 7, and the Hugging Face parts of Tasks 8 and 9.
+- **Decided with the maintainer:**
+  - **Phase 36 goes ahead in full** (DECISIONS D55): the laptop's numbers set the wording and whether D51's list of
+    changes is tried; they don't decide whether the feature ships.
+  - **About and PRIVACY.md carry the Hugging Face text already,** because Store certification sees the download.
+  - **The Store has 1.1.0,** so the checkpoint package is **1.3.0** (`package.json`); CHANGELOG stays [Unreleased].
+- **As built:**
+  - **The settings store:**
+    - the saved choice (`prefs.transcriptionEngine`, set with `setTranscriptionEngine`) is apart from the engine in
+      use (`transcriptionEngine`, a computed: `'local'` only while `localAvailable`, i.e. desktop and the models
+      *ready*);
+    - the saved choice survives the models' removal, so a new download brings This computer back;
+    - a language the engine in use lacks becomes Auto-detect when the choice changes;
+    - the number of speakers is ignored when the engine takes none.
+  - **Setup:** a "Transcribe with" band (a `<fieldset>` named by the band's heading) after Recording, because the API
+    key band below it depends on the choice. With This computer: "Slower. The recording stays on this computer.", and
+    no key band, Zero retention or Number of speakers. Setup asks Rust for the status when it opens.
+  - **Glossary:** the line as drafted. The editor's empty hint ("…can help the transcription…") is hidden with This
+    computer, because it would contradict the line.
+  - **Output:** "Preparing…", then "Transcribing…" with the elapsed time, and under it a bar with "00:12:30 of
+    00:58:10" (out of the live region). The hint "Keep DeScribe open. You can use other apps." The job store's
+    `runEngine` tells Output which engine runs. With ElevenLabs on desktop the hint says "Keep DeScribe open".
+  - **Settings:** "Last recording: 01:02:10 of audio in 00:14:32." and a closed **Timings** with Speed (× real time),
+    Reading the audio, Words, Speakers, Total, Threads and Peak memory.
+  - **About (desktop):**
+    - the Transcribe sentence as drafted;
+    - "ElevenLabs, to transcribe with ElevenLabs";
+    - **Speech models** from `pack.json` through `speechModelCredits()`, with the licence links in `MODEL_LICENCES`
+      (a test fails for a licence without one), in its own component `SpeechModelsCredit.vue` so the web build drops
+      it (`verify:single-file` rejects "Download speech models");
+    - Hugging Face under Privacy and terms.
+  - **PRIVACY.md:** dated 16 November 2026. It adds:
+    - transcribing on the computer, with no copy written;
+    - Hugging Face as the fourth service;
+    - the models' storage and **Remove**;
+    - NVIDIA's models in the AI section;
+    - the pinned, checked download in Security.
+- **Checks:** typecheck, lint, Vitest (1,996 at the time), build, `verify:single-file`, e2e (157), `cargo test` (69).
+  L1, L2, L3 (page side), L5 (progress), L6 and L8 by the agent over CDP (reference/desktop.md).
+- **For the maintainer, in this order:**
+  1. **Publish PRIVACY.md** (the Store's privacy URL shows it).
+  2. **Submit `release/DeScribe-v1.3.0-x64.msix`** to the hidden listing, with Phase 35's description and
+     certification note (reference/desktop.md, *The Store*). Record Partner Center's wording.
+  3. **On the work laptop, from the Store: Phase 35's S1, S2, S5, S6 and S8.** If S1 fails, L9 can't run there, and
+     installing the models from files is the follow-up to plan (D55).
+  4. **L9:** the one-hour recording plugged in, the three-hour one, the one-hour one on battery, and the one-hour one
+     during a Teams call with Edge open. After each, copy Settings' line and Timings into reference/local-stt.md's
+     table, and note fans, heat, other apps and whether it slept.
+  5. The PC's open rows: S1–S10 as Phase 35 lists them, the licence reading, and L3 with the network off.
+- **Still to do in this phase (after the numbers):**
+  - correct the emulation's calibration;
+  - the final "Slower" wording;
+  - Task 5's error texts and the Settings link;
+  - Task 6, the engine in the header and the `.docx`;
+  - whether Timings ships;
+  - Parakeet's missing language (Phase 34's open item);
+  - the Licences read-through;
+  - USER_GUIDE;
+  - the Store listing text;
+  - Task 12's docs;
+  - L4, L5's screen reader, Cancel and Try again, L7, L10;
+  - the Phase 34 e2e spec and axe.
+
+**Phase 36, the rest (2026-11-16).** Same branch, without waiting for the laptop (D55). DECISIONS **D56**.
+- **Decided with the maintainer:** with This computer, **Setup asks for the language** (no Auto-detect; Auto-detect
+  becomes English and comes back with ElevenLabs); **Timings ships**, closed.
+- **As built:**
+  - `supports.autoDetect` on both providers; the settings store moves the language when the engine changes, and
+    applies the rule when it opens on This computer.
+  - **Task 5:**
+    - the models' errors (missing, damaged, outdated) carry `fixIn: 'settings'`, and Output offers **Open Settings**
+      for them, with no Try again;
+    - "missing" now reads "The speech models aren't on this computer any more. Download them in Settings, or
+      transcribe with ElevenLabs.";
+    - the other texts are kept as Phase 34 drafted them.
+  - **Task 6:** `SPEECH_PACK_NAMES` in `domain/transcript.ts`. The header names an engine other than ElevenLabs
+    ("On this computer (NVIDIA Parakeet, Nemotron Diarization)"); ElevenLabs isn't named there, as before. An unknown
+    pack shows its id.
+  - **Task 3's wording:** "Slower." stays until the laptop's numbers (D55).
+  - **Task 10:**
+    - the User Guide gains *Transcribe on this computer (Windows app)*, a Privacy line, and three Troubleshooting
+      rows (a blocked download names `huggingface.co` and `us.aws.cdn.hf.co`);
+    - CHANGELOG [Unreleased] has the entry.
+  - **Task 11:** the description's feature line and *What's new in 1.3.0* are drafted in reference/desktop.md.
+  - **Task 12:** ROADMAP §2 and §3, future.md F2, TESTING (S and L rows for desktop releases), D56.
+- **Checks:** the agent's L5 (Cancel, Start again, Try again on a crash) and axe on the four changed desktop views over
+  CDP; L7 in e2e; L10 from the page. typecheck, lint, Vitest (2,005), build, `verify:single-file`, `cargo test` (69)
+  and `notices --check` pass.
+  - **E2E:** 157 pass with `--workers=6`. With the default 12 workers on a loaded PC, one Project or header test
+    timed out per run (a different one each time; each passes alone). The commit before Phase 36 fails the same
+    way, so it isn't this phase's.
+  - **`verify:single-file`'s marker for the pack list** is now a model's file name, not the pack id: both builds
+    name a local transcript's models from the id (Task 6).
+- **Not done here, for the maintainer:**
+  - L9 on the work laptop, then the speed wording (Setup's "Slower", the User Guide);
+  - L3 with the network off;
+  - L4 with real recordings;
+  - L5 with Narrator;
+  - L7 with a real local transcript;
+  - L10's capture of Rust's connections;
+  - publishing PRIVACY.md;
+  - the Store submission;
+  - Phase 35's open rows.
+- **For later:** whether the clean-up ran still isn't recorded in the doc (Phase 34's note).

@@ -3,21 +3,27 @@ import { computed } from 'vue';
 import { formatBytes } from '../../domain/filecheck';
 import { formatTimestamp } from '../../domain/transcript';
 import { useJobStore } from '../../stores/job';
+import { useNavStore } from '../../stores/nav';
 import ErrorDetails from './ErrorDetails.vue';
 
 // Progress, error and cancelled states of a transcription run. Only the phase is announced (the
 // status line); the changing percentage and the timer are not, so screen readers aren't flooded.
 const job = useJobStore();
+const nav = useNavStore();
+const desktop = __DESKTOP__;
 
 /** Errors that a retry of the same request can't fix: the key or the request must change first. */
 const NEEDS_SETUP_CHANGE = new Set(['auth', 'validation']);
+
+/** A run on this computer: nothing is uploaded, and the engine reports the seconds of audio done (Phase 36). */
+const local = computed(() => job.runEngine === 'local');
 
 const phaseText = computed(() => {
   switch (job.status) {
     case 'uploading':
       return 'Uploading';
     case 'processing':
-      return 'Transcribing…';
+      return local.value && !job.localProgress ? 'Preparing…' : 'Transcribing…';
     case 'error':
       return job.error?.userMessage ?? 'The transcription failed.';
     case 'cancelled':
@@ -38,6 +44,27 @@ const upload = computed(() => {
     text: `${percent}% (${formatBytes(loaded)} of ${formatBytes(p.total)})`,
   };
 });
+
+/** On this computer: the seconds of audio done, out of the total when it's known. */
+const audio = computed(() => {
+  const p = job.localProgress;
+  if (!local.value || job.status !== 'processing' || !p) return null;
+  const total = p.totalSec !== null && p.totalSec > 0 ? p.totalSec : null;
+  const done = total === null ? p.doneSec : Math.min(p.doneSec, total);
+  return {
+    done,
+    total,
+    text:
+      total === null
+        ? formatTimestamp(done)
+        : `${formatTimestamp(done)} of ${formatTimestamp(total)}`,
+  };
+});
+
+/** A failure fixed in Settings (the speech models, Phase 36) offers it. */
+const fixInSettings = computed(
+  () => job.status === 'error' && job.error?.opts.fixIn === 'settings',
+);
 
 const canRetry = computed(
   () => job.status === 'error' && !NEEDS_SETUP_CHANGE.has(job.error?.kind ?? ''),
@@ -78,11 +105,34 @@ const canRetry = computed(
       :value="upload?.loaded ?? 0"
       :max="upload?.total ?? 1"
     />
-    <p v-if="job.status === 'processing'" class="hint">
-      Long recordings take several minutes. Keep this tab open.
+    <div v-if="audio" class="audio">
+      <progress
+        class="progress"
+        aria-label="Transcription progress"
+        :value="audio.total === null ? undefined : audio.done"
+        :max="audio.total ?? undefined"
+      />
+      <span>{{ audio.text }}</span>
+    </div>
+    <p v-if="job.status === 'processing' && local" class="hint">
+      Keep DeScribe open. You can use other apps.
+    </p>
+    <p v-else-if="job.status === 'processing'" class="hint">
+      Long recordings take several minutes. Keep {{ desktop ? 'DeScribe' : 'this tab' }} open.
     </p>
 
-    <div v-if="job.isActive || canRetry || job.status === 'cancelled'" class="actions">
+    <div
+      v-if="job.isActive || canRetry || fixInSettings || job.status === 'cancelled'"
+      class="actions"
+    >
+      <button
+        v-if="fixInSettings"
+        type="button"
+        class="button button-primary"
+        @click="nav.openSettings()"
+      >
+        Open Settings
+      </button>
       <button v-if="job.isActive" type="button" class="button" @click="job.cancel()">Cancel</button>
       <button v-if="canRetry" type="button" class="button button-primary" @click="job.retry()">
         Try again
@@ -138,6 +188,15 @@ const canRetry = computed(
   width: min(100%, 30rem);
   height: 0.75rem;
   accent-color: var(--color-accent);
+}
+
+.audio {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  font-variant-numeric: tabular-nums;
 }
 
 .actions {

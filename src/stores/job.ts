@@ -8,6 +8,7 @@ import { getTranscriptionProvider } from '../providers/index';
 import type {
   TranscriptionInput,
   TranscriptionProvider,
+  TranscriptionProviderId,
   TranscriptionTimings,
 } from '../providers/transcription/types';
 import { readJson, removeKey, writeJson } from '../storage/local';
@@ -80,6 +81,8 @@ export const useJobStore = defineStore('job', () => {
   /** On this computer: seconds of audio done, out of the total if known. Phase 36 shows it. */
   const localProgress = ref<{ doneSec: number; totalSec: number | null } | null>(null);
   const lastLocalRun = shallowRef<LocalRunRecord | null>(loadLastLocalRun());
+  /** The engine of the current or last run, so Output can word its progress. */
+  const runEngine = ref<TranscriptionProviderId | null>(null);
 
   let controller: AbortController | null = null;
   let lastSnapshot: RunSnapshot | null = null;
@@ -154,6 +157,7 @@ export const useJobStore = defineStore('job', () => {
     uploadDoneAt.value = null;
     elapsedSec.value = 0;
     localProgress.value = null;
+    runEngine.value = snap.provider.id;
     stopTicker();
     unloadGuard.hold();
 
@@ -270,6 +274,7 @@ export const useJobStore = defineStore('job', () => {
 
   return {
     status,
+    runEngine,
     progress,
     error,
     startedAt,

@@ -46,3 +46,49 @@ export function localLimits() {
     maxSpeakers: localPack().maxSpeakers,
   };
 }
+
+/** A licence the speech models are under, by its SPDX id: how About names it and where its text is. */
+export const MODEL_LICENCES: Readonly<Record<string, { name: string; url: string }>> = {
+  'CC-BY-4.0': {
+    name: 'CC BY 4.0',
+    url: 'https://creativecommons.org/licenses/by/4.0/legalcode.en',
+  },
+  'OpenMDW-1.1': { name: 'OpenMDW 1.1', url: 'https://openmdw.ai/license/1-1/' },
+};
+
+/** About's credit for one model (Phase 36): from pack.json, so it can't disagree with what the app downloads. */
+export interface SpeechModelCredit {
+  name: string;
+  /** The model's card on Hugging Face. */
+  card: string;
+  licence: { id: string; name: string; url: string };
+  copyright: string;
+}
+
+let credits: readonly SpeechModelCredit[] | null = null;
+
+/** The models' names, cards, licences and copyright. Throws for a licence `MODEL_LICENCES` doesn't know. */
+export function speechModelCredits(): readonly SpeechModelCredit[] {
+  if (credits) return credits;
+  const models = z
+    .array(
+      z.object({
+        name: z.string().min(1),
+        card: z.string().startsWith('https://huggingface.co/'),
+        licence: z.string().min(1),
+        copyright: z.string().min(1),
+      }),
+    )
+    .parse(pack.models);
+  credits = models.map((m) => {
+    const licence = MODEL_LICENCES[m.licence];
+    if (!licence) throw new Error(`No link for the speech model licence ${m.licence}`);
+    return {
+      name: m.name,
+      card: m.card,
+      licence: { id: m.licence, ...licence },
+      copyright: m.copyright,
+    };
+  });
+  return credits;
+}

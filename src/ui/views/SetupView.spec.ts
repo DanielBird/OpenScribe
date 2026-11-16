@@ -1,8 +1,10 @@
 import { flushPromises, mount } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { setLocalSttBridgeForTests } from '../../providers/index';
 import { useNavStore } from '../../stores/nav';
 import { useSettingsStore } from '../../stores/settings';
+import { fakeLocalBridge, TEST_PACK } from '../../testing/localBridge';
 import SetupView from './SetupView.vue';
 
 const probeDuration = vi.hoisted(() => vi.fn<() => Promise<number | null>>());
@@ -149,6 +151,90 @@ describe('SetupView', () => {
     expect(JSON.parse(localStorage.getItem('describe.v1.prefs') ?? '{}')).toEqual({
       languageHint: 'fr',
       zeroRetention: true,
+    });
+  });
+
+  describe('in the desktop app (Phase 36)', () => {
+    const radio = (label: string) =>
+      wrapper!
+        .findAll('label')
+        .find((l) => l.text() === label)!
+        .get<HTMLInputElement>('input[type="radio"]');
+
+    async function mountDesktop(state: 'ready' | 'missing' = 'ready') {
+      vi.stubGlobal('__DESKTOP__', true);
+      setLocalSttBridgeForTests(fakeLocalBridge({ state, pack: TEST_PACK }));
+      wrapper = mount(SetupView);
+      await flushPromises();
+    }
+
+    afterEach(() => {
+      setLocalSttBridgeForTests(null);
+      vi.unstubAllGlobals();
+    });
+
+    it('offers no choice until the speech models are ready', async () => {
+      await mountDesktop('missing');
+      expect(wrapper!.findAll('h2').map((h) => h.text())).toEqual([
+        'Recording',
+        'API key',
+        'Options',
+      ]);
+      expect(wrapper!.find('input[type="radio"]').exists()).toBe(false);
+    });
+
+    it('offers ElevenLabs and This computer, with ElevenLabs chosen the first time', async () => {
+      await mountDesktop();
+      expect(wrapper!.findAll('h2').map((h) => h.text())).toEqual([
+        'Recording',
+        'Transcribe with',
+        'API key',
+        'Options',
+      ]);
+      const group = wrapper!.get('fieldset');
+      expect(group.attributes('aria-labelledby')).toBe('setup-engine');
+      expect(radio('ElevenLabs').element.checked).toBe(true);
+      expect(radio('This computer').element.checked).toBe(false);
+      expect(wrapper!.text()).not.toContain('Slower.');
+    });
+
+    it('with This computer, asks for no key and hides what doesn’t apply', async () => {
+      await mountDesktop();
+      await radio('This computer').setValue(true);
+      const settings = useSettingsStore();
+      expect(settings.transcriptionEngine).toBe('local');
+      expect(wrapper!.findAll('h2').map((h) => h.text())).toEqual([
+        'Recording',
+        'Transcribe with',
+        'Options',
+      ]);
+      expect(wrapper!.findAll('label').map((l) => l.text())).toEqual([
+        'ElevenLabs',
+        'This computer',
+        'Language',
+      ]);
+      expect(wrapper!.text()).toContain('Slower. The recording stays on this computer.');
+      expect(wrapper!.get('fieldset').attributes('aria-describedby')).toBeTruthy();
+      expect(wrapper!.get('.band-summary').text()).toBe('Language: English');
+    });
+
+    it('lists the pack’s languages with This computer', async () => {
+      await mountDesktop();
+      await radio('This computer').setValue(true);
+      const options = byLabel('Language')
+        .findAll('option')
+        .map((o) => o.attributes('value'));
+      expect(options).toHaveLength(25);
+      expect(options).toContain('uk');
+      expect(options).not.toContain('ja');
+      expect(options).not.toContain('auto');
+      expect((byLabel('Language').element as HTMLSelectElement).value).toBe('en');
+      await radio('ElevenLabs').setValue(true);
+      expect(
+        byLabel('Language')
+          .findAll('option')
+          .map((o) => o.attributes('value')),
+      ).toContain('ja');
     });
   });
 });
