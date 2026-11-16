@@ -292,7 +292,7 @@ describe('SettingsView', () => {
     expect(text).toContain(
       'Your recording and glossary are sent to ElevenLabs for transcription. If you choose',
     );
-    expect(text).toContain('ElevenLabs, to transcribe:');
+    expect(text).toContain('ElevenLabs, for cloud transcription:');
     expect(text).not.toContain('Speech models');
     expect(text).not.toContain('Hugging Face');
   });
@@ -334,7 +334,7 @@ describe('SettingsView', () => {
       expect(text).toContain(
         "Your recording and glossary are sent to ElevenLabs for transcription, or, if you choose This computer on Setup, the recording is transcribed here and isn't sent anywhere.",
       );
-      expect(text).toContain('ElevenLabs, to transcribe with ElevenLabs:');
+      expect(text).toContain('ElevenLabs, for cloud transcription:');
       expect(text).toContain(
         'Transcribing on this computer uses NVIDIA Parakeet TDT 0.6B v3 (CC BY 4.0) and NVIDIA Nemotron 3 Diarization (OpenMDW 1.1), © NVIDIA Corporation. DeScribe downloads them from Hugging Face when you click Download speech models, and sends nothing about you or your recordings. DeScribe is not affiliated with or endorsed by NVIDIA.',
       );

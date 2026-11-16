@@ -18,7 +18,6 @@ const ids = {
   zeroRetentionHelp: `${id}-zero-retention-help`,
   optionsPanel: `${id}-options-panel`,
   engine: `${id}-engine`,
-  engineHelp: `${id}-engine-help`,
 };
 
 // Whether This computer is offered depends on the speech models (Phase 36, decision 2): ask Rust each time Setup opens.
@@ -84,11 +83,7 @@ const optionsSummary = computed(() => {
       <section v-if="settings.localAvailable" class="band" aria-labelledby="setup-engine">
         <h2 id="setup-engine">Transcribe with</h2>
         <div class="band-content engine-content">
-          <fieldset
-            class="engine"
-            aria-labelledby="setup-engine"
-            :aria-describedby="local ? ids.engineHelp : undefined"
-          >
+          <fieldset class="engine" aria-labelledby="setup-engine">
             <label class="choice">
               <input
                 type="radio"
@@ -110,20 +105,21 @@ const optionsSummary = computed(() => {
               This computer
             </label>
           </fieldset>
-          <p v-if="local" :id="ids.engineHelp" class="hint">
-            Slower. The recording stays on this computer.
-          </p>
         </div>
       </section>
 
-      <section v-if="keyMissing" class="band" aria-labelledby="setup-key">
-        <h2 id="setup-key">API key</h2>
-        <div class="band-content">
-          <div>
-            <button type="button" class="button" @click="nav.openSettings()">Open Settings</button>
+      <Transition name="reveal">
+        <section v-if="keyMissing" class="band" aria-labelledby="setup-key">
+          <h2 id="setup-key">API key</h2>
+          <div class="band-content">
+            <div>
+              <button type="button" class="button" @click="nav.openSettings()">
+                Open Settings
+              </button>
+            </div>
           </div>
-        </div>
-      </section>
+        </section>
+      </Transition>
 
       <section class="band" aria-labelledby="setup-options">
         <h2 id="setup-options">
@@ -274,6 +270,27 @@ const optionsSummary = computed(() => {
   accent-color: var(--color-accent);
 }
 
+/* The API key band grows open and folds shut as the engine changes: its height, padding and rule move
+   together, and the content fades. interpolate-size lets height go to and from auto (as in AppHeader). */
+.reveal-enter-active,
+.reveal-leave-active {
+  overflow: clip;
+  interpolate-size: allow-keywords;
+  transition:
+    height 0.3s cubic-bezier(0.22, 1, 0.36, 1),
+    padding-block 0.3s cubic-bezier(0.22, 1, 0.36, 1),
+    border-top-width 0.3s cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 0.2s ease-out;
+}
+
+.reveal-enter-from,
+.reveal-leave-to {
+  height: 0;
+  padding-block: 0;
+  border-top-width: 0;
+  opacity: 0;
+}
+
 /* The last-transcript line sits close to the recording. */
 .band-content.recording {
   gap: var(--space-3);
@@ -395,6 +412,8 @@ const optionsSummary = computed(() => {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .reveal-enter-active,
+  .reveal-leave-active,
   .band-summary,
   .band-toggle::before {
     transition: none;

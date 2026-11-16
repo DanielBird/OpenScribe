@@ -213,8 +213,6 @@ describe('SetupView', () => {
         'This computer',
         'Language',
       ]);
-      expect(wrapper!.text()).toContain('Slower. The recording stays on this computer.');
-      expect(wrapper!.get('fieldset').attributes('aria-describedby')).toBeTruthy();
       expect(wrapper!.get('.band-summary').text()).toBe('Language: English');
     });
 
