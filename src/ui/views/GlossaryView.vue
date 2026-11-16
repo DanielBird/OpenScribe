@@ -14,6 +14,7 @@ const nav = useNavStore();
 const job = useJobStore();
 const transcript = useTranscriptStore();
 const { confirm, dialog } = useConfirm();
+const local = computed(() => settings.transcriptionEngine === 'local');
 
 const missing = computed(() =>
   job.isActive
@@ -50,7 +51,11 @@ async function run(): Promise<void> {
     <!-- The step nav shows the title; this heading names the view and takes focus on step change. -->
     <h1 id="glossary-title" class="visually-hidden" tabindex="-1">Glossary</h1>
 
-    <GlossaryEditor />
+    <!-- Transcribing on this computer takes no terms, but translation still uses them (Phase 36). -->
+    <p v-if="local" class="hint">
+      Used when you translate. Transcribing on this computer doesn't use terms.
+    </p>
+    <GlossaryEditor :empty-hint="!local" />
 
     <StepFooter :missing="missing">
       <template #back>

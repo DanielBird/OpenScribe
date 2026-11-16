@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed, ref, useId } from 'vue';
+import { computed, onMounted, ref, useId } from 'vue';
 import { useNavStore } from '../../stores/nav';
 import { useSettingsStore } from '../../stores/settings';
+import { useSpeechPackStore } from '../../stores/speechPack';
 import FileDrop from '../components/FileDrop.vue';
 import LastTranscriptBanner from '../components/LastTranscriptBanner.vue';
 import StepFooter from '../components/StepFooter.vue';
@@ -16,13 +17,20 @@ const ids = {
   zeroRetention: `${id}-zero-retention`,
   zeroRetentionHelp: `${id}-zero-retention-help`,
   optionsPanel: `${id}-options-panel`,
+  engine: `${id}-engine`,
+  engineHelp: `${id}-engine-help`,
 };
+
+// Whether This computer is offered depends on the speech models (Phase 36, decision 2): ask Rust each time Setup opens.
+if (__DESKTOP__) onMounted(() => void useSpeechPackStore().refresh());
+const local = computed(() => settings.transcriptionEngine === 'local');
+const supports = computed(() => settings.transcription.supports);
 
 const optionsOpen = ref(false);
 // The keys are on Settings (D27); Setup only points there while the required one is missing.
 const keyMissing = computed(() => settings.keyRequired && settings.elevenLabsKey.trim() === '');
 
-const languages = [{ code: 'auto', label: 'Auto-detect' }, ...settings.languages];
+const languages = computed(() => [{ code: 'auto', label: 'Auto-detect' }, ...settings.languages]);
 
 // NaN (an entry that isn't a number) is left out so that re-rendering doesn't wipe what the user typed.
 const speakersValue = computed(() => {
@@ -39,9 +47,10 @@ function onSpeakersInput(event: Event): void {
 // Collapsed, Options says what it holds, so it needn't be opened to check.
 const optionsSummary = computed(() => {
   const language =
-    languages.find((lang) => lang.code === settings.languageHint)?.label ?? 'Auto-detect';
-  const parts = [`Language: ${language}`, `Speakers: ${speakersValue.value ?? 'Auto'}`];
-  if (settings.zeroRetention) parts.push('Zero retention');
+    languages.value.find((lang) => lang.code === settings.languageHint)?.label ?? 'Auto-detect';
+  const parts = [`Language: ${language}`];
+  if (supports.value.numSpeakers) parts.push(`Speakers: ${speakersValue.value ?? 'Auto'}`);
+  if (supports.value.zeroRetention && settings.zeroRetention) parts.push('Zero retention');
   return parts.join(' · ');
 });
 </script>
@@ -64,6 +73,41 @@ const optionsSummary = computed(() => {
             @remove="settings.clearFile"
           />
           <LastTranscriptBanner />
+        </div>
+      </section>
+
+      <section v-if="settings.localAvailable" class="band" aria-labelledby="setup-engine">
+        <h2 id="setup-engine">Transcribe with</h2>
+        <div class="band-content engine-content">
+          <fieldset
+            class="engine"
+            aria-labelledby="setup-engine"
+            :aria-describedby="local ? ids.engineHelp : undefined"
+          >
+            <label class="choice">
+              <input
+                type="radio"
+                :name="ids.engine"
+                value="elevenlabs"
+                :checked="!local"
+                @change="settings.setTranscriptionEngine('elevenlabs')"
+              />
+              ElevenLabs
+            </label>
+            <label class="choice">
+              <input
+                type="radio"
+                :name="ids.engine"
+                value="local"
+                :checked="local"
+                @change="settings.setTranscriptionEngine('local')"
+              />
+              This computer
+            </label>
+          </fieldset>
+          <p v-if="local" :id="ids.engineHelp" class="hint">
+            Slower. The recording stays on this computer.
+          </p>
         </div>
       </section>
 
@@ -99,7 +143,7 @@ const optionsSummary = computed(() => {
             </select>
           </div>
 
-          <div class="field">
+          <div v-if="supports.numSpeakers" class="field">
             <label :for="ids.speakers" class="label">Number of speakers</label>
             <input
               :id="ids.speakers"
@@ -107,7 +151,7 @@ const optionsSummary = computed(() => {
               type="number"
               inputmode="numeric"
               min="1"
-              max="32"
+              :max="settings.limits.maxSpeakers"
               step="1"
               placeholder="Auto"
               :value="speakersValue"
@@ -119,7 +163,7 @@ const optionsSummary = computed(() => {
             </p>
           </div>
 
-          <div class="field">
+          <div v-if="supports.zeroRetention" class="field">
             <label :for="ids.zeroRetention" class="label">Zero retention</label>
             <button
               :id="ids.zeroRetention"
@@ -197,6 +241,32 @@ const optionsSummary = computed(() => {
 
 .band:has(.band-toggle:hover) .band-summary {
   color: var(--color-text);
+}
+
+/* Where to transcribe: the two choices on one line, the hint close under them. */
+.engine-content {
+  gap: var(--space-2);
+}
+
+.engine {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-5);
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.choice {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  cursor: pointer;
+}
+
+.choice input {
+  margin: 0;
+  accent-color: var(--color-accent);
 }
 
 /* The last-transcript line sits close to the recording. */

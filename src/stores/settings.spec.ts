@@ -2,10 +2,12 @@ import { createPinia, setActivePinia } from 'pinia';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { setTranscriptionProviderForTests } from '../providers/index';
 import { createElevenLabsProvider } from '../providers/transcription/elevenlabs/provider';
-import type { LocalSttBridge } from '../providers/transcription/local/bridge';
+import type { LocalSttBridge, LocalSttStatus } from '../providers/transcription/local/bridge';
 import { createLocalProvider } from '../providers/transcription/local/provider';
 import type { KeyCheckResult } from '../providers/transcription/types';
+import { TEST_PACK } from '../testing/localBridge';
 import { useSettingsStore } from './settings';
+import { useSpeechPackStore } from './speechPack';
 
 const mocks = vi.hoisted(() => ({
   probeDuration:
@@ -672,13 +674,21 @@ describe('settings store', () => {
     });
   });
 
-  describe('the engine (DECISIONS.md D53)', () => {
+  describe('the engine (DECISIONS.md D53, Phase 36)', () => {
     const unusedBridge: LocalSttBridge = {
       status: () => Promise.reject(new Error('unused')),
       transcribe: () => Promise.reject(new Error('unused')),
       download: () => Promise.reject(new Error('unused')),
       removeModels: () => Promise.reject(new Error('unused')),
     };
+    const ready: LocalSttStatus = { state: 'ready', pack: TEST_PACK };
+
+    /** The desktop app, with the speech models in the given state. */
+    function desktop(status: LocalSttStatus | null = ready) {
+      vi.stubGlobal('__DESKTOP__', true);
+      useSpeechPackStore().status = status;
+      return useSettingsStore();
+    }
 
     beforeEach(() => setTranscriptionProviderForTests(createLocalProvider(unusedBridge), 'local'));
     afterEach(() => {
@@ -688,38 +698,100 @@ describe('settings store', () => {
 
     it('is ElevenLabs in the web build, whatever the saved pref says', () => {
       localStorage.setItem('describe.v1.prefs', JSON.stringify({ transcriptionEngine: 'local' }));
-      expect(useSettingsStore().transcriptionEngine).toBe('elevenlabs');
+      useSpeechPackStore().status = ready;
+      const settings = useSettingsStore();
+      expect(settings.localAvailable).toBe(false);
+      expect(settings.transcriptionEngine).toBe('elevenlabs');
     });
 
-    it('reads the pref in the desktop app, and falls back to ElevenLabs for a value it does not know', () => {
-      vi.stubGlobal('__DESKTOP__', true);
-      localStorage.setItem('describe.v1.prefs', JSON.stringify({ transcriptionEngine: 'local' }));
-      expect(useSettingsStore().transcriptionEngine).toBe('local');
+    it('offers this computer only with the models ready', () => {
+      for (const status of [
+        null,
+        { state: 'missing', pack: TEST_PACK },
+        { state: 'unusable', pack: TEST_PACK, reason: 'damaged' },
+        { state: 'downloading', pack: TEST_PACK, receivedBytes: 1, totalBytes: 2 },
+      ] satisfies (LocalSttStatus | null)[]) {
+        setActivePinia(createPinia());
+        expect(desktop(status).localAvailable).toBe(false);
+      }
       setActivePinia(createPinia());
+      expect(desktop().localAvailable).toBe(true);
+    });
+
+    it('starts on ElevenLabs, and saves the choice', () => {
+      const settings = desktop();
+      expect(settings.transcriptionEngine).toBe('elevenlabs');
+      settings.setTranscriptionEngine('local');
+      expect(settings.transcriptionEngine).toBe('local');
+      expect(storedPrefs()).toMatchObject({ transcriptionEngine: 'local' });
+      setActivePinia(createPinia());
+      expect(desktop().transcriptionEngine).toBe('local');
+    });
+
+    it('falls back to ElevenLabs while the models are gone, and keeps the choice for their return', () => {
+      const settings = desktop();
+      settings.setTranscriptionEngine('local');
+      const speechPack = useSpeechPackStore();
+      speechPack.status = { state: 'missing', pack: TEST_PACK };
+      expect(settings.transcriptionEngine).toBe('elevenlabs');
+      expect(storedPrefs()).toMatchObject({ transcriptionEngine: 'local' });
+      speechPack.status = ready;
+      expect(settings.transcriptionEngine).toBe('local');
+    });
+
+    it('reads an unknown saved engine as ElevenLabs', () => {
       localStorage.setItem('describe.v1.prefs', JSON.stringify({ transcriptionEngine: 'mars' }));
-      expect(useSettingsStore().transcriptionEngine).toBe('elevenlabs');
+      expect(desktop().transcriptionEngine).toBe('elevenlabs');
     });
 
     it('needs no ElevenLabs key on this computer', async () => {
+      desktop();
       const settings = await readyStore();
       settings.elevenLabsKey = '';
-      settings.transcriptionEngine = 'local';
+      settings.setTranscriptionEngine('local');
       expect(settings.keyRequired).toBe(false);
       expect(settings.missingRequirements).toEqual([]);
-      settings.transcriptionEngine = 'elevenlabs';
+      settings.setTranscriptionEngine('elevenlabs');
       expect(settings.missingRequirements).toEqual(['Add your ElevenLabs API key in Settings.']);
     });
 
+    it('ignores the number of speakers on this computer', async () => {
+      desktop();
+      const settings = await readyStore();
+      settings.numSpeakers = 40;
+      expect(settings.isReady).toBe(false);
+      settings.setTranscriptionEngine('local');
+      expect(settings.isReady).toBe(true);
+    });
+
     it('takes the pack’s languages and limits on this computer', () => {
-      const settings = useSettingsStore();
-      settings.transcriptionEngine = 'local';
+      const settings = desktop();
+      settings.setTranscriptionEngine('local');
       expect(settings.languages).toHaveLength(25);
       expect(settings.languages.map((l) => l.code)).toContain('uk');
       settings.file = new File(['x'], 'long.m4a', { type: 'audio/mp4' });
       settings.fileDurationSec = 11 * 3600; // past ElevenLabs' 10 hours
       expect(settings.fileCheck?.ok).toBe(true);
-      settings.transcriptionEngine = 'elevenlabs';
+      settings.setTranscriptionEngine('elevenlabs');
       expect(settings.fileCheck?.ok).toBe(false);
+    });
+
+    it('turns a language this computer lacks into Auto-detect', () => {
+      const settings = desktop();
+      settings.languageHint = 'ja';
+      settings.setTranscriptionEngine('local');
+      expect(settings.languageHint).toBe('auto');
+      settings.languageHint = 'de';
+      settings.setTranscriptionEngine('elevenlabs');
+      expect(settings.languageHint).toBe('de');
+    });
+
+    it('goes back to ElevenLabs when the preferences are reset', () => {
+      const settings = desktop();
+      settings.setTranscriptionEngine('local');
+      settings.resetPrefs();
+      expect(settings.transcriptionEngine).toBe('elevenlabs');
+      expect(storedPrefs()).toBeNull();
     });
 
     it('cleans up local transcripts unless told not to', () => {

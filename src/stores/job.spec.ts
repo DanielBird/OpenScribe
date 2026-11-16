@@ -15,7 +15,9 @@ import { useGlossaryStore } from './glossary';
 import { useJobStore } from './job';
 import { useNavStore } from './nav';
 import { usePlaybackStore } from './playback';
+import { TEST_PACK } from '../testing/localBridge';
 import { useSettingsStore } from './settings';
+import { useSpeechPackStore } from './speechPack';
 import { useTranscriptStore } from './transcript';
 
 vi.mock('../storage/idb', () => ({
@@ -449,14 +451,19 @@ describe('job store', () => {
         supports: { keyterms: false, zeroRetention: false, numSpeakers: false },
       });
       setTranscriptionProviderForTests(local.provider, 'local');
+      vi.stubGlobal('__DESKTOP__', true);
     });
 
-    afterEach(() => setTranscriptionProviderForTests(null, 'local'));
+    afterEach(() => {
+      setTranscriptionProviderForTests(null, 'local');
+      vi.unstubAllGlobals();
+    });
 
     function makeLocalReady() {
       const settings = makeReady();
       settings.elevenLabsKey = '';
-      settings.transcriptionEngine = 'local';
+      useSpeechPackStore().status = { state: 'ready', pack: TEST_PACK };
+      settings.setTranscriptionEngine('local');
       return settings;
     }
 

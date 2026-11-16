@@ -27,6 +27,7 @@ import type { KeyCheckResult } from '../providers/transcription/types';
 import { readJson, removeKey, writeJson } from '../storage/local';
 import * as secrets from '../storage/secrets';
 import { KEY_PROVIDERS, type KeyProvider } from '../storage/secrets';
+import { useSpeechPackStore } from './speechPack';
 
 export type { KeyProvider };
 
@@ -60,8 +61,8 @@ const PrefsSchema = z.object({
   /** The name saved with your chats (D29); empty for the one made up for this browser. */
   userName: z.string().catch(''),
   /**
-   * Where the desktop app transcribes (DECISIONS.md D53). No UI until Phase 36: set it from DevTools in a debug build.
-   * The web build always uses ElevenLabs.
+   * Where the desktop app transcribes, as chosen on Setup (DECISIONS.md D53, Phase 36). Used only while the speech
+   * models are ready; the web build always uses ElevenLabs.
    */
   transcriptionEngine: z.enum(['elevenlabs', 'local']).catch('elevenlabs'),
   /** Drop fillers and doubled words from a local transcript (the maintainer, 2026-11-15). No UI yet. */
@@ -107,10 +108,19 @@ const CHECK_FAILED: KeyCheckResult = {
 
 export const useSettingsStore = defineStore('settings', () => {
   const prefs = loadPrefs();
-  /** The engine that transcribes: always ElevenLabs in the web build. */
-  const transcriptionEngine = ref<TranscriptionProviderId>(
-    __DESKTOP__ ? prefs.transcriptionEngine : 'elevenlabs',
+  const speechPack = useSpeechPackStore();
+  /** Whether Setup offers This computer: the desktop app, with the speech models ready (Phase 36, decision 2). */
+  const localAvailable = computed(() => __DESKTOP__ && speechPack.status?.state === 'ready');
+  /** The engine chosen on Setup, kept while the models are gone, so downloading them again brings it back. */
+  const preferredEngine = ref<TranscriptionProviderId>(prefs.transcriptionEngine);
+  watch(preferredEngine, (engine) => savePrefs({ transcriptionEngine: engine }), { flush: 'sync' });
+  /** The engine that transcribes: ElevenLabs unless This computer is chosen and can run (decision 3). */
+  const transcriptionEngine = computed<TranscriptionProviderId>(() =>
+    localAvailable.value && preferredEngine.value === 'local' ? 'local' : 'elevenlabs',
   );
+  function setTranscriptionEngine(engine: TranscriptionProviderId): void {
+    preferredEngine.value = engine;
+  }
   const localTextCleanUp = ref(prefs.localTextCleanUp);
   const transcription = computed(() => getTranscriptionProvider(transcriptionEngine.value));
   const limits = computed(() => transcription.value.limits);
@@ -225,6 +235,16 @@ export const useSettingsStore = defineStore('settings', () => {
   const languageHint = ref<LanguageHint>(
     transcription.value.languages.includes(prefs.languageHint) ? prefs.languageHint : 'auto',
   );
+  // A language the engine now in use doesn't offer becomes Auto-detect, as one saved earlier does above (D37).
+  watch(
+    () => transcription.value.languages,
+    (offered) => {
+      if (languageHint.value !== 'auto' && !offered.includes(languageHint.value)) {
+        languageHint.value = 'auto';
+      }
+    },
+    { flush: 'sync' },
+  );
   const zeroRetention = ref(prefs.zeroRetention);
   watch(
     [languageHint, zeroRetention],
@@ -311,7 +331,7 @@ export const useSettingsStore = defineStore('settings', () => {
     agentToolBudget.value = defaults.agentToolBudget;
     agentReadingBudget.value = defaults.agentReadingBudget;
     userName.value = defaults.userName;
-    transcriptionEngine.value = __DESKTOP__ ? defaults.transcriptionEngine : 'elevenlabs';
+    preferredEngine.value = defaults.transcriptionEngine;
     localTextCleanUp.value = defaults.localTextCleanUp;
     // The watchers above have just saved the defaults (flush: 'sync'); remove them instead.
     removeKey('local', PREFS_KEY);
@@ -375,6 +395,7 @@ export const useSettingsStore = defineStore('settings', () => {
 
   const speakersValid = computed(() => {
     const n = numSpeakers.value;
+    if (!transcription.value.supports.numSpeakers) return true; // not asked for (Phase 33)
     return n === null || (Number.isInteger(n) && n >= 1 && n <= limits.value.maxSpeakers);
   });
 
@@ -408,6 +429,10 @@ export const useSettingsStore = defineStore('settings', () => {
     keyChecks,
     languages,
     transcriptionEngine,
+    localAvailable,
+    setTranscriptionEngine,
+    transcription,
+    limits,
     localTextCleanUp,
     keyRequired,
     languageHint,
