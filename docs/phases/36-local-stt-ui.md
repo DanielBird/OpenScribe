@@ -292,3 +292,45 @@ Tasks 1–5 and 7, and the Hugging Face parts of Tasks 8 and 9.
   - Task 12's docs;
   - L4, L5's screen reader, Cancel and Try again, L7, L10;
   - the Phase 34 e2e spec and axe.
+
+**Phase 36, the rest (2026-11-16).** Same branch, without waiting for the laptop (D55). DECISIONS **D56**.
+- **Decided with the maintainer:** with This computer, **Setup asks for the language** (no Auto-detect; Auto-detect
+  becomes English and comes back with ElevenLabs); **Timings ships**, closed.
+- **As built:**
+  - `supports.autoDetect` on both providers; the settings store moves the language when the engine changes, and
+    applies the rule when it opens on This computer.
+  - **Task 5:**
+    - the models' errors (missing, damaged, outdated) carry `fixIn: 'settings'`, and Output offers **Open Settings**
+      for them, with no Try again;
+    - "missing" now reads "The speech models aren't on this computer any more. Download them in Settings, or
+      transcribe with ElevenLabs.";
+    - the other texts are kept as Phase 34 drafted them.
+  - **Task 6:** `SPEECH_PACK_NAMES` in `domain/transcript.ts`. The header names an engine other than ElevenLabs
+    ("On this computer (NVIDIA Parakeet, Nemotron Diarization)"); ElevenLabs isn't named there, as before. An unknown
+    pack shows its id.
+  - **Task 3's wording:** "Slower." stays until the laptop's numbers (D55).
+  - **Task 10:**
+    - the User Guide gains *Transcribe on this computer (Windows app)*, a Privacy line, and three Troubleshooting
+      rows (a blocked download names `huggingface.co` and `us.aws.cdn.hf.co`);
+    - CHANGELOG [Unreleased] has the entry.
+  - **Task 11:** the description's feature line and *What's new in 1.3.0* are drafted in reference/desktop.md.
+  - **Task 12:** ROADMAP §2 and §3, future.md F2, TESTING (S and L rows for desktop releases), D56.
+- **Checks:** the agent's L5 (Cancel, Start again, Try again on a crash) and axe on the four changed desktop views over
+  CDP; L7 in e2e; L10 from the page. typecheck, lint, Vitest (2,005), build, `verify:single-file`, `cargo test` (69)
+  and `notices --check` pass.
+  - **E2E:** 157 pass with `--workers=6`. With the default 12 workers on a loaded PC, one Project or header test
+    timed out per run (a different one each time; each passes alone). The commit before Phase 36 fails the same
+    way, so it isn't this phase's.
+  - **`verify:single-file`'s marker for the pack list** is now a model's file name, not the pack id: both builds
+    name a local transcript's models from the id (Task 6).
+- **Not done here, for the maintainer:**
+  - L9 on the work laptop, then the speed wording (Setup's "Slower", the User Guide);
+  - L3 with the network off;
+  - L4 with real recordings;
+  - L5 with Narrator;
+  - L7 with a real local transcript;
+  - L10's capture of Rust's connections;
+  - publishing PRIVACY.md;
+  - the Store submission;
+  - Phase 35's open rows.
+- **For later:** whether the clean-up ran still isn't recorded in the doc (Phase 34's note).

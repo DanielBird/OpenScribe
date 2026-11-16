@@ -13,8 +13,10 @@ All notable changes to DeScribe are recorded here. The format follows
   **Change** in Analyse lists them too.
 - **Desktop app: transcribe on this computer.** After **Download speech models** in Settings (about 0.8 GB from
   Hugging Face), Setup asks whether to transcribe with **ElevenLabs** or **This computer**. On this computer the
-  recording isn't sent anywhere, and no ElevenLabs key is needed. Output shows how much of the recording is done, and
+  recording isn't sent anywhere, no ElevenLabs key is needed, and you choose the recording's language (25 European
+  languages). Output shows how much of the recording is done, and
   Settings shows how long the last one took.
+- **A transcript made on this computer names its models** in its details and its Word file, in the HTML file too.
 - **Desktop app launch:** the DeScribe mark appears at once, and the app then opens already maximised and drawn, with
   no blank window first.
 

@@ -168,6 +168,8 @@ Partner Center's exact wording with the next submission.
 | Certification notes | *The app needs the user's own API keys (ElevenLabs, and Claude or Gemini to translate).* From Phase 35, add the speech models' note below. |
 | Description (from Phase 35) | The draft below, at the start of the description (Policy 10.2.4). *Record the submitted wording.* |
 | Direct link | *The listing's URL, for the work laptop.* |
+| Description (from Phase 36) | After Phase 35's sentence, among the features: "Transcribe on your computer: with NVIDIA's speech models, the recording stays on your computer and no ElevenLabs key is needed. It's slower than ElevenLabs and works in 25 European languages." *Record the submitted wording.* |
+| What's new in 1.3.0 | "Transcribe on your computer, without ElevenLabs: download the speech models in Settings, then choose This computer on Setup." |
 | Phase 36's checkpoint | `release/DeScribe-v1.3.0-x64.msix` (2026-11-16): unsigned, 5.4 MB, version 1.3.0.0. It has Phases 34–35 and Phase 36's checkpoint: the choice on Setup, progress, the last run in Settings, and About's Hugging Face text. *Submit it with Phase 35's description and certification note, after publishing PRIVACY.md.* |
 
 ### The certification kit
@@ -317,13 +319,22 @@ and Remove ran without it, and the run with `fake-slow.json` in a second launch 
 | L1 | Before the models are downloaded: Setup has no choice, and Settings offers **Download speech models**. | **Pass (the agent, 2026-11-16):** Setup's bands Recording, API key, Options. | |
 | L2 | With the models downloaded: Setup offers the choice; ElevenLabs is chosen the first time; the choice survives a restart. | **Pass (the agent):** a group named "Transcribe with", ElevenLabs checked; This computer still checked after closing and reopening. | |
 | L3 | This computer with no ElevenLabs key saved: Setup doesn't ask for one, and the run works with the network off. | **Pass from the page (the agent):** no API key band, no Zero retention or Number of speakers, 26 languages; the fake run made requests only to the app and IPC. *The network off: the maintainer.* | |
-| L5 | Progress moves and reads sensibly with a screen reader; Cancel; Try again. | **Progress (the agent, fake engine):** "Transcribing… 00:00:02", a bar and "00:00:20 of 00:10:00"; the Glossary line shown. *A screen reader, Cancel and Try again: after the checkpoint.* | |
+| L4 | An English, a German and a French recording, each locally: language, speakers, playback from a turn, rename, edit, translate, **Download .docx**, **Add to project**. | *The maintainer, with the real models.* Setup now asks for the language with This computer, so each transcript has one (D56). | |
+| L5 | Progress moves and reads sensibly with a screen reader; Cancel; Try again. | **Pass (the agent, fake engine):** "Preparing…", then "Transcribing… 00:00:02", a bar and "00:00:20 of 00:10:00"; **Cancel** → "Transcription cancelled." and **Start again**, which ran again; a crash (`fake-crash.json`) → "Transcribing on this computer stopped unexpectedly. Try again." with Technical details, and **Try again** ran again. *A screen reader: the maintainer (Narrator).* | |
 | L6 | The models removed after choosing This computer: Setup falls back to ElevenLabs; Settings offers the download again. | **Pass (the agent):** after Remove, Setup's bands Recording, API key, Options; after a new download, This computer was chosen again. | |
-| L8 | About shows the Speech models part, says the models come from Hugging Face, and lists Hugging Face under Privacy and terms. The same before and after the download. | **Pass (the agent)** before and after. *Licences' read-through: after the checkpoint.* | |
+| L7 | A local transcript added to a project opens in the HTML file of the same release, on Output and in Analyse, and names its engine. | **Pass in e2e** (`localTranscript.e2e.ts`, seeded): Output's header and the `.docx` say "On this computer (NVIDIA Parakeet, Nemotron Diarization)"; the project session is read. *With a real local transcript: the maintainer.* | |
+| L8 | About shows the Speech models part, says the models come from Hugging Face, and lists Hugging Face under Privacy and terms. The same before and after the download. | **Pass (the agent)** before and after. Licences: the Speech models part names each model, its copyright and card, "NVIDIA's own file, unchanged", then the licence's full text. | |
 | L9 | The work laptop's real numbers. | | *The maintainer: [local-stt.md](local-stt.md#the-work-laptops-numbers-phase-36-l9).* |
+| L10 | During a local run, a debug build makes no request at all: none from the page, and none from Rust (a capture of the app's connections). | **The page (the agent, fake engine):** requests only to `tauri.localhost`, `ipc.localhost` and `blob:`. *Rust's side, with the real engine and a capture: the maintainer.* | |
 
-Also checked: after the fake run, Settings showed "Last recording: 00:10:00 of audio in 00:01:00." with its Timings;
-no console errors.
+Also checked:
+- after the fake run, Settings showed "Last recording: 00:10:00 of audio in 00:01:00." with its Timings;
+- Language had no Auto-detect with This computer, and showed English;
+- axe (WCAG 2.2 AA tags, as `a11y.e2e.ts`) on Setup and Glossary with This computer, Output while transcribing and
+  after a failure, and Settings with Timings open: no serious or critical violations once the pointer was moved away
+  and the page left still. Run straight after a click, axe caught the step nav and the header mid-change (contrast,
+  target size); neither is this phase's UI;
+- no console errors.
 
 ## Input for Phase 25
 

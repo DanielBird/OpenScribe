@@ -246,8 +246,9 @@ Where results go:
   no-go for projects on those laptops (PROJECTS.md §9 Q4).
 
 **The desktop app:** `npm run desktop:test` runs the Rust tests (`cargo test`). For each desktop release, also run E1–E9
-(transcribing on this computer) and W1–W15 in
-[reference/desktop.md](reference/desktop.md#checklist), on the maintainer's PC and on the work laptop.
+(transcribing on this computer), S1–S10 (the speech models' download, [reference/local-stt.md](reference/local-stt.md#the-download-as-built-phase-35)),
+L1–L10 (the choice on Setup, [reference/desktop.md](reference/desktop.md#transcribe-on-this-computer-the-choice-phase-36))
+and W1–W15 in [reference/desktop.md](reference/desktop.md#checklist), on the maintainer's PC and on the work laptop.
 
 ### Results for 1.0.0
 

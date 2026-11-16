@@ -1168,3 +1168,20 @@ summarise them.
     numbers (or *not run* with a reason), not for a result within the floor.
   - Phase 35's "if S1 fails on the laptop, stop before Phase 36" no longer stops Phase 36. A failed S1 still goes to
     the maintainer, with the file-install follow-up.
+
+### D56 — Setup's choice of engine, and a language on this computer (2026-11-16; Phase 36)
+- **Decision:**
+  - **Setup's options (D5) gain Transcribe with:** **ElevenLabs** or **This computer**, only in the desktop app
+    with the speech models *ready*. It is a band after Recording, because the API key band below depends on it.
+  - **The saved choice is kept apart from the engine in use:** while the models are missing, Setup uses ElevenLabs
+    without a message, and a new download brings This computer back.
+  - **With This computer, Setup asks for a language** (the maintainer, 2026-11-16): Language has no Auto-detect.
+    Parakeet detects the language but doesn't report it, so a transcript made on Auto-detect had none, and Add to
+    project translated even English (Phase 34). Auto-detect becomes English, and comes back when ElevenLabs is chosen
+    again, unless the language was changed in between. A provider says whether it reports what it detected
+    (`supports.autoDetect`).
+  - **What doesn't apply locally is hidden, not disabled:** the API key band, Number of speakers and Zero retention.
+  - **Settings' last run:** the line, and its **Timings** behind a closed disclosure. They ship (the maintainer,
+    2026-11-16): they cost nothing on screen and help when a colleague reports slowness.
+- **Why:** each thing in the user's terms (D13); a transcript that always knows its language.
+- **Consequences:** D37's "Auto-detect is first in the list" holds for ElevenLabs only.
