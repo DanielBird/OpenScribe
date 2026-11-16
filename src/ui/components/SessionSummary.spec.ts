@@ -1,4 +1,5 @@
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
+import { defineComponent, h } from 'vue';
 import { createPinia, setActivePinia } from 'pinia';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SessionText } from '../../domain/corpus/sessionText';
@@ -12,6 +13,8 @@ import { useTranscriptStore } from '../../stores/transcript';
 import { makeProjectSession, makeSessionText } from '../../testing/projectSessions';
 import { makeSummaryReply } from '../../testing/summary';
 import { makeDoc } from '../../testing/transcriptDoc';
+import { useOpenTranscript } from '../composables/useOpenTranscript';
+import ConfirmDialog from './ConfirmDialog.vue';
 import QuoteCard from './QuoteCard.vue';
 import SessionSummary from './SessionSummary.vue';
 
@@ -140,10 +143,15 @@ describe('SessionSummary', () => {
       ),
     ];
     project.corpus = [text];
-    wrapper = mount(SessionSummary, {
-      props: { sessionId: text.sessionId },
-      attachTo: document.body,
+    // With the confirmation that ProjectView shows for every Open.
+    const { openDialog } = useOpenTranscript();
+    const host = defineComponent({
+      setup: () => () => [
+        h(SessionSummary, { sessionId: text.sessionId }),
+        h(ConfirmDialog, openDialog.value),
+      ],
     });
+    wrapper = mount(host, { attachTo: document.body });
     return { project, text };
   }
 
@@ -236,6 +244,23 @@ describe('SessionSummary', () => {
     expect(cards[0]!.props('citation')).toBe(
       '"I put them on the charger by the bed" — Anna, 00:41:12, P07 – home visit, Hamburg (translated from German)',
     );
+    expect(cards.map((c) => c.props('at'))).toEqual([
+      { sessionId: 'session-7', turnId: 't2' },
+      { sessionId: 'session-7', turnId: 't3' },
+    ]);
+  });
+
+  it("opens a quote's turn on Output, in English", async () => {
+    show();
+    const transcript = useTranscriptStore();
+    const open = vi.spyOn(transcript, 'openFromProject').mockResolvedValue(undefined);
+    const showTurn = vi.spyOn(transcript, 'showTurn');
+    const goTo = vi.spyOn(useNavStore(), 'goTo').mockReturnValue(true);
+    await wrapper!.find('button[aria-label^="Open in transcript: I put them"]').trigger('click');
+    await flushPromises();
+    expect(open).toHaveBeenCalledWith('session-7');
+    expect(showTurn).toHaveBeenCalledWith('t2', true);
+    expect(goTo).toHaveBeenCalledWith('output');
   });
 
   it('names a Gemini model in the details', async () => {
@@ -265,6 +290,8 @@ describe('SessionSummary', () => {
     const cards = wrapper.findAllComponents(QuoteCard);
     expect(cards.map((c) => c.props('check'))).toEqual(['verified', 'not_found']);
     expect(cards[1]!.props('citation')).toBeNull();
+    // Still in its turn, which can be read to see what changed.
+    expect(cards[1]!.props('at')).toEqual({ sessionId: 'session-7', turnId: 't3' });
   });
 
   it('marks a saved quote whose left-out words could change it (D44)', () => {
@@ -433,6 +460,6 @@ describe('SessionSummary', () => {
   it('Sessions goes back (narrow windows)', async () => {
     show();
     await button('Sessions')!.trigger('click');
-    expect(wrapper!.emitted('back')).toHaveLength(1);
+    expect(wrapper!.getComponent(SessionSummary).emitted('back')).toHaveLength(1);
   });
 });

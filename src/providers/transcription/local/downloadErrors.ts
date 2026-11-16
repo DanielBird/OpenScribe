@@ -21,6 +21,11 @@ function message(kind: DownloadErrorKind, size: string): { kind: ProviderErrorKi
       return { kind: 'rate_limit', text: 'Hugging Face is busy. Try again in a few minutes.' };
     case 'disk':
       return { kind: 'validation', text: `Not enough disk space: the speech models need ${size}.` };
+    case 'write':
+      return {
+        kind: 'unknown',
+        text: "DeScribe couldn't save the speech models. Close other apps that might use them, and try again.",
+      };
     case 'mismatch':
       return { kind: 'bad_output', text: "The download didn't arrive intact. Try again." };
     case 'gone':

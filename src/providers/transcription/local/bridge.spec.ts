@@ -86,6 +86,7 @@ describe('the bridge', () => {
     await expect(run((p) => seen.push(p))).resolves.toEqual(RESULT);
     expect(invoke).toHaveBeenCalledWith('stt_start', {
       token: '0'.repeat(32),
+      runId: expect.stringMatching(/^[0-9a-f-]{36}$/),
       onProgress: { id: 1 },
     });
     expect(seen).toEqual([
@@ -123,9 +124,20 @@ describe('the bridge', () => {
     );
     const done = run(undefined, controller.signal);
     controller.abort();
-    expect(invoke).toHaveBeenCalledWith('stt_cancel', undefined);
+    // The cancel names the run, so Rust keeps one that arrives before the run has begun.
+    const runId = invoke.mock.calls.find(([command]) => command === 'stt_start')?.[1]?.runId;
+    expect(runId).toEqual(expect.any(String));
+    expect(invoke).toHaveBeenCalledWith('stt_cancel', { runId });
     finish(null);
     await expect(done).rejects.toBeInstanceOf(LocalSttError);
+  });
+
+  it('names each run apart', async () => {
+    invoke.mockResolvedValue(RESULT);
+    await run();
+    await run();
+    const ids = invoke.mock.calls.map(([, args]) => args?.runId);
+    expect(new Set(ids).size).toBe(2);
   });
 
   it('reads Rust’s errors, and makes anything else an engine failure', () => {
@@ -144,7 +156,7 @@ describe('the bridge', () => {
       signal = new AbortController().signal,
     ) => createTauriSttBridge().download({ signal, onProgress });
 
-    it('starts it with nothing but a channel, and passes progress on', async () => {
+    it('starts it with nothing but its id and a channel, and passes progress on', async () => {
       const seen: [number, number][] = [];
       invoke.mockImplementation(async (command) => {
         if (command !== 'stt_download') return null;
@@ -153,7 +165,10 @@ describe('the bridge', () => {
         return null;
       });
       await expect(download((r, t) => seen.push([r, t]))).resolves.toBeUndefined();
-      expect(invoke).toHaveBeenCalledWith('stt_download', { onProgress: { id: 1 } });
+      expect(invoke).toHaveBeenCalledWith('stt_download', {
+        downloadId: expect.stringMatching(/^[0-9a-f-]{36}$/),
+        onProgress: { id: 1 },
+      });
       expect(seen).toEqual([[4, 10]]);
     });
 
@@ -167,13 +182,25 @@ describe('the bridge', () => {
       );
       const done = download(undefined, controller.signal);
       controller.abort();
-      expect(invoke).toHaveBeenCalledWith('stt_download_cancel', undefined);
+      const downloadId = invoke.mock.calls.find(([command]) => command === 'stt_download')?.[1]
+        ?.downloadId;
+      expect(downloadId).toEqual(expect.any(String));
+      expect(invoke).toHaveBeenCalledWith('stt_download_cancel', { downloadId });
       fail({ kind: 'cancelled', detail: 'cancelled' });
       await expect(done).rejects.toMatchObject({ kind: 'cancelled' });
     });
 
     it('rejects with each failure Rust reports', async () => {
-      for (const kind of ['blocked', 'offline', 'busy', 'disk', 'mismatch', 'gone', 'in-use']) {
+      for (const kind of [
+        'blocked',
+        'offline',
+        'busy',
+        'disk',
+        'write',
+        'mismatch',
+        'gone',
+        'in-use',
+      ]) {
         invoke.mockRejectedValueOnce({ kind, detail: 'huggingface.co 403' });
         const error = await download().catch((e: unknown) => e);
         expect(error).toBeInstanceOf(SpeechPackError);

@@ -428,6 +428,29 @@ fn not_enough_disk_space_asks_nothing_of_the_network() {
 }
 
 #[test]
+fn a_file_that_cannot_be_written_is_not_a_full_disk() {
+  let server = good_server();
+  let root = TempDir::new("dl-write");
+  let def = served(&server, "1.0.0");
+  // A folder where the `.part` should go: opening it as a file is refused, as a file held by another app would be.
+  std::fs::create_dir_all(root.0.join(&def.id).join("words.gguf.part")).unwrap();
+  let error = run(&def, &root.0).0.unwrap_err();
+  assert_eq!(error.kind, DownloadErrorKind::Write, "{}", error.detail);
+  assert!(!error.detail.contains("full"), "{}", error.detail);
+  assert!(!error.detail.contains(&*root.0.to_string_lossy()), "{}", error.detail);
+}
+
+#[test]
+fn only_a_full_disk_is_disk() {
+  let root = Path::new("C:\\nowhere");
+  let kind_of = |code: i32| io_error(root, "writing", &std::io::Error::from_raw_os_error(code)).kind;
+  assert_eq!(kind_of(112), DownloadErrorKind::Disk); // ERROR_DISK_FULL
+  assert_eq!(kind_of(39), DownloadErrorKind::Disk); // ERROR_HANDLE_DISK_FULL
+  assert_eq!(kind_of(5), DownloadErrorKind::Write); // ERROR_ACCESS_DENIED
+  assert_eq!(kind_of(32), DownloadErrorKind::Write); // ERROR_SHARING_VIOLATION
+}
+
+#[test]
 fn a_verified_file_is_not_fetched_again() {
   let server = good_server();
   let root = TempDir::new("dl-skip");

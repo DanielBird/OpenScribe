@@ -1,5 +1,6 @@
 import { mount, type VueWrapper } from '@vue/test-utils';
-import { afterEach, describe, expect, it } from 'vitest';
+import { createPinia, setActivePinia } from 'pinia';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { parseAnswer } from '../../features/agent/answer';
 import { makeAgentCorpus } from '../../testing/agentCorpus';
 import AnswerBlocks from './AnswerBlocks.vue';
@@ -8,6 +9,10 @@ import QuoteCard from './QuoteCard.vue';
 describe('AnswerBlocks', () => {
   let wrapper: VueWrapper | null = null;
   const corpus = makeAgentCorpus();
+
+  beforeEach(() => {
+    setActivePinia(createPinia());
+  });
 
   afterEach(() => {
     wrapper?.unmount();
@@ -52,7 +57,10 @@ describe('AnswerBlocks', () => {
     expect(wrapper!.find('img').exists()).toBe(false);
   });
 
-  it('shows a verified quote in the transcript’s words, with its session and Copy', () => {
+  const labels = (card: Pick<VueWrapper, 'findAll'>) =>
+    card.findAll('button').map((b) => b.attributes('aria-label')?.split(':')[0]);
+
+  it('shows a verified quote in the transcript’s words, with its session, Copy and Open', () => {
     show('Mary said:\n<quote ref="s1/t2">i put them on the charger by the bed</quote>');
     const card = wrapper!.getComponent(QuoteCard);
     expect(card.props()).toMatchObject({
@@ -62,9 +70,10 @@ describe('AnswerBlocks', () => {
       start: 61,
       sessionTitle: 'P01 – kitchen interview, Leeds',
       translatedFrom: null,
+      at: { sessionId: 'session-1', turnId: 't2' },
     });
     expect(card.props('citation')).toContain('— Mary, 00:01:01, P01 – kitchen interview, Leeds');
-    expect(card.find('button').exists()).toBe(true);
+    expect(labels(card)).toEqual(['Copy quote', 'Open in transcript']);
   });
 
   it('says a translated quote is translated', () => {
@@ -72,7 +81,7 @@ describe('AnswerBlocks', () => {
     expect(wrapper!.getComponent(QuoteCard).props('translatedFrom')).toBe('deu');
   });
 
-  it('marks a quote that was not found, with its session when the ref is known', () => {
+  it('marks a quote that was not found, with its session and Open when the ref is known', () => {
     show(
       '<quote ref="s1/t2">I charge them at the office</quote>\n<quote ref="s9/t1">Invented</quote>',
     );
@@ -85,8 +94,10 @@ describe('AnswerBlocks', () => {
       citation: null,
     });
     expect(changed!.text()).toContain('Not found in the transcript');
-    expect(changed!.find('button').exists()).toBe(false);
+    expect(labels(changed!)).toEqual(['Open in transcript']);
     expect(unknown!.props('sessionTitle')).toBeNull();
+    expect(unknown!.props('at')).toBeNull();
+    expect(unknown!.find('button').exists()).toBe(false);
   });
 
   it('marks a quote whose left-out words could change it, in the model’s words, with no Copy', () => {
@@ -99,6 +110,6 @@ describe('AnswerBlocks', () => {
       citation: null,
     });
     expect(card.text()).toContain('Left-out words may change the meaning');
-    expect(card.find('button').exists()).toBe(false);
+    expect(labels(card)).toEqual(['Open in transcript']);
   });
 });

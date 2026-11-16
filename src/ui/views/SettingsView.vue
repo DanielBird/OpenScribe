@@ -187,7 +187,7 @@ async function clearSavedData(): Promise<void> {
             <h3>Getting API keys</h3>
             <ul class="list">
               <li>
-                ElevenLabs, to transcribe{{ desktop ? ' with ElevenLabs' : '' }}: create one on the
+                ElevenLabs, for cloud transcription: create one on the
                 <a
                   href="https://elevenlabs.io/app/settings/api-keys"
                   target="_blank"

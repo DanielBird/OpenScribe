@@ -1,6 +1,14 @@
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import IconCopied from '../icons/IconCopied.vue';
+import IconCopy from '../icons/IconCopy.vue';
 import QuoteCard from './QuoteCard.vue';
+
+const opener = vi.hoisted(() => ({
+  openTranscript: vi.fn(async (_sessionId: string, _at?: unknown): Promise<string | null> => null),
+  canOpen: vi.fn((_sessionId: string) => true),
+}));
+vi.mock('../composables/useOpenTranscript', () => ({ useOpenTranscript: () => opener }));
 
 const citation =
   '"I put them on the charger by the bed." — Anna, 00:41:12, P07 – home visit (translated from German)';
@@ -14,6 +22,9 @@ describe('QuoteCard', () => {
     writeText.mockReset();
     writeText.mockResolvedValue(undefined);
     vi.stubGlobal('navigator', { clipboard: { writeText } });
+    opener.openTranscript.mockClear();
+    opener.openTranscript.mockResolvedValue(null);
+    opener.canOpen.mockReturnValue(true);
   });
 
   afterEach(() => {
@@ -46,15 +57,20 @@ describe('QuoteCard', () => {
     );
   });
 
-  it('copies the quote with its citation, and says so for a moment', async () => {
+  it('copies the quote with its citation, and shows the copied icon for a moment', async () => {
     wrapper = verified();
-    await wrapper.get('button').trigger('click');
+    const button = wrapper.get('button');
+    expect(button.findComponent(IconCopy).exists()).toBe(true);
+    await button.trigger('click');
     await flushPromises();
     expect(writeText).toHaveBeenCalledWith(citation);
-    expect(wrapper.get('button').text()).toBe('Copied');
+    expect(button.findComponent(IconCopied).exists()).toBe(true);
+    expect(button.findComponent(IconCopy).exists()).toBe(false);
+    expect(button.classes()).toContain('copied');
     expect(wrapper.get('[aria-live]').text()).toBe('Copied with its citation.');
     await vi.advanceTimersByTimeAsync(1500);
-    expect(wrapper.get('button').text()).toBe('Copy');
+    expect(button.findComponent(IconCopy).exists()).toBe(true);
+    expect(button.classes()).not.toContain('copied');
   });
 
   it('shows the text selected for Ctrl+C when the clipboard refuses', async () => {
@@ -102,6 +118,61 @@ describe('QuoteCard', () => {
   it('names a short quote whole on its Copy button', () => {
     wrapper = verified({ text: 'Every night.' });
     expect(wrapper.get('button').attributes('aria-label')).toBe('Copy quote: Every night.');
+  });
+
+  describe('Open', () => {
+    const at = { sessionId: 'session-7', turnId: 't2' };
+    const open = () => wrapper!.get('button[aria-label^="Open in transcript"]');
+
+    it('is not offered when the turn is not known', () => {
+      wrapper = verified();
+      expect(wrapper.findAll('button')).toHaveLength(1);
+    });
+
+    it('comes after Copy, named by the quote', () => {
+      wrapper = verified({ at });
+      expect(wrapper.findAll('button').map((b) => b.attributes('aria-label'))).toEqual([
+        'Copy quote: I put them on the charger…',
+        'Open in transcript: I put them on the charger…',
+      ]);
+    });
+
+    it('opens the turn, in English when the quote is a translation', async () => {
+      wrapper = verified({ at });
+      await open().trigger('click');
+      expect(opener.openTranscript).toHaveBeenCalledWith('session-7', {
+        turnId: 't2',
+        english: true,
+      });
+      wrapper.unmount();
+      wrapper = verified({ at, translatedFrom: null });
+      await open().trigger('click');
+      expect(opener.openTranscript).toHaveBeenLastCalledWith('session-7', {
+        turnId: 't2',
+        english: false,
+      });
+    });
+
+    it('is offered on a flagged quote too, so it can be checked', () => {
+      wrapper = verified({ at, check: 'not_found', citation: null });
+      expect(wrapper.get('.flag').text()).toBe('Not found in the transcript');
+      expect(wrapper.findAll('button')).toHaveLength(1);
+      expect(open().attributes('aria-label')).toMatch(/^Open in transcript/);
+    });
+
+    it('waits while the session is being worked on', () => {
+      opener.canOpen.mockReturnValue(false);
+      wrapper = verified({ at });
+      expect(open().attributes('disabled')).toBeDefined();
+    });
+
+    it("says why it couldn't open", async () => {
+      opener.openTranscript.mockResolvedValue('This file is only in OneDrive.');
+      wrapper = verified({ at });
+      await open().trigger('click');
+      await flushPromises();
+      expect(wrapper.get('[role="alert"]').text()).toBe('This file is only in OneDrive.');
+    });
   });
 
   it('names the session when asked to (chat answers)', () => {

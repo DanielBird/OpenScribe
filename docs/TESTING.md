@@ -28,6 +28,19 @@ The e2e specs in `tests/e2e/`:
 | `keyboard` | The whole flow with the keyboard only, with a visible focus indicator at every Tab stop, and focus returning to dialog triggers and moving to the view heading on a step or mode change. Home's two buttons and **Home**. Analyse: open, the Brief, the model (the arrow keys across its Claude and Gemini groups), **Search** under the chat's box (focus moves into its box), Copy and Change; the sessions list (one Tab stop, arrow keys, Enter), a summary, Summarise all and Open transcript. Add to project: the dialog (Escape returns focus), and focus kept in the actions row while it works and after. The chat: Enter and Shift+Enter, **Stop** (focus stays on it as it turns back into **Send**), the details, **Copy**, and Escape from a summary back to the question box. |
 | `robustness` | A 50 ms recording, silence, one speaker, 32 speakers, a long unicode file name, blocked `localStorage`/`sessionStorage`, IndexedDB full, offline (ElevenLabs and Claude). |
 
+**A known intermittent failure (recorded 19 November 2026).** A full `npm run test:e2e` sometimes fails one test:
+`a11y` › *Project: every state, search results and the Brief dialog*.
+
+- **What happens:** it goes over Playwright's 30-second test timeout. The other 157 tests pass.
+- **On 19 November:** it took 10.5 s run alone, but failed in all three full runs that day.
+  - Two runs were with the BUG-2 fix (AUDIT-2026-11-19). They timed out in `expectAccessible`'s wait for animations
+    to stop, with the Brief dialog open.
+  - One run was at `7466a65`, without the fix. It timed out later in the test, at Reconnect.
+- **Likely cause:** it is the longest test (an 8-hour corpus and a dozen axe checks), so it probably runs out of
+  time while the other workers load the machine, rather than hanging on one step. This hasn't been diagnosed.
+- **What to do:** run it alone to check it passes:
+  `npx playwright test tests/e2e/a11y.e2e.ts --project=chromium -g "Project: every state"`.
+
 **The project folder in e2e specs** (`tests/e2e/projectFolder.ts`, re-exported by `helpers.ts`):
 `useProjectFolder(page, { '<folder name>': files }, { permission })` replaces `showDirectoryPicker` with in-memory
 handles. The files live in the spec's Node process: `files(name)` returns what the app wrote, `put()` and `remove()`
@@ -245,7 +258,10 @@ Where results go:
   [reference/file-system-access.md](reference/file-system-access.md). A policy that blocks folder access is a
   no-go for projects on those laptops (PROJECTS.md §9 Q4).
 
-**The desktop app:** `npm run desktop:test` runs the Rust tests (`cargo test`). For each desktop release, also run E1–E9
+**The desktop app:** `npm run desktop:test` runs the Rust tests (`cargo test`). One test is opt-in, since it needs the
+real engine and models (`npm run desktop:stt-runtime`, `npm run desktop:fetch-models`): `cd src-tauri; cargo test --lib
+-- --ignored model_paths_with_non_ascii` loads both models from a folder named with ø and ü. Run it after any change to
+the engine. For each desktop release, also run E1–E9
 (transcribing on this computer), S1–S10 (the speech models' download, [reference/local-stt.md](reference/local-stt.md#the-download-as-built-phase-35)),
 L1–L10 (the choice on Setup, [reference/desktop.md](reference/desktop.md#transcribe-on-this-computer-the-choice-phase-36))
 and W1–W15 in [reference/desktop.md](reference/desktop.md#checklist), on the maintainer's PC and on the work laptop.

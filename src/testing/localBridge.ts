@@ -26,6 +26,10 @@ export interface FakeBridge extends LocalSttBridge {
   removeFails: SpeechPackError | null;
   /** Whether a download is waiting to be finished. */
   readonly downloading: boolean;
+  /** Makes `status()` wait until `release()`: the start, while Rust hashes the models. */
+  hold(): void;
+  /** Answers the waiting `status()` calls with `next`, or fails them with `error`. */
+  release(error?: Error): void;
 }
 
 /** A bridge whose download waits until the test calls `finish()` (or the signal aborts). */
@@ -34,6 +38,7 @@ export function fakeLocalBridge(
 ): FakeBridge {
   let onProgress: ((r: number, t: number) => void) | null = null;
   let settle: ((error?: SpeechPackError) => void) | null = null;
+  let waiting: ((error?: Error) => void)[] | null = null;
   const bridge: FakeBridge = {
     next: status,
     calls: [],
@@ -43,7 +48,11 @@ export function fakeLocalBridge(
     },
     status() {
       bridge.calls.push('status');
-      return Promise.resolve(bridge.next);
+      const queue = waiting;
+      if (!queue) return Promise.resolve(bridge.next);
+      return new Promise<LocalSttStatus>((resolve, reject) => {
+        queue.push((error) => (error ? reject(error) : resolve(bridge.next)));
+      });
     },
     transcribe() {
       return Promise.reject(new Error('not used here'));
@@ -74,6 +83,14 @@ export function fakeLocalBridge(
     },
     finish(error) {
       settle?.(error);
+    },
+    hold() {
+      waiting ??= [];
+    },
+    release(error) {
+      const queue = waiting ?? [];
+      waiting = null;
+      for (const answer of queue) answer(error);
     },
   };
   return bridge;

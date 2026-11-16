@@ -203,8 +203,9 @@ your search is kept.
 | `night OR evening` | either word |
 | `charger -phone` | *charger* but not *phone* |
 
-Each hit has **Copy**, which copies the whole turn (in English, if it was translated) with the speaker, the time and
-the recording's name. **Esc** clears the box.
+Each hit has a copy button, which copies the whole turn (in English, if it was translated) with the speaker, the time and
+the recording's name. The open button beside it opens the transcript on the Output step at that turn. **Esc** clears
+the box.
 
 **Working offline:** in File Explorer, right-click the project folder and choose **Always keep on this device**.
 
@@ -235,10 +236,12 @@ back to the DeScribe window.
 In Analyse mode, click a session (or move with the arrow keys and press Enter). The summary shows a short synopsis,
 an overview, the respondents and their details, what the session says about each research question, and the themes.
 Each finding and theme has up to two quotes that support it.
-- Each quote shows the transcript's own words. **Copy** copies it with its citation, for example `"…" — Anna,
+- Each quote shows the transcript's own words. Its copy button copies it with its citation, for example `"…" — Anna,
   00:41:12, P07 – home visit, Hamburg (translated from German)`.
 - A quote that no longer matches the transcript (because the text was edited) is marked **Not found** and can't be
   copied.
+- The open button beside a quote opens the transcript on the Output step at the quote's turn, in English if the quote
+  is a translation. Marked quotes have it too, so you can read what was said.
 - **Open transcript** opens the session on the Output step, linked to the project. Attach the recording to listen.
 - Summaries are written in English and can't be edited. To change one, correct the transcript, the speaker names or
   the brief, then make it again.
@@ -260,9 +263,10 @@ transcripts with several words and spellings, in English and in the original lan
 what it finds, and uses the summaries for an overview. Then it answers in English.
 - **What it did:** under each answer, a line like *6 searches · 5 reads · ≈ $0.40* opens to every search and read.
 - **Quotes** are checked against the transcript. A checked quote shows the transcript's own words, the speaker, the
-  time and the session. **Copy** copies it with its citation. A quote marked **Not found in the transcript** isn't in the words of the turn the model pointed to, so it
+  time and the session. Its copy button copies it with its citation. A quote marked **Not found in the transcript** isn't in the words of the turn the model pointed to, so it
   can't be copied: treat it with care. One marked **Left-out words may change the meaning** is there, but with words
-  left out that could reverse it, such as a "not": check the transcript before you use it.
+  left out that could reverse it, such as a "not": check the transcript before you use it. The open button beside a
+  quote shows its turn on the Output step.
 - **Costs and limits:** the line under an answer gives its approximate cost, usually well under a dollar with Sonnet
   5.5. For each question the model reads at most about 20 hours of transcript and about 30 summaries, and makes at
   most 30 searches or reads, then answers from what it has. An answer that hit a limit says so.

@@ -119,11 +119,25 @@ test('Add to project on a new transcript: saved, translated, summarised, and its
   await sessions(page).first().click();
   await expect(page.getByRole('heading', { level: 2, name: summary.summary.title })).toBeFocused();
   const firstQuote = page.locator('.quote-card').first();
+  // Copy and Open show only on the card pointed at.
+  await page.mouse.move(0, 0);
+  await expect(firstQuote.locator('.actions')).toHaveCSS('opacity', '0');
+  await firstQuote.hover();
+  await expect(firstQuote.locator('.actions')).toHaveCSS('opacity', '1');
   await firstQuote.getByRole('button', { name: /^Copy/ }).click();
   const copied = await page.evaluate(() => navigator.clipboard.readText());
   expect(copied).toMatch(
     /^"English t\d\.?" — Speaker \d, 00:00:\d\d, .+ \(translated from German\)$/,
   );
+
+  // Open: back on Output, at the quote's turn, in English.
+  const words = (await firstQuote.locator('blockquote').innerText()).replace(/[“”]/g, '');
+  await firstQuote.getByRole('button', { name: /^Open in transcript/ }).click();
+  await expect(page.getByRole('heading', { level: 1, name: 'Output' })).toBeAttached();
+  const turn = page.locator('li.turn.is-revealed');
+  await expect(turn).toBeFocused();
+  await expect(turn).toBeInViewport();
+  await expect(turn.locator('.text')).toHaveText(words);
 });
 
 test('Summarise in Analyse mode translates a German session in its file, then summarises it', async ({

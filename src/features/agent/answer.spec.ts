@@ -75,6 +75,7 @@ describe('parseAnswer', () => {
       kind: 'quote',
       ref: 's1/t2',
       sessionId: 'session-1',
+      turnId: 't2',
       modelText: 'i put them on the CHARGER by the bed',
       check: { status: 'verified', sourceText: 'I put them on the charger by the bed' },
       citation: {
@@ -85,6 +86,14 @@ describe('parseAnswer', () => {
         translatedFrom: null,
       },
     });
+  });
+
+  it('knows the quoted turn only when the ref names one that exists', () => {
+    const [wrongTurn, wrongSession] = parse(
+      ['<quote ref="s1/t99">Anything</quote>', '<quote ref="s9/t1">Invented</quote>'].join('\n'),
+    );
+    expect(wrongTurn).toMatchObject({ sessionId: 'session-1', turnId: null });
+    expect(wrongSession).toMatchObject({ sessionId: null, turnId: null });
   });
 
   it('checks a quote from a translated session against its translation, with omissions', () => {

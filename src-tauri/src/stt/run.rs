@@ -46,9 +46,42 @@ impl<W: Write> Emitter<W> {
   }
 }
 
+/// The worker's exit code when the app has gone.
+const APP_GONE: i32 = 3;
+
+/// The worker's stdout, a pipe to the app. A write that fails means the app has gone (closed, crashed, or it has let
+/// go of this run), so the worker calls `gone` at once rather than transcribe for no one. Normally the job object has
+/// ended the worker before that (`worker.rs`). Noticed at the next event: about every 500 ms while decoding, later
+/// during a model's load or the speakers model's final flush.
+pub struct ToApp<W: Write> {
+  out: W,
+  gone: fn(),
+}
+
+impl<W: Write> ToApp<W> {
+  fn checked<T>(&self, result: std::io::Result<T>) -> std::io::Result<T> {
+    if result.is_err() {
+      (self.gone)();
+    }
+    result
+  }
+}
+
+impl<W: Write> Write for ToApp<W> {
+  fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+    let result = self.out.write(buf);
+    self.checked(result)
+  }
+
+  fn flush(&mut self) -> std::io::Result<()> {
+    let result = self.out.flush();
+    self.checked(result)
+  }
+}
+
 /// The worker's entry point. Returns the process's exit code.
 pub fn main() -> i32 {
-  let mut emitter = Emitter(std::io::stdout().lock());
+  let mut emitter = Emitter(ToApp { out: std::io::stdout().lock(), gone: || std::process::exit(APP_GONE) });
   // From the app, on stdin. For timing runs by hand (pinrun doesn't pass stdin on): `--stt-worker --job <file>`.
   let mut line = String::new();
   let read = match std::env::args().skip_while(|a| a != "--job").nth(1) {
@@ -117,8 +150,9 @@ fn transcribe<W: Write>(job: &Job, emitter: &mut Emitter<W>) -> Result<WorkerRes
   })
 }
 
-/// Turns the threads' messages into events, and their results into the worker's. Returns at the first failure: the
-/// process then exits, which stops the other threads.
+/// Turns the threads' messages into events, and their results into the worker's. Returns at the first failure, but
+/// `transcribe`'s scope still waits for the other threads to work through their queues, so the app ends the worker
+/// as soon as it reads `Failed` (`worker.rs`).
 fn collect<W: Write>(
   messages: Receiver<Msg>,
   emitter: &mut Emitter<W>,
@@ -290,5 +324,84 @@ fn speakers_thread(api: &Api, model: &std::path::Path, input: Receiver<Block>, t
     Err(error) => {
       let _ = tx.send(engine_failure(&error));
     }
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+  use std::sync::atomic::{AtomicUsize, Ordering};
+
+  /// A pipe whose reader has gone.
+  struct Broken;
+
+  impl Write for Broken {
+    fn write(&mut self, _buf: &[u8]) -> std::io::Result<usize> {
+      Err(std::io::ErrorKind::BrokenPipe.into())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+      Err(std::io::ErrorKind::BrokenPipe.into())
+    }
+  }
+
+  static GONE: AtomicUsize = AtomicUsize::new(0);
+
+  #[test]
+  fn the_worker_notices_when_the_app_has_gone() {
+    let mut emitter = Emitter(ToApp { out: Vec::new(), gone: || panic!("the app is still there") });
+    emitter.emit(&Event::Progress { done_sec: 1.0 });
+    assert!(!emitter.0.out.is_empty());
+
+    let mut emitter = Emitter(ToApp { out: Broken, gone: || _ = GONE.fetch_add(1, Ordering::SeqCst) });
+    emitter.emit(&Event::Progress { done_sec: 1.0 });
+    assert!(GONE.load(Ordering::SeqCst) >= 1);
+  }
+
+  /// Removes the scratch folder, even when the test panics.
+  struct Scratch(std::path::PathBuf);
+
+  impl Drop for Scratch {
+    fn drop(&mut self) {
+      let _ = std::fs::remove_dir_all(&self.0);
+    }
+  }
+
+  /// Audit DES-1: a Windows user name such as "Søren Müller" puts non-ASCII letters in the models' paths. The engine
+  /// opens them with `ggml_fopen` (UTF-8, then `_wfopen`), so they must load. Run on a PC whose ANSI code page isn't
+  /// UTF-8, or a narrow open would pass here too. Needs the real engine and models, so it's opt-in:
+  /// `cargo test -- --ignored model_paths_with_non_ascii`.
+  #[test]
+  #[ignore = "needs src-tauri/stt-runtime and .speech-pack: npm run desktop:stt-runtime, npm run desktop:fetch-models"]
+  fn model_paths_with_non_ascii_letters_load() {
+    use super::super::pack::{self, Role};
+    let here = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let runtime_dir = here.join("stt-runtime");
+    let def = pack::compiled();
+    let pack_dir = here.join("..").join(".speech-pack").join(&def.id);
+    assert!(runtime_dir.join("nemo_speech_asr_c.dll").is_file(), "no engine: run npm run desktop:stt-runtime");
+
+    let scratch = Scratch(std::env::temp_dir().join(format!("describe-Søren-Müller-æøå-{}", std::process::id())));
+    std::fs::create_dir_all(&scratch.0).unwrap();
+    let place = |role: Role| {
+      let file = &def.model(role).expect("the pack names both models").file;
+      let from = pack_dir.join(file);
+      assert!(from.is_file(), "no {file}: run npm run desktop:fetch-models");
+      let to = scratch.0.join(file);
+      if std::fs::hard_link(&from, &to).is_err() {
+        std::fs::copy(&from, &to).unwrap();
+      }
+      to
+    };
+    let words_model = place(Role::Words);
+    let speakers_model = place(Role::Speakers);
+    let recording = scratch.0.join("opptak-ø.wav");
+    std::fs::copy(here.join("..").join("fixtures").join("audio").join("tone-5s.wav"), &recording).unwrap();
+    assert!(!words_model.to_string_lossy().is_ascii());
+
+    let job = Job { recording, runtime_dir, words_model, speakers_model, fake: None };
+    let result = transcribe(&job, &mut Emitter(Vec::new()));
+    assert!(result.is_ok(), "{:?}", result.err().map(|(kind, detail)| (kind, clean(&detail, &job))));
+    assert_eq!(result.unwrap().duration_sec.round(), 5.0);
   }
 }

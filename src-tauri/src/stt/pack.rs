@@ -12,7 +12,7 @@
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::io::Read;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 use std::sync::OnceLock;
 use std::time::UNIX_EPOCH;
 
@@ -103,8 +103,12 @@ fn test_list() -> Option<PackDef> {
   }
   let path = std::env::var_os("DESCRIBE_SPEECH_PACK_TEST_LIST").filter(|v| !v.is_empty())?;
   let text = std::fs::read_to_string(&path).ok()?;
-  match serde_json::from_str(&text) {
-    Ok(def) => Some(def),
+  match serde_json::from_str::<PackDef>(&text) {
+    Ok(def) if is_plain_name(&def.id) && def.models.iter().all(|m| is_plain_name(&m.file)) => Some(def),
+    Ok(_) => {
+      eprintln!("DESCRIBE_SPEECH_PACK_TEST_LIST has an id or file that isn't a plain name; using the compiled list");
+      None
+    }
     Err(e) => {
       eprintln!("DESCRIBE_SPEECH_PACK_TEST_LIST is unreadable ({e}); using the compiled list");
       None
@@ -394,14 +398,22 @@ pub(crate) fn delete(path: &Path) -> std::io::Result<()> {
   }
 }
 
+/// Whether `name` is one plain file name, so joining it onto a folder stays in that folder: not empty, `.` or `..`,
+/// and with no drive, root or separator.
+fn is_plain_name(name: &str) -> bool {
+  let mut parts = Path::new(name).components();
+  matches!((parts.next(), parts.next()), (Some(Component::Normal(part)), None) if part == name)
+}
+
 fn is_part(path: &Path) -> bool {
   path.is_file() && path.file_name().and_then(|n| n.to_str()).is_some_and(|n| n.ends_with(PART))
 }
 
 /// Empties a folder the app made: the files `names` lists, their `.part`s, every other `.part`, and the receipt. The
-/// folder goes too if nothing else is in it.
+/// folder goes too if nothing else is in it. A name that isn't a plain file name (an edited or damaged receipt) is
+/// skipped, so nothing outside `dir` is deleted.
 fn empty_pack_dir(dir: &Path, names: &[String]) -> std::io::Result<()> {
-  for name in names {
+  for name in names.iter().filter(|n| is_plain_name(n)) {
     delete(&dir.join(name))?;
     delete(&dir.join(format!("{name}{PART}")))?;
   }
@@ -532,10 +544,11 @@ pub mod tests {
   #[test]
   fn the_builds_pack_is_valid_and_every_url_pinned() {
     let def = &compiled();
-    assert!(!def.id.is_empty() && !def.version.is_empty());
+    assert!(is_plain_name(&def.id) && !def.version.is_empty());
     assert!(def.model(Role::Words).is_some() && def.model(Role::Speakers).is_some());
     assert_eq!(def.models.len(), 2);
     for m in &def.models {
+      assert!(is_plain_name(&m.file), "not a plain file name: {}", m.file);
       assert!(is_pinned(&m.url, &m.file), "not pinned: {}", m.url);
       assert_eq!(m.sha256.len(), 64);
       assert!(m.bytes > 0);
@@ -695,6 +708,59 @@ pub mod tests {
     assert!(!old.exists(), "another version's folder goes");
     assert!(stranger.join("b.gguf").exists(), "a folder without a receipt isn't touched");
     assert_eq!(check(&root.0, &def), PackState::Missing);
+  }
+
+  #[test]
+  fn only_one_plain_file_name_counts_as_plain() {
+    for ok in ["words.gguf", "a", "with space.gguf", "..gguf", "words.gguf.part"] {
+      assert!(is_plain_name(ok), "{ok:?} should be plain");
+    }
+    for bad in ["", ".", "..", "../x", "..\\x", "sub/x", "x/", "/x", "\\x", "C:x", "C:\\x", "./x"] {
+      if bad.contains('\\') && !cfg!(windows) {
+        continue; // A backslash is an ordinary character elsewhere.
+      }
+      assert!(!is_plain_name(bad), "{bad:?} shouldn't be plain");
+    }
+  }
+
+  #[test]
+  fn a_receipt_cannot_name_a_file_outside_its_folder() {
+    let def = test_def("1.0.0");
+    let parent = TempDir::new("pack-escape");
+    let root = parent.0.join("speech-pack");
+    let outside = parent.0.join("outside.txt");
+    std::fs::create_dir_all(&root).unwrap();
+    std::fs::write(&outside, b"not ours").unwrap();
+    std::fs::write(root.join("beside.txt"), b"not ours either").unwrap();
+    let names = [
+      outside.to_string_lossy().into_owned(),
+      "../../outside.txt".into(),
+      "..\\..\\outside.txt".into(),
+      "../beside.txt".into(),
+      "\\outside.txt".into(),
+      "sub/x".into(),
+      String::new(),
+      "..".into(),
+    ];
+    let files: Vec<_> = names
+      .iter()
+      .map(|f| serde_json::json!({ "file": f, "bytes": 1, "modifiedMs": 0, "sha256": "x" }))
+      .collect();
+    let receipt = |id: &str| serde_json::json!({ "packId": id, "version": "0.1.0", "files": files }).to_string();
+    // This pack's folder, under an older version's receipt, and another pack's folder.
+    let dir = install(&root, &def);
+    std::fs::write(dir.join("receipt.json"), receipt(&def.id)).unwrap();
+    let old = root.join("old-pack");
+    std::fs::create_dir_all(old.join("sub")).unwrap();
+    std::fs::write(old.join("sub").join("x"), b"x").unwrap();
+    std::fs::write(old.join("receipt.json"), receipt("old-pack")).unwrap();
+
+    remove(&root, &def).unwrap();
+    assert!(outside.exists(), "a file outside the speech pack is left");
+    assert!(root.join("beside.txt").exists(), "a file beside the packs' folders is left");
+    assert!(old.join("sub").join("x").exists(), "a file in a subfolder isn't named by a plain name");
+    assert!(!dir.join("words.gguf").exists() && !dir.join("receipt.json").exists());
+    assert!(!old.join("receipt.json").exists());
   }
 
   #[test]

@@ -15,6 +15,9 @@ describe('download failures', () => {
     expect(byKind('offline')).toContain("Couldn't reach huggingface.co");
     expect(byKind('busy')).toBe('Hugging Face is busy. Try again in a few minutes.');
     expect(byKind('disk')).toBe('Not enough disk space: the speech models need 0.8 GB.');
+    expect(byKind('write')).toBe(
+      "DeScribe couldn't save the speech models. Close other apps that might use them, and try again.",
+    );
     expect(byKind('mismatch')).toBe("The download didn't arrive intact. Try again.");
     expect(byKind('gone')).toContain('Update DeScribe.');
   });
@@ -33,7 +36,7 @@ describe('download failures', () => {
     expect(toRemoveProviderError(new SpeechPackError('in-use', 'x')).userMessage).toBe(
       'Wait for the transcription to finish, then try again.',
     );
-    expect(toRemoveProviderError(new SpeechPackError('disk', 'x')).userMessage).toContain(
+    expect(toRemoveProviderError(new SpeechPackError('write', 'x')).userMessage).toContain(
       "couldn't remove",
     );
   });

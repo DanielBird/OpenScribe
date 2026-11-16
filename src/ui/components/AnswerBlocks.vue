@@ -11,6 +11,14 @@ defineProps<{
   /** The chat's corpus, for the session title of a quote that wasn't verified. */
   corpus: CorpusReader | null;
 }>();
+
+type QuoteBlock = Extract<AnswerBlock, { kind: 'quote' }>;
+
+/** Where **Open** goes: the quote's turn, flagged or not, when the ref names one. */
+const at = (block: QuoteBlock) =>
+  block.sessionId !== null && block.turnId !== null
+    ? { sessionId: block.sessionId, turnId: block.turnId }
+    : null;
 </script>
 
 <template>
@@ -48,6 +56,7 @@ defineProps<{
         :translated-from="block.citation.translatedFrom"
         :session-title="block.citation.sessionTitle"
         :citation="formatCitation(block.citation)"
+        :at="at(block)"
       />
       <QuoteCard
         v-else
@@ -57,6 +66,7 @@ defineProps<{
         :start="null"
         :session-title="block.sessionId ? (corpus?.byId(block.sessionId)?.title ?? null) : null"
         :citation="null"
+        :at="at(block)"
       />
     </template>
   </div>

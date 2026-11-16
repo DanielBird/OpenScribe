@@ -188,7 +188,16 @@ test('Project works from the keyboard: open, the Brief, the model, search, Copy,
   const copy = page.locator('li.hit').last().getByRole('button', { name: /^Copy/ });
   await tabTo(page, copy, { backwards: true });
   await page.keyboard.press('Enter');
-  await expect(copy).toHaveText('Copied');
+  await expect(copy).toHaveClass(/\bcopied\b/);
+  // Open comes next. With focus on them, the buttons show without pointing at the hit.
+  await page.keyboard.press('Tab');
+  await expect(
+    page
+      .locator('li.hit')
+      .last()
+      .getByRole('button', { name: /^Open in transcript/ }),
+  ).toBeFocused();
+  await expect(page.locator('li.hit').last().locator('.actions')).toHaveCSS('opacity', '1');
   await tabTo(page, box);
   await page.keyboard.press('Escape');
   await expect(page.locator('li.result')).toHaveCount(0);

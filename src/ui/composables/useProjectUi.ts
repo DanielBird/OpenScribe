@@ -3,7 +3,8 @@ import { reactive } from 'vue';
 /**
  * What the Project header and the Project view share: the Brief dialog, opened from the header, after New project
  * or from the Add to project dialog; the chooser that **Change** shows in place of the panes; the session whose
- * summary is shown; the sidebar's tab, Sessions or Chats; and the chat pane's mode, Chat or Search. View state only;
+ * summary is shown; the sidebar's tab, Sessions or Chats; the chat pane's mode, Chat or Search; and what Search
+ * searches for, kept while a quote is open on Output. View state only;
  * the project itself is in the store.
  */
 const state = reactive({
@@ -12,6 +13,7 @@ const state = reactive({
   selected: null as string | null,
   sidebarTab: 'sessions' as 'sessions' | 'chats',
   chatPaneMode: 'chat' as 'chat' | 'search',
+  searchQuery: '',
 });
 
 export function useProjectUi() {
@@ -25,4 +27,5 @@ export function resetProjectUi(): void {
   state.selected = null;
   state.sidebarTab = 'sessions';
   state.chatPaneMode = 'chat';
+  state.searchQuery = '';
 }

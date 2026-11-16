@@ -213,9 +213,53 @@ describe('SetupView', () => {
         'This computer',
         'Language',
       ]);
-      expect(wrapper!.text()).toContain('Slower. The recording stays on this computer.');
-      expect(wrapper!.get('fieldset').attributes('aria-describedby')).toBeTruthy();
       expect(wrapper!.get('.band-summary').text()).toBe('Language: English');
+    });
+
+    it('opens with This computer’s layout while Rust checks the models (audit BUG-6)', async () => {
+      localStorage.setItem('describe.v1.prefs', JSON.stringify({ transcriptionEngine: 'local' }));
+      vi.stubGlobal('__DESKTOP__', true);
+      const bridge = fakeLocalBridge({ state: 'ready', pack: TEST_PACK });
+      bridge.hold();
+      setLocalSttBridgeForTests(bridge);
+      wrapper = mount(SetupView);
+      await flushPromises();
+      const layout = () => ({
+        bands: wrapper!.findAll('h2').map((h) => h.text()),
+        labels: wrapper!.findAll('label').map((l) => l.text()),
+        summary: wrapper!.get('.band-summary').text(),
+      });
+      const local = {
+        bands: ['Recording', 'Transcribe with', 'Options'],
+        labels: ['ElevenLabs', 'This computer', 'Language'],
+        summary: 'Language: English',
+      };
+      expect(layout()).toEqual(local);
+      expect(radio('This computer').element.checked).toBe(true);
+      expect(wrapper.text()).toContain('Wait while the speech models are checked.');
+      expect(wrapper.text()).not.toContain('ElevenLabs API key');
+      bridge.release();
+      await flushPromises();
+      expect(layout()).toEqual(local);
+      expect(wrapper.text()).not.toContain('Wait while the speech models are checked.');
+    });
+
+    it('shows the key band when the models turn out to be gone', async () => {
+      localStorage.setItem('describe.v1.prefs', JSON.stringify({ transcriptionEngine: 'local' }));
+      vi.stubGlobal('__DESKTOP__', true);
+      const bridge = fakeLocalBridge({ state: 'missing', pack: TEST_PACK });
+      bridge.hold();
+      setLocalSttBridgeForTests(bridge);
+      wrapper = mount(SetupView);
+      await flushPromises();
+      expect(wrapper.findAll('h2').map((h) => h.text())).not.toContain('API key');
+      bridge.release();
+      await flushPromises();
+      expect(wrapper.findAll('h2').map((h) => h.text())).toEqual([
+        'Recording',
+        'API key',
+        'Options',
+      ]);
     });
 
     it('lists the pack’s languages with This computer', async () => {

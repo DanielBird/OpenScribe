@@ -71,7 +71,8 @@ pub fn run() {
       match event {
         WindowEvent::DragDrop(drop) => stt::commands::on_drag_drop(&webview, &dropped, drop),
         // Closing while DeScribe works asks first (close_guard.rs): a run, a download, or work the page reports. The
-        // worker dies with the app either way, and a download's .part file is kept for the next attempt.
+        // worker dies with the app either way (its job object, or its pipe to the app closing: stt/worker.rs), and a
+        // download's .part file is kept for the next attempt.
         WindowEvent::CloseRequested { api, .. } => {
           if close_guard::CLOSE_GUARD.should_hold(&webview, dropped.is_busy()) {
             api.prevent_close();
@@ -116,8 +117,8 @@ pub fn run() {
           // F5 or a navigation: the page that held the close guard, and owned any local run or download, is gone.
           PageLoadEvent::Started => {
             close_guard::CLOSE_GUARD.set(false);
-            reloaded.cancel();
-            reloaded.cancel_download();
+            reloaded.cancel_any_run();
+            reloaded.cancel_any_download();
           }
         })
         // The user chose the folder in Windows' own picker, so the app grants access to it itself: WebView2's prompts

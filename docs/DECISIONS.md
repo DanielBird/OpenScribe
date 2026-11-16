@@ -1070,9 +1070,14 @@ summarise them.
     whether anything is running. A local run counts whatever the page says, and a page load clears the flag.
   - **The commands:** `stt_choose_recording`, `stt_status`, `stt_start`, `stt_cancel`, `set_close_guard`. `build.rs`
     lists them (`AppManifest::commands`), so each needs its permission, and the capability grants exactly those.
+    `stt_start` and `stt_cancel` take the page's id for the run, so a cancel that reaches Rust first still stops it
+    (AUDIT-2026-11-19, BUG-3).
   - **The clean-up is on by default** (the maintainer, 2026-11-15): the mapper drops fillers (um, uh, erm, äh, ähm,
     euh) and keeps once a word one speaker says twice in a row ("Yeah Yeah"). The pref `localTextCleanUp` (no UI)
     turns it off. "that that" and "had had" are kept.
+    - **Grammatical repeats are dropped too, by choice** (the maintainer, 2026-11-19): "Nous nous sommes" becomes
+      "Nous sommes", and "dass das das" becomes "dass das". The audit of 2026-11-19 (BUG-1) flagged this. The
+      maintainer wants repetition dropped, so the mapper keeps no exceptions for each language.
   - **The engine shipped is the one Phase 33 benchmarked:** built from source as `src-tauri/stt-runtime.json`
     defines it (`npm run desktop:stt-runtime`), with the MSVC and OpenMP runtimes beside it.
   - `@tauri-apps/api` ~2.12 is a runtime dependency of the desktop build only.
@@ -1115,8 +1120,8 @@ summarise them.
     checked for size and hash, and only then gets its name. Its hash goes into `receipt.json` at once, so the next
     status check hashes nothing (S6).
   - **One attempt.** A `.part` is resumed with a Range request; a `200` starts the file again; a `206` that doesn't
-    fit drops the part. A failure ends the attempt with one kind: `blocked`, `offline`, `busy`, `disk`, `mismatch` or
-    `gone` (Phase 35's Task 2), plus `cancelled` and `in-use`. No retries.
+    fit drops the part. A failure ends the attempt with one kind: `blocked`, `offline`, `busy`, `disk`, `write`,
+    `mismatch` or `gone` (Phase 35's Task 2), plus `cancelled` and `in-use`. No retries.
   - **A partly downloaded pack is `missing`, not `damaged`.** A file that's there but wrong makes it damaged;
     otherwise a file that isn't there makes it missing, so a cancelled download is offered again.
   - **A run, a download and a removal exclude each other.** Closing the window during a download asks first, as
@@ -1125,7 +1130,8 @@ summarise them.
   - **Removing and cleaning up touch only what the app named:** this pack's listed files, their parts and the
     receipt, and other packs' folders that hold a receipt. At start, parts this build won't finish are deleted. After
     a download, other versions' folders go (Phase 35's decision 5). **Clear saved data** leaves the models.
-  - **The commands:** `stt_download { onProgress }`, `stt_download_cancel`, `stt_remove_models`, granted in the
+  - **The commands:** `stt_download { downloadId, onProgress }`, `stt_download_cancel { downloadId }`,
+    `stt_remove_models`, granted in the
     capability as the others. `stt_status` gains `downloading`, with the bytes received and the total.
   - **The page side:** `stores/speechPack.ts` holds the status, the progress and the last failure;
     `SpeechPackSection.vue` is Settings' band, after API keys. `getLocalSttBridge()` gives the provider and the store
@@ -1179,9 +1185,24 @@ summarise them.
     Parakeet detects the language but doesn't report it, so a transcript made on Auto-detect had none, and Add to
     project translated even English (Phase 34). Auto-detect becomes English, and comes back when ElevenLabs is chosen
     again, unless the language was changed in between. A provider says whether it reports what it detected
-    (`supports.autoDetect`).
+    (`supports.autoDetect`). The replacement is saved in prefs (`languageAutoReplaced`), so it survives a restart
+    (audit BUG-5, 2026-11-19): a new optional pref, so D18 doesn't apply.
   - **What doesn't apply locally is hidden, not disabled:** the API key band, Number of speakers and Zero retention.
   - **Settings' last run:** the line, and its **Timings** behind a closed disclosure. They ship (the maintainer,
     2026-11-16): they cost nothing on screen and help when a colleague reports slowness.
 - **Why:** each thing in the user's terms (D13); a transcript that always knows its language.
 - **Consequences:** D37's "Auto-detect is first in the list" holds for ElevenLabs only.
+
+### D57 — A quote opens at its turn (2026-11-16; at the maintainer's request, during Phase 36)
+- **Decision:**
+  - **Every quote card and search hit has Open**, an icon after **Copy**. It opens the session on Output as **Open
+    transcript** does (asking first when the transcript there would lose work), then scrolls to the turn, focuses
+    it and tints it for a moment.
+  - **In the words it was shown in:** English when the quote is a translation or the hit was found in English, if the
+    transcript has a translation; the original otherwise.
+  - **Marked quotes have it too** (not found, or left-out words that may change the meaning), whenever the ref names a
+    turn that exists: reading the turn is how to check them (the maintainer, 2026-11-16).
+  - **The player doesn't move** (the maintainer): the turn's timestamp plays it, as before.
+  - **The search is kept** for the way back (`useProjectUi`), since leaving Analyse unmounts it.
+- **Why:** a quote is checked by reading it in context; Copy alone left the reader to find the turn by hand.
+- **Consequences:** one confirmation for every Open, rendered by ProjectView (`useOpenTranscript`).

@@ -4,7 +4,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SessionText } from '../../domain/corpus/sessionText';
 import { SEARCH_PAGE_SESSIONS, useProjectStore } from '../../stores/project';
 import { makeProjectSession, makeSessionText } from '../../testing/projectSessions';
+import { resetProjectUi } from '../composables/useProjectUi';
+import IconCopied from '../icons/IconCopied.vue';
+import IconCopy from '../icons/IconCopy.vue';
 import SessionSearch from './SessionSearch.vue';
+
+const opener = vi.hoisted(() => ({
+  openTranscript: vi.fn(async (_sessionId: string, _at?: unknown): Promise<string | null> => null),
+  canOpen: vi.fn((_sessionId: string) => true),
+}));
+vi.mock('../composables/useOpenTranscript', () => ({ useOpenTranscript: () => opener }));
 
 describe('SessionSearch', () => {
   let wrapper: VueWrapper | null = null;
@@ -12,6 +21,9 @@ describe('SessionSearch', () => {
   beforeEach(() => {
     localStorage.clear();
     setActivePinia(createPinia());
+    resetProjectUi();
+    opener.openTranscript.mockClear();
+    opener.openTranscript.mockResolvedValue(null);
     vi.useFakeTimers();
   });
 
@@ -196,22 +208,83 @@ describe('SessionSearch', () => {
     });
   });
 
-  it('copies the whole turn with its citation, and says Copied for a moment', async () => {
+  describe('Open', () => {
+    const open = () => wrapper!.get('li.hit button.open');
+
+    it("opens the hit's turn, after Copy", async () => {
+      mountWith([makeSessionText(1)]);
+      await type('charger');
+      expect(open().attributes('aria-label')).toBe('Open in transcript, Anna at 00:01:01');
+      expect(wrapper!.get('li.hit .actions').findAll('button')[1]!.element).toBe(open().element);
+      await open().trigger('click');
+      expect(opener.openTranscript).toHaveBeenCalledWith('session-1', {
+        turnId: 't2',
+        english: true,
+      });
+    });
+
+    it('shows the original when the hit is in the original words', async () => {
+      const german = makeSessionText(1, {
+        languageCode: 'deu',
+        turns: [
+          {
+            id: 't2',
+            speakerId: 'speaker_1',
+            start: 61,
+            text: 'Ich lege sie neben das Bett.',
+            en: 'I put them by the bed.',
+          },
+        ],
+      });
+      mountWith([german]);
+      await type('Bett');
+      await open().trigger('click');
+      expect(opener.openTranscript).toHaveBeenCalledWith('session-1', {
+        turnId: 't2',
+        english: false,
+      });
+    });
+
+    it("says why it couldn't open, under the hit", async () => {
+      opener.openTranscript.mockResolvedValue('This file is only in OneDrive.');
+      mountWith([makeSessionText(1)]);
+      await type('charger');
+      await open().trigger('click');
+      await flushPromises();
+      expect(wrapper!.get('li.hit [role="alert"]').text()).toBe('This file is only in OneDrive.');
+    });
+
+    it('keeps the search for when Analyse is shown again', async () => {
+      mountWith([makeSessionText(1)]);
+      await type('charger');
+      wrapper!.unmount();
+      wrapper = mount(SessionSearch, { attachTo: document.body });
+      await flushPromises();
+      expect(input().element.value).toBe('charger');
+      expect(status().text()).toBe('1 hit in 1 session');
+    });
+  });
+
+  it('copies the whole turn with its citation, and shows the copied icon for a moment', async () => {
     const writeText = vi.fn(async () => undefined);
     vi.stubGlobal('navigator', { clipboard: { writeText } });
     mountWith([makeSessionText(1)]);
     await type('charger');
     const copy = wrapper!.get('li.hit button');
     expect(copy.attributes('aria-label')).toBe('Copy, Anna at 00:01:01');
+    expect(copy.findComponent(IconCopy).exists()).toBe(true);
     await copy.trigger('click');
     await flushPromises();
     expect(writeText).toHaveBeenCalledWith(
       '"I put them on the charger by the bed." — Anna, 00:01:01, P01 interview.m4a',
     );
-    expect(copy.text()).toBe('Copied');
+    expect(copy.findComponent(IconCopied).exists()).toBe(true);
+    expect(copy.findComponent(IconCopy).exists()).toBe(false);
+    expect(copy.classes()).toContain('copied');
     expect(wrapper!.text()).toContain('Copied with its citation.');
     await vi.advanceTimersByTimeAsync(1600);
-    expect(copy.text()).toBe('Copy');
+    expect(copy.findComponent(IconCopy).exists()).toBe(true);
+    expect(copy.classes()).not.toContain('copied');
   });
 
   describe('opening a hit', () => {
@@ -298,11 +371,14 @@ describe('SessionSearch', () => {
       expect(quote(1).text()).toBe(LONG);
     });
 
-    it('stays as it is on Copy, or on a click that ends a selection', async () => {
+    it('stays as it is on Copy or Open, or on a click that ends a selection', async () => {
       vi.stubGlobal('navigator', { clipboard: { writeText: vi.fn(async () => undefined) } });
       mountWith([longSession(1)]);
       await type('charger');
       await hit().get('button.copy').trigger('click');
+      await flushPromises();
+      expect(toggle().attributes('aria-expanded')).toBe('false');
+      await hit().get('button.open').trigger('click');
       await flushPromises();
       expect(toggle().attributes('aria-expanded')).toBe('false');
 

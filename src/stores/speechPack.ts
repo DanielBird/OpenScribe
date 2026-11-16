@@ -22,6 +22,10 @@ export type SpeechPackOutcome = 'installed' | 'cancelled' | 'removed' | 'failed'
 export const useSpeechPackStore = defineStore('speechPack', () => {
   /** What Rust last said, or null before the first answer. */
   const status = shallowRef<LocalSttStatus | null>(null);
+  /** Rust couldn't say, or isn't there: the status stays null, but the check is over. */
+  const unreadable = ref(false);
+  /** Rust has answered once, or couldn't. Until then Settings trusts the saved engine (audit BUG-6). */
+  const checked = computed(() => status.value !== null || unreadable.value);
   /** Bytes of the whole download so far, while one runs. */
   const progress = ref<{ received: number; total: number } | null>(null);
   /** The last download's or removal's failure, until the next attempt. */
@@ -44,16 +48,21 @@ export const useSpeechPackStore = defineStore('speechPack', () => {
   function refresh(): Promise<void> {
     if (!__DESKTOP__) return Promise.resolve();
     const bridge = getLocalSttBridge();
-    if (!bridge) return Promise.resolve();
+    if (!bridge) {
+      unreadable.value = true;
+      return Promise.resolve();
+    }
     checking ??= bridge
       .status()
       .then((next) => {
         status.value = next;
+        unreadable.value = false;
         if (next.state === 'downloading' && !controller) {
           progress.value = { received: next.receivedBytes, total: next.totalBytes };
         }
       })
       .catch((cause: unknown) => {
+        unreadable.value = true;
         console.warn('DeScribe: the speech models’ status is unreadable', cause);
       })
       .finally(() => {
@@ -119,5 +128,17 @@ export const useSpeechPackStore = defineStore('speechPack', () => {
     return outcome;
   }
 
-  return { status, progress, error, busy, size, credits, refresh, download, cancel, remove };
+  return {
+    status,
+    checked,
+    progress,
+    error,
+    busy,
+    size,
+    credits,
+    refresh,
+    download,
+    cancel,
+    remove,
+  };
 });

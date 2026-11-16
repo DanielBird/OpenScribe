@@ -290,6 +290,34 @@ describe('transcript store', () => {
     });
   });
 
+  describe('showTurn', () => {
+    it('asks Output for the turn, in English only when there is a translation', async () => {
+      const store = useTranscriptStore();
+      await store.setDoc(makeDoc());
+      store.showTurn('t2', true);
+      expect(store.view).toBe('original');
+      expect(store.revealTurnId).toBe('t2');
+
+      await store.setDoc(withTranslation(makeDoc()));
+      expect(store.revealTurnId).toBeNull();
+      store.showTurn('t3', true);
+      expect(store.view).toBe('en');
+      expect(store.revealTurnId).toBe('t3');
+      store.showTurn('t3', false);
+      expect(store.view).toBe('original');
+    });
+
+    it('is forgotten when the transcript goes', async () => {
+      const store = useTranscriptStore();
+      await store.setDoc(makeDoc());
+      store.showTurn('t2', false);
+      await store.clear();
+      expect(store.revealTurnId).toBeNull();
+      store.showTurn('t2', false);
+      expect(store.revealTurnId).toBeNull();
+    });
+  });
+
   describe('setTranslation', () => {
     const translation = {
       provider: 'claude' as const,

@@ -1,11 +1,11 @@
 import { createPinia, setActivePinia } from 'pinia';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { setTranscriptionProviderForTests } from '../providers/index';
+import { setLocalSttBridgeForTests, setTranscriptionProviderForTests } from '../providers/index';
 import { createElevenLabsProvider } from '../providers/transcription/elevenlabs/provider';
 import type { LocalSttBridge, LocalSttStatus } from '../providers/transcription/local/bridge';
 import { createLocalProvider } from '../providers/transcription/local/provider';
 import type { KeyCheckResult } from '../providers/transcription/types';
-import { TEST_PACK } from '../testing/localBridge';
+import { fakeLocalBridge, TEST_PACK } from '../testing/localBridge';
 import { useSettingsStore } from './settings';
 import { useSpeechPackStore } from './speechPack';
 
@@ -800,6 +800,37 @@ describe('settings store', () => {
       expect(settings.languageHint).toBe('fr');
     });
 
+    it('gives Auto-detect back after a restart, while Rust is still checking the models at first', () => {
+      desktop().setTranscriptionEngine('local');
+      setActivePinia(createPinia());
+      const settings = desktop(null); // the real start: no status until Rust answers
+      useSpeechPackStore().status = ready;
+      expect(settings.transcriptionEngine).toBe('local');
+      expect(settings.languageHint).toBe('en');
+      settings.setTranscriptionEngine('elevenlabs');
+      expect(settings.languageHint).toBe('auto');
+    });
+
+    it('gives Auto-detect back after a restart with the models ready at once', () => {
+      desktop().setTranscriptionEngine('local');
+      setActivePinia(createPinia());
+      const settings = desktop();
+      expect(settings.languageHint).toBe('en');
+      settings.setTranscriptionEngine('elevenlabs');
+      expect(settings.languageHint).toBe('auto');
+    });
+
+    it('keeps a language chosen on this computer across a restart', () => {
+      const before = desktop();
+      before.setTranscriptionEngine('local');
+      before.languageHint = 'fr';
+      expect(storedPrefs()).toMatchObject({ languageHint: 'fr', languageAutoReplaced: false });
+      setActivePinia(createPinia());
+      const settings = desktop();
+      settings.setTranscriptionEngine('elevenlabs');
+      expect(settings.languageHint).toBe('fr');
+    });
+
     it('asks for a language when it opens on this computer', () => {
       localStorage.setItem(
         'describe.v1.prefs',
@@ -810,12 +841,88 @@ describe('settings store', () => {
       expect(settings.languageHint).toBe('en');
     });
 
+    describe('while Rust first checks the models (audit BUG-6)', () => {
+      const saved = (prefs: Record<string, unknown>) =>
+        localStorage.setItem('describe.v1.prefs', JSON.stringify(prefs));
+
+      it('trusts a saved This computer, and waits before Next', async () => {
+        saved({ transcriptionEngine: 'local' });
+        desktop(null);
+        const settings = await readyStore();
+        settings.elevenLabsKey = '';
+        expect(settings.localAvailable).toBe(true);
+        expect(settings.transcriptionEngine).toBe('local');
+        expect(settings.missingRequirements).toEqual(['Wait while the speech models are checked.']);
+        expect(settings.isReady).toBe(false);
+        useSpeechPackStore().status = ready;
+        expect(settings.transcriptionEngine).toBe('local');
+        expect(settings.missingRequirements).toEqual([]);
+      });
+
+      it('is ElevenLabs at once when that is the saved choice', async () => {
+        desktop(null);
+        const settings = await readyStore();
+        expect(settings.localAvailable).toBe(false);
+        expect(settings.transcriptionEngine).toBe('elevenlabs');
+        expect(settings.missingRequirements).toEqual([]);
+      });
+
+      it('keeps a language only this computer offers', () => {
+        saved({ transcriptionEngine: 'local', languageHint: 'lt' });
+        const settings = desktop(null);
+        expect(settings.languageHint).toBe('lt');
+        useSpeechPackStore().status = ready;
+        expect(settings.languageHint).toBe('lt');
+        expect(storedPrefs()).toMatchObject({ languageHint: 'lt' });
+      });
+
+      it('falls back to ElevenLabs, and Auto-detect, when the models are gone', () => {
+        saved({ transcriptionEngine: 'local', languageHint: 'en', languageAutoReplaced: true });
+        const settings = desktop(null);
+        expect(settings.languageHint).toBe('en');
+        useSpeechPackStore().status = { state: 'missing', pack: TEST_PACK };
+        expect(settings.transcriptionEngine).toBe('elevenlabs');
+        expect(settings.languageHint).toBe('auto');
+        expect(storedPrefs()).toMatchObject({ transcriptionEngine: 'local' });
+      });
+
+      it('falls back to ElevenLabs when the status is unreadable', async () => {
+        saved({ transcriptionEngine: 'local' });
+        const bridge = fakeLocalBridge(ready);
+        bridge.hold();
+        setLocalSttBridgeForTests(bridge);
+        const settings = desktop(null);
+        const checking = useSpeechPackStore().refresh();
+        expect(settings.transcriptionEngine).toBe('local');
+        vi.spyOn(console, 'warn').mockImplementation(() => {});
+        bridge.release(new Error('no answer'));
+        await checking;
+        setLocalSttBridgeForTests(null);
+        expect(settings.transcriptionEngine).toBe('elevenlabs');
+        expect(settings.missingRequirements).not.toContain(
+          'Wait while the speech models are checked.',
+        );
+      });
+    });
+
     it('goes back to ElevenLabs when the preferences are reset', () => {
       const settings = desktop();
       settings.setTranscriptionEngine('local');
       settings.resetPrefs();
       expect(settings.transcriptionEngine).toBe('elevenlabs');
       expect(storedPrefs()).toBeNull();
+    });
+
+    it('forgets the replaced Auto-detect when the preferences are reset', () => {
+      const settings = desktop();
+      settings.setTranscriptionEngine('local');
+      settings.resetPrefs();
+      settings.setTranscriptionEngine('local');
+      settings.languageHint = 'de';
+      settings.setTranscriptionEngine('elevenlabs');
+      expect(settings.languageHint).toBe('de');
+      setActivePinia(createPinia());
+      expect(desktop().languageHint).toBe('de');
     });
 
     it('cleans up local transcripts unless told not to', () => {

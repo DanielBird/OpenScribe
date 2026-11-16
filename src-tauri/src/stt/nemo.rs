@@ -198,6 +198,9 @@ impl Api {
   }
 }
 
+/// A model's path as the engine wants it: UTF-8. It opens models with ggml's `ggml_fopen`, which converts UTF-8 to wide
+/// characters and calls `_wfopen`, so a user folder with ø or ü works (audit DES-1;
+/// `run::tests::model_paths_with_non_ascii_letters_load`). Not the ANSI code page.
 fn c_path(path: &Path) -> Result<CString, EngineError> {
   CString::new(path.to_string_lossy().into_owned())
     .map_err(|_| EngineError { status: 1, message: "a model path holds a NUL".into() })
