@@ -592,10 +592,19 @@ mod http {
       if request == 0 {
         return Err(std::io::Error::from_raw_os_error(12017)); // ERROR_WINHTTP_OPERATION_CANCELLED
       }
+      let failed = |e: windows::core::Error| std::io::Error::from_raw_os_error(code_of(e.code().0 as u32) as i32);
+      // A synchronous WinHttpReadData waits until the whole buffer is full, so progress would move a megabyte at a
+      // time and a cancel would lose what had arrived. Ask what has arrived (waiting for some), and read only that.
+      let mut available = 0u32;
+      // SAFETY: the out pointer is valid; a handle closed by cancel makes the call fail, not crash.
+      unsafe { WinHttpQueryDataAvailable(request as *mut _, &mut available) }.map_err(failed)?;
+      if available == 0 {
+        return Ok(0); // the end of the body
+      }
+      let wanted = buffer.len().min(available as usize) as u32;
       let mut read = 0u32;
-      // SAFETY: the buffer is valid for its length; a handle closed by cancel makes the call fail, not crash.
-      unsafe { WinHttpReadData(request as *mut _, buffer.as_mut_ptr() as *mut _, buffer.len() as u32, &mut read) }
-        .map_err(|e| std::io::Error::from_raw_os_error(code_of(e.code().0 as u32) as i32))?;
+      // SAFETY: the buffer is valid for `wanted` bytes; a handle closed by cancel makes the call fail, not crash.
+      unsafe { WinHttpReadData(request as *mut _, buffer.as_mut_ptr() as *mut _, wanted, &mut read) }.map_err(failed)?;
       Ok(read as usize)
     }
   }

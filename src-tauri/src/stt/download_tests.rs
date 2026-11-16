@@ -34,11 +34,21 @@ struct Reply {
   cut_after: Option<usize>,
   /// Send this many bytes of the body, then wait without closing.
   stall_after: Option<usize>,
+  /// Send the body in pieces of this many bytes, 300 ms apart.
+  drip: Option<usize>,
 }
 
 impl Reply {
   fn status(status: u16) -> Self {
-    Reply { status, headers: vec![], body: b"no".to_vec(), length: Length::Body, cut_after: None, stall_after: None }
+    Reply {
+      status,
+      headers: vec![],
+      body: b"no".to_vec(),
+      length: Length::Body,
+      cut_after: None,
+      stall_after: None,
+      drip: None,
+    }
   }
 
   fn file(body: &[u8]) -> Self {
@@ -133,6 +143,15 @@ fn answer(mut stream: TcpStream, log: &Mutex<Vec<Seen>>, route: &dyn Fn(&Seen) -
     let _ = stream.write_all(&reply.body[..n]);
     let _ = stream.flush();
     std::thread::sleep(Duration::from_secs(20));
+    return;
+  }
+  if let Some(piece) = reply.drip {
+    for chunk in reply.body.chunks(piece) {
+      let _ = stream.write_all(chunk);
+      let _ = stream.flush();
+      std::thread::sleep(Duration::from_millis(300));
+    }
+    let _ = stream.shutdown(std::net::Shutdown::Both);
     return;
   }
   let body = match reply.cut_after {
@@ -482,4 +501,19 @@ fn an_unpinned_url_is_never_requested() {
 #[test]
 fn the_hash_helper_agrees_with_the_pack() {
   assert_eq!(hash(WORDS), test_def("1.0.0").models[0].sha256);
+}
+
+#[test]
+fn progress_moves_as_bytes_arrive_not_a_buffer_at_a_time() {
+  let server = Server::start(|seen| match seen.path.as_str() {
+    "/words.gguf" => Reply { drip: Some(5), ..Reply::file(WORDS) },
+    _ => Reply::file(SPEAKERS),
+  });
+  let root = TempDir::new("dl-drip");
+  let def = served(&server, "1.0.0");
+  let (result, reports) = run(&def, &root.0);
+  result.unwrap();
+  let words = WORDS.len() as u64;
+  let between: Vec<u64> = reports.iter().map(|(r, _)| *r).filter(|r| *r > 0 && *r < words).collect();
+  assert!(between.len() >= 2, "progress inside the first file: {reports:?}");
 }

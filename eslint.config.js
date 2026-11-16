@@ -41,6 +41,7 @@ export default withVueTs(
     'src-tauri/gen/**',
     'src-tauri/stt-runtime/**',
     '.speech-pack/**',
+    '.speech-pack-test/**',
     '.stt-runtime-build/**',
     // Local agent and design tooling (gitignored); ESLint doesn't read .gitignore.
     '.claude/**',
