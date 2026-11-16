@@ -250,7 +250,10 @@ describe('buildDocModel', () => {
       request: { ...doc.request, provider, model },
     });
     expect(metaOf(by('local', 'nvidia-parakeet-nemotron-1')).Transcription).toBe(
-      'On this computer (nvidia-parakeet-nemotron-1)',
+      'On this computer (NVIDIA Parakeet, Nemotron Diarization)',
+    );
+    expect(metaOf(by('local', 'nvidia-later-pack-2')).Transcription).toBe(
+      'On this computer (nvidia-later-pack-2)',
     );
     expect(metaOf(by('a-later-engine', 'v9')).Transcription).toBe('a-later-engine v9');
   });

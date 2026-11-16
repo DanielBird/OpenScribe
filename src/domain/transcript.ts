@@ -160,8 +160,16 @@ const TRANSCRIPTION_PROVIDER_NAMES: Record<TranscriptionProviderId, string> = {
 };
 
 /**
- * The engine that made a transcript, for the export's details: 'ElevenLabs scribe_v2', 'On this computer
- * (nvidia-parakeet-nemotron-1)'. An engine this build doesn't know is shown as it was saved.
+ * The speech packs this build knows, by id (src-tauri/speech-pack/pack.json): the models' names as a transcript's
+ * details show them (Phase 36). A pack this build doesn't know is shown by its id.
+ */
+const SPEECH_PACK_NAMES: Readonly<Record<string, string>> = {
+  'nvidia-parakeet-nemotron-1': 'NVIDIA Parakeet, Nemotron Diarization',
+};
+
+/**
+ * The engine that made a transcript, for its details and the export: 'ElevenLabs scribe_v2', 'On this computer
+ * (NVIDIA Parakeet, Nemotron Diarization)'. An engine or pack this build doesn't know is shown as it was saved.
  */
 export function transcriptionEngineName(
   request: Pick<TranscriptionRequestInfo, 'provider' | 'model'>,
@@ -171,7 +179,7 @@ export function transcriptionEngineName(
     return `${TRANSCRIPTION_PROVIDER_NAMES.elevenlabs} ${model}`.trim();
   if (provider === 'local') {
     const name = TRANSCRIPTION_PROVIDER_NAMES.local;
-    return model ? `${name} (${model})` : name;
+    return model ? `${name} (${SPEECH_PACK_NAMES[model] ?? model})` : name;
   }
   return `${provider} ${model}`.trim();
 }

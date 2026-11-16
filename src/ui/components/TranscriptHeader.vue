@@ -5,10 +5,11 @@ import {
   formatDateTime,
   formatTimestamp,
   languageName,
+  transcriptionEngineName,
   type TranscriptDoc,
 } from '../../domain/transcript';
 
-// What was transcribed and how. Glossary, zero-retention and project entries appear only when they apply.
+// What was transcribed and how. Glossary, zero-retention, engine and project entries appear only when they apply.
 const props = defineProps<{
   doc: TranscriptDoc;
   /** The project the transcript is saved in (Phase 15). */
@@ -32,6 +33,10 @@ const items = computed(() => {
   if (language) list.push({ label: 'Language', value: language + confidence });
   list.push({ label: 'Speakers', value: plural(speakers.length, 'speaker', 'speakers') });
   list.push({ label: 'Transcribed', value: formatDateTime(props.doc.createdAt) });
+  // ElevenLabs is the usual engine, so only another one is named (Phase 36), in both builds.
+  if (request.provider !== 'elevenlabs') {
+    list.push({ label: 'Transcription', value: transcriptionEngineName(request) });
+  }
   if (request.keyterms.length > 0) {
     list.push({
       label: 'Glossary',

@@ -67,6 +67,10 @@ test('a transcript made on this computer opens on Output and exports with its en
   await expect(page.locator('li.turn').first()).toContainText(
     'Thanks for joining the review today.',
   );
+  // The header names the engine (Phase 36): only an engine other than ElevenLabs is named.
+  await expect(page.locator('.transcript-header')).toContainText(
+    'On this computer (NVIDIA Parakeet, Nemotron Diarization)',
+  );
 
   const downloading = page.waitForEvent('download');
   await page.getByRole('button', { name: 'Download .docx' }).click();
@@ -77,7 +81,7 @@ test('a transcript made on this computer opens on Output and exports with its en
   )
     .file('word/document.xml')!
     .async('string');
-  expect(xml).toContain('On this computer (nvidia-parakeet-nemotron-1)');
+  expect(xml).toContain('On this computer (NVIDIA Parakeet, Nemotron Diarization)');
   expect(xml).toContain('Thanks for joining the review today.');
 });
 
