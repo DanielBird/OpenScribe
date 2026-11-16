@@ -6,8 +6,9 @@ recording goes in each case, that the models are downloaded from Hugging Face, a
 their licences. Without the models, and in the HTML file, nothing changes.
 
 **Status of the plan:** drafted on 2026-11-14 (DECISIONS.md **D50**). Phase 33 ran on 2026-11-15 (**D51**) and chose
-the models named below. Its findings, below, override the text where they differ. All UI text here is a draft
-(D13).
+the models named below. Its findings, below, override the text where they differ. **On 2026-11-16 the maintainer
+decided local transcription ships whatever the work laptop's speed (D55):** the laptop run below is a measurement,
+not a gate, and the phase doesn't wait for it. All UI text here is a draft (D13).
 
 ## Phase 33's findings (2026-11-15; DECISIONS.md D51)
 
@@ -35,8 +36,9 @@ They override the text below where they differ ([reference/local-stt.md](../refe
   becomes a choice, it belongs here.
 - **About:** the two models, NVIDIA's own files from Hugging Face. No copy hosted by Dtype.
 
-**Depends on:** Phases 34 and 35. Phase 35's download must have worked on the work laptop (its S1), because Task 1
-transcribes there.
+**Depends on:** Phases 34 and 35 (built). Not on the laptop: Phase 35's laptop rows and this phase's Task 1 can run
+whenever the maintainer next has the Store build on it (D55). Task 1 needs Phase 35's S1 to have worked there
+first, since it transcribes with downloaded models.
 
 **Read first:**
 - [DECISIONS.md](../DECISIONS.md) D3, D5, D6, D13, D27, D36, D37, D41, D50 and the entries of Phases 33–35;
@@ -63,30 +65,32 @@ transcribes there.
 7. **About's credit comes from the build:** the names, licences and links from `pack.json`, and the full texts from
    the notices Phase 35 generates. It is the same whether or not the models are downloaded, and it can't disagree
    with what the app would download.
-8. **This phase holds the first real measurement.** The work laptop can't run a benchmark, so Phase 33's go rests
-   on an emulation on the maintainer's PC. The laptop's first local run comes from this phase's build, installed
-   from the Store, which the maintainer confirmed may transcribe real recordings there (2026-11-14). It happens
-   **early** (Task 1), before the wording, About and the docs are polished, so that a laptop slower than estimated
-   is found while the plan can still change.
+8. **This phase holds the first real measurement, but doesn't wait for it** (D55). The work laptop can't run a
+   benchmark, so Phase 33's numbers come from an emulation on the maintainer's PC. The laptop's first local run comes
+   from this phase's build, installed from the Store, which the maintainer confirmed may transcribe real recordings
+   there (2026-11-14). It runs when the maintainer can, before or after the rest of the phase. Its result changes
+   only what the texts say about speed; a slow laptop is the maintainer's call, not a stop.
 
 ## Tasks
 
-1. **The timing checkpoint, before anything else is polished.** Build the least that lets the laptop run locally:
-   the choice on Setup (Tasks 3 and 4, rough wording is fine) and the last run's timings in Settings (Task 7).
-   Submit the app to the hidden listing. Then the maintainer, on the work laptop, with the models downloaded in
-   Settings and the laptop plugged in:
+1. **The laptop run: a measurement, whenever the maintainer can** (D55; no longer a gate). Any build of this phase
+   with the choice on Setup and the last run's timings in Settings (Tasks 3, 4 and 7) will do, submitted to the
+   hidden listing. The maintainer, on the work laptop, with the models downloaded in Settings and the laptop plugged
+   in:
    - transcribes the same one-hour recording Phase 33 used, and reads off the timings; then the three-hour one;
    - once more on battery, and once during ordinary work (a Teams call, Edge open);
    - notes how the laptop behaves meanwhile: fans, heat, whether other apps stay usable, whether it tries to sleep.
 
-   Write the numbers beside Phase 33's estimates in reference/local-stt.md, with how far off the emulation was.
-   - **At the target** (an hour in 10 minutes or less, under 4 GB): carry on.
-   - **Between the target and the floor** (10 to 15 minutes): carry on, and tell the maintainer the number. The
-     user-facing texts must not promise more than it (Task 3's "Slower", the User Guide).
-   - **Past the floor** (more than 15 minutes, or over 4 GB): stop and take it to the maintainer, with the changes
-     Phase 33 listed for this case and what each costs. Don't tune by guesswork on the PC: correct the emulation's
-     calibration from the real numbers first, so the next attempt is measured against a better stand-in.
-   - In every case, record the corrected calibration: later work on the engine needs it.
+   Write the numbers beside Phase 33's estimates in reference/local-stt.md, with how far off the emulation was, and
+   the corrected calibration: later work on the engine needs it.
+   - **What the numbers change:** only what the texts say about speed (Task 3's "Slower", the User Guide), which
+     must never promise more than the laptop showed. Until the run, they say only "Slower", or give Phase 33's
+     estimate as an estimate.
+   - **Past the floor** (more than 15 minutes for an hour, or over 4 GB): tell the maintainer, with the changes Phase
+     33 listed for this case and what each costs. The maintainer decides whether to try them; the phase doesn't stop.
+     Don't tune by guesswork on the PC: correct the emulation's calibration from the real numbers first.
+   - **If the download fails on the laptop** (Phase 35's S1), this run can't happen: take it to the maintainer, with
+     installing the models from files as the follow-up.
 2. **The settings store:** `transcriptionEngine` gets its public setter and the rules of decisions 2 and 3. It holds
    the models' status from the bridge (asked on Setup's opening, and updated by Phase 35's download and removal),
    behind `__DESKTOP__`.
@@ -119,8 +123,7 @@ transcribes there.
 
    It comes from Phase 34's timings. It tells a colleague what to expect of their own computer, and it is how
    the maintainer reads the work laptop's speed (Task 1). The stage times, threads and peak memory sit behind a
-   `<details>` under it, for the checkpoint; the maintainer decides after the checkpoint whether that disclosure
-   ships or goes. **Clear saved data** clears the line and resets the choice to ElevenLabs. It leaves the models
+   `<details>` under it, for the laptop run; the maintainer decides whether that disclosure ships or goes. **Clear saved data** clears the line and resets the choice to ElevenLabs. It leaves the models
    (Phase 35).
 8. **About** (`SettingsView.vue`, under `__DESKTOP__`):
    - **Transcribe:** "Your recording and glossary are sent to ElevenLabs for transcription, or, if you choose **This
@@ -193,9 +196,9 @@ debug build).
 - [ ] A local transcript's details and export name the engine, in both builds.
 - [ ] New UI reviewed against D13, and for keyboard and screen-reader use (the radio group, the progress bar, the
       status in Settings).
-- [ ] The timing checkpoint ran on the work laptop before the rest of the phase was finished. Its numbers are in
-      reference/local-stt.md beside Phase 33's estimates, with the corrected calibration, and they are within the
-      floor (an hour in 15 minutes), or the maintainer has decided what changes.
+- [ ] The laptop run (Task 1) has its numbers in reference/local-stt.md beside Phase 33's estimates, with the
+      corrected calibration, or *not run* with the reason (D55: it doesn't gate the phase). The texts about speed
+      promise no more than what was measured.
 - [ ] L1–L10 have results on the maintainer's PC, and on the work laptop from the Store, or *not run* with a reason.
 - [ ] The Definition of Done in AGENTS.md.
 

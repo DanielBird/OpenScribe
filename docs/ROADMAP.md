@@ -370,8 +370,8 @@ MVP = Phases 0–5. Each phase is sized for one agent session (or a few) and end
 
 Status values: ☐ Not started · ◐ In progress · ☑ Done.
 
-Phases 33–36 add transcription on the computer to the desktop app (D50). Phase 33 is a spike, and its go/no-go gates
-the other three.
+Phases 33–36 add transcription on the computer to the desktop app (D50). Phase 33 is a spike, and its go/no-go gated
+the other three. The work laptop's own speed gates nothing (D55): it is measured when the maintainer can.
 
 Phases 0–9 are release 1. Phases 10–22 are release 2 (Projects). Their dependency
 graph is in [PROJECTS.md](PROJECTS.md) §8, and the graph below covers release 1 only. Release 2 is in 1.1.0, with
