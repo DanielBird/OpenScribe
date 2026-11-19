@@ -190,6 +190,7 @@ describe('SpeechPackSection', () => {
       offline: "Couldn't reach huggingface.co.",
       busy: 'Hugging Face is busy.',
       disk: 'Not enough disk space: the speech models need 0.8 GB.',
+      write: "DeScribe couldn't save the speech models.",
       mismatch: "The download didn't arrive intact.",
       gone: "This version of DeScribe can't download its speech models any more.",
     };

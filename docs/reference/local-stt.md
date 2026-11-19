@@ -163,6 +163,11 @@ and these flags, which `CMakeCache.txt` confirms:
 - `max_speaker_count` "is accepted for compatibility but is ignored".
 - `diar-stream` (harness) drives `diar.h` from Rust through `LoadLibraryExW`/`GetProcAddress`: create, open, push 30 s
   pieces, finish, segments. It works.
+- **Model paths are UTF-8.** Both models load through `ggml_runtime::GGUFLoader`, which opens the file with
+  `gguf_init_from_file` and `llama_file`. Both call ggml's `ggml_fopen`, which converts UTF-8 to wide characters and
+  calls `_wfopen`. So a user folder with ø or ü works on any ANSI code page. See
+  [non-ASCII paths](#non-ascii-paths-audit-des-1).
+- **A new engine version** must pass `cargo test --lib -- --ignored model_paths_with_non_ascii` before it ships.
 
 ## The emulated laptop
 
@@ -361,6 +366,31 @@ DECISIONS.md D53; the app's commands and debug switches in [desktop.md](desktop.
   - Word times at the end of the 3-hour file match the first copy: 1,533 of 1,644 words paired, all within 0.5 s.
   - Phase 36's laptop column is still to run.
 
+### Non-ASCII paths (audit DES-1)
+
+The models live under the user's profile, so a user name such as "Søren Müller" puts ø and ü in their paths. `c_path`
+(`stt/nemo.rs`) passes them as UTF-8.
+
+- **The engine's source** (NeMo-Speech.cpp `20999cc`, llama.cpp `bd4f514`):
+  - The words model (`asr/model.cpp`) and the speakers model (`asr/diar/sortformer_model.cpp`) both load through
+    `GGUFLoader`, so through `ggml_fopen` (UTF-8 → `MultiByteToWideChar(CP_UTF8)` → `_wfopen`).
+  - The memory map uses the open file's handle, not the path.
+- **The engine's narrow opens** (`fopen`, `std::ifstream` from a `char` path) are all in features DeScribe doesn't
+  use:
+  - the CLI's WAV reader;
+  - the ITN grammar folder (`postproc` is null);
+  - the profanity list and the YAML config;
+  - the SALM encoder lookup, which needs a `nemo_speech.speech_model` key that neither model's header has.
+- **The DLLs' imports agree:** `nemo_speech_asr.dll` takes `ggml_fopen` from `ggml-base.dll`, which imports `_wfopen`.
+- **The recording** is opened by Media Foundation, and **the DLLs** by `LoadLibraryExW`, both wide. The paths reach
+  the worker as JSON.
+- **The test:** `run::tests::model_paths_with_non_ascii_letters_load` (opt-in, `--ignored`) links both models into
+  `%TEMP%\describe-Søren-Müller-æøå-<pid>\`, with the recording beside them as `opptak-ø.wav`, and transcribes.
+  - It passes on the maintainer's PC (ANSI code page 1252, so a narrow open would have failed).
+  - With `c_path` changed to replace non-ASCII letters, as a lossy ANSI conversion would, it fails with "Failed to
+    load GGML file".
+- **No `activeCodePage` manifest:** nothing needs it, and it would change the whole process's ANSI behaviour.
+
 ## The download as built (Phase 35)
 
 DECISIONS.md D54; the commands, folders and debug switches in [desktop.md](desktop.md#the-speech-models-download-phase-35).
@@ -382,12 +412,13 @@ DECISIONS.md D54; the commands, folders and debug switches in [desktop.md](deskt
   us.aws.cdn.hf.co 403)`), never a signed URL; folders as `<speech-pack>` or `%USERPROFILE%`.
 - **Tests:** `src-tauri/src/stt/download_tests.rs`, against a small HTTP server in the test on 127.0.0.1: a whole
   download, a redirect, resume, a server ignoring Range, a bad Content-Range, wrong sizes both ways, a wrong hash, a
-  web page, every status, a cut connection, nothing listening, cancel, a full disk, a skipped verified file, a
-  damaged and an outdated pack, an unpinned URL, progress as bytes arrive.
+  web page, every status, a cut connection, nothing listening, cancel, a full disk, a file that can't be written
+  (`write`, not `disk`), a skipped verified file, a damaged and an outdated pack, an unpinned URL, progress as bytes
+  arrive.
 
 | ID | Check | Maintainer's PC | Work laptop (from the Store) |
 |---|---|---|---|
-| S1 | A fresh install: Settings says the models are missing, with the size. **Download** runs to *installed*. Record the time and the speed. **On the work laptop this proves the download works on its network.** | **The agent, against the stand-in:** missing with "8 MB from huggingface.co"; Download ran to *installed* with both files and the receipt. *The real download: the maintainer.* | *not run* |
+| S1 | A fresh install: Settings says the models are missing, with the size. **Download** runs to *installed*. Record the time and the speed. **On the work laptop this proves the download works on its network.** | **The agent, against the stand-in:** missing with "8 MB from huggingface.co"; Download ran to *installed* with both files and the receipt. *The real download: the maintainer.* | **Pass (the maintainer, 2026-11-17, 1.3.0):** the models downloaded on the company network, and transcribing with them worked. Time and speed not recorded. |
 | S2 | During a download: leave Settings and come back; the progress is still there. **Cancel**, then **Download** again: it carries on. | **Pass (the agent, stand-in at 400 kB/s):** "926 kB of 8 MB", Back to Home and Settings again, "1 MB of 8 MB" with Cancel; Cancel kept 1,966,080 bytes in `words.gguf.part`; Download again asked `Range: bytes=1966080-` and finished. *With Hugging Face: the maintainer.* | *not run* |
 | S3 | The network cable out mid-download, the PC put to sleep, the app closed (it asks first), then resumed each time. No partial file is ever loaded. | *The maintainer.* A cut connection (the stand-in's `drop`) ends in "Couldn't reach huggingface.co", the part kept and the pack still *missing*. | |
 | S4 | Failures, each with its own message: the host blocked, a full disk, a model file altered on disk, a URL that answers 404. | **The agent, stand-in:** 403, an HTML page and a redirect to plain HTTP → "Your network didn't allow…"; 404 → "…can't download its speech models any more"; 429 → "Hugging Face is busy" (detail: `Retry-After 120`); one byte altered → "didn't arrive intact"; a cut → "Couldn't reach…". Each with Technical details and the button again; no file named. A file altered on disk after a download: *damaged*, **Download again** → *installed*. Full disk: `cargo test` only. *The `hosts` file, a firewall rule and a small virtual disk: the maintainer.* | |
@@ -408,10 +439,31 @@ Recordings: `scripts/spikes/local-stt/out/test-set/test_audio.1h.m4a` and `test_
 
 | Run | Phase 33's estimate | Last recording | Speed | Reading the audio | Words | Speakers | Total | Threads | Peak memory | Fans, heat, other apps, sleep |
 |---|---|---|---|---|---|---|---|---|---|---|
+| 37 min (`test_audio.m4a`), plugged in, Balanced, other apps open (2026-11-17) | 208 s (*Laptop*, 10.8×) | 00:37:22 in 00:05:14 | 7.1× | – | – | – | 314 s | – | – | Timings not copied. The first run after the download. |
+| 37 min, plugged in, Balanced, every other app closed (2026-11-17) | 208 s (*Laptop*, 10.8×) | 00:37:22 in 00:05:01 | 7.4× | 9.0 s | 301.4 s | 297.0 s | 301.4 s | 8 | 1.11 GB | Fans and heat not noted. |
 | 1 h, plugged in | 334 s (*Laptop*) | | | | | | | | | |
 | 3 h, plugged in | 998 s (*Laptop*) | | | | | | | | | |
 | 1 h, on battery | 567 s (*Throttled*) | | | | | | | | | |
 | 1 h, during a Teams call with Edge open | – | | | | | | | | | |
+
+**What the 37-minute runs say** (2026-11-17):
+- **At the target, plugged in:** 7.4× real time, so an hour in about 8.1 minutes (the target is 10, the floor 15).
+  Peak memory 1.11 GB, as on the PC (1.09 GB in Phase 34's E1). D51's list of changes isn't needed.
+- **The emulation was 1.45× too fast:** *Laptop* estimated 10.8×, the laptop did 7.4×, and *Throttled* is 6.35×. The
+  laptop lies between the two profiles, nearer *Throttled*. Pinned at full clock, the PC is 2.1× the laptop on this
+  work (15.7× in Phase 33's 37-minute row), against 1.37–1.62× in Cinebench: Cinebench was a poor stand-in. Phase 33's
+  margin of half again (9× emulated for 6× real) was used almost exactly.
+- **Recalibrate against the engine, not Cinebench:** find the cap at which the release worker, pinned to `0xfff0`,
+  takes about 301 s on `test_audio.m4a`. It lies above *Throttled*'s 1,950 MHz and below 3,375. *Not done yet.*
+- **The words set the pace.** Words and Speakers in Timings are each the time from the start until that model
+  finished, not the time it worked. The worker's decoder feeds both through queues of 8 blocks of 5 s
+  (`stt/run.rs`), so the speakers can't run more than about 40 s of audio ahead of the words, and finish just before
+  them. 297.0 s therefore says nothing of the speakers' own speed.
+- **Other apps cost little:** closing everything gained 4 % (314 s to 301 s), as M11's two busy processors suggested.
+- **Balanced is the number to quote,** since colleagues mostly run in it. A run in Best performance would show
+  whether the laptop's power limit holds it back: *not run*.
+- **Still to run:** the 3-hour file (heat over about 24 minutes), the 1-hour file on battery (the riskiest: if battery
+  costs what *Throttled* suggests, about 4.3×, an hour in about 14 minutes), and the 1-hour file during a Teams call.
 
 - **At the target** (an hour in 10 minutes or less, under 4 GB): carry on.
 - **10 to 15 minutes:** carry on; the texts promise no more than the number.
@@ -447,3 +499,5 @@ Recordings: `scripts/spikes/local-stt/out/test-set/test_audio.1h.m4a` and `test_
 | 2026-11-15 | Maintainer's PC, *Laptop* profile (the maintainer switched the scheme) | E6: the release worker on 1 h and 3 h | 328.3 s and 972.6 s; GPU 0.0 %. |
 | 2026-11-15 | Maintainer's PC | `ipc-probe/pack.ps1` | `DeScribe.SttProbe` 1.0.0.0 and 2.0.0.0, 2.7 MB each, signed with a new `devcert.pfx` (gitignored, not trusted yet: guide task 6). |
 | 2026-11-16 | Maintainer's PC, debug exe over CDP, `speech-pack-test-server.mjs` (the agent) | Phase 35's S1, S2, S4, S5, S6, S9 | As in [the S table](#the-download-as-built-phase-35). No console errors. |
+| 2026-11-17 | Work laptop, 1.3.0 from the Store, company network, the maintainer | Download speech models in Settings; then `test_audio.m4a` (37 min 22 s) twice, plugged in, Balanced | The download worked (S1). 314 s (7.1×), then 301 s (7.4×) with every other app closed. As in [the laptop's numbers](#the-work-laptops-numbers-phase-36-l9). |
+| 2026-11-19 | Maintainer's PC, ANSI code page 1252 (the agent) | `model_paths_with_non_ascii_letters_load`: both models and the recording in `describe-Søren-Müller-æøå-<pid>\`; then with `c_path` mangling non-ASCII letters | Passes (0.7 s); the mangled path fails with "Failed to load GGML file". As in [non-ASCII paths](#non-ascii-paths-audit-des-1). |

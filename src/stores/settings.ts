@@ -44,6 +44,8 @@ const PREFS_KEY = 'prefs';
 const PrefsSchema = z.object({
   /** `'auto'` or a language code; the store falls back to Auto for one the provider doesn't offer. */
   languageHint: z.string().catch('auto'),
+  /** Auto-detect was replaced by English for This computer, so ElevenLabs gives it back (D56). */
+  languageAutoReplaced: z.boolean().catch(false),
   zeroRetention: z.boolean().catch(false),
   /** The provider and model of the last translation, offered first next time. */
   translationProvider: z.enum(['claude', 'gemini']).catch('claude'),
@@ -109,8 +111,15 @@ const CHECK_FAILED: KeyCheckResult = {
 export const useSettingsStore = defineStore('settings', () => {
   const prefs = loadPrefs();
   const speechPack = useSpeechPackStore();
-  /** Whether Setup offers This computer: the desktop app, with the speech models ready (Phase 36, decision 2). */
-  const localAvailable = computed(() => __DESKTOP__ && speechPack.status?.state === 'ready');
+  /** Whether This computer was the saved choice at start: fixed, so a click while Rust checks doesn't move Setup. */
+  const startedLocal = prefs.transcriptionEngine === 'local';
+  /**
+   * Whether Setup offers This computer: the desktop app, with the speech models ready (Phase 36, decision 2). Until
+   * Rust first answers, the saved choice is trusted, so Setup doesn't open with ElevenLabs' layout (audit BUG-6).
+   */
+  const localAvailable = computed(
+    () => __DESKTOP__ && (speechPack.checked ? speechPack.status?.state === 'ready' : startedLocal),
+  );
   /** The engine chosen on Setup, kept while the models are gone, so downloading them again brings it back. */
   const preferredEngine = ref<TranscriptionProviderId>(prefs.transcriptionEngine);
   watch(preferredEngine, (engine) => savePrefs({ transcriptionEngine: engine }), { flush: 'sync' });
@@ -121,6 +130,10 @@ export const useSettingsStore = defineStore('settings', () => {
   function setTranscriptionEngine(engine: TranscriptionProviderId): void {
     preferredEngine.value = engine;
   }
+  /** This computer is trusted but not yet confirmed: Next waits for Rust's answer. */
+  const engineChecking = computed(
+    () => __DESKTOP__ && !speechPack.checked && transcriptionEngine.value === 'local',
+  );
   const localTextCleanUp = ref(prefs.localTextCleanUp);
   const transcription = computed(() => getTranscriptionProvider(transcriptionEngine.value));
   const limits = computed(() => transcription.value.limits);
@@ -237,14 +250,19 @@ export const useSettingsStore = defineStore('settings', () => {
   );
   // When the engine changes, the language follows it (D37, Phase 36). One it doesn't offer becomes Auto-detect, or
   // English for an engine that can't report what it detected (this computer), which Setup then asks for. Auto-detect
-  // replaced that way comes back with an engine that can, unless the language was changed in between.
-  let autoReplaced = false;
+  // replaced that way comes back with an engine that can, unless the language was changed in between. That is saved,
+  // so it survives a restart (audit BUG-5). While Rust checks the models at start, the engine is the saved one, so a
+  // language only this computer offers isn't dropped first (audit BUG-6).
+  const autoReplaced = ref(prefs.languageAutoReplaced);
+  watch(autoReplaced, (replaced) => savePrefs({ languageAutoReplaced: replaced }), {
+    flush: 'sync',
+  });
   let settingHint = false;
   function setHint(hint: LanguageHint): void {
     settingHint = true;
     languageHint.value = hint;
     settingHint = false;
-    if (hint === 'auto') autoReplaced = false;
+    if (hint === 'auto') autoReplaced.value = false;
   }
   watch(
     transcription,
@@ -252,19 +270,19 @@ export const useSettingsStore = defineStore('settings', () => {
       const hint = languageHint.value;
       const offered = hint === 'auto' || provider.languages.includes(hint);
       if (provider.supports.autoDetect) {
-        if (!offered || autoReplaced) setHint('auto');
+        if (!offered || autoReplaced.value) setHint('auto');
         return;
       }
       if (hint !== 'auto' && offered) return;
       setHint(provider.languages.includes('en') ? 'en' : (provider.languages[0] ?? 'auto'));
-      autoReplaced = hint === 'auto';
+      autoReplaced.value = hint === 'auto';
     },
     { flush: 'sync', immediate: true },
   );
   watch(
     languageHint,
     () => {
-      if (!settingHint) autoReplaced = false;
+      if (!settingHint) autoReplaced.value = false;
     },
     { flush: 'sync' },
   );
@@ -344,6 +362,7 @@ export const useSettingsStore = defineStore('settings', () => {
   function resetPrefs(): void {
     const defaults = PrefsSchema.parse({});
     languageHint.value = defaults.languageHint;
+    autoReplaced.value = defaults.languageAutoReplaced;
     zeroRetention.value = defaults.zeroRetention;
     translationProvider.value = defaults.translationProvider;
     translationModel.value = LLM_MODELS[defaults.translationProvider].default;
@@ -430,7 +449,8 @@ export const useSettingsStore = defineStore('settings', () => {
     else if (!fileCheck.value?.ok) {
       missing.push('Choose a recording that meets the limits shown above.');
     }
-    if (keyRequired.value && elevenLabsKey.value.trim() === '') {
+    if (engineChecking.value) missing.push('Wait while the speech models are checked.');
+    else if (keyRequired.value && elevenLabsKey.value.trim() === '') {
       missing.push('Add your ElevenLabs API key in Settings.');
     }
     if (!speakersValid.value) {

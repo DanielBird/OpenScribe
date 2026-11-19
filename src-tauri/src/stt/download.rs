@@ -37,8 +37,10 @@ pub enum DownloadErrorKind {
   Offline,
   /// 429 or a server error: try again later.
   Busy,
-  /// Not enough space, or a write failed.
+  /// Not enough space.
   Disk,
+  /// A file couldn't be made, written, read back, renamed or deleted (held by another app, or no write access).
+  Write,
   /// A complete file with the wrong hash (it is deleted).
   Mismatch,
   /// 404 or 410: this build's files aren't there any more.
@@ -149,8 +151,8 @@ pub fn download(
   on_progress: &mut dyn FnMut(u64, u64),
 ) -> Result<(), DownloadError> {
   let dir = root.join(&def.id);
-  let disk = |what: &str, e: std::io::Error| disk_error(root, what, &e);
-  pack::claim(&dir, def).map_err(|e| disk("making the folder", e))?;
+  let io = |what: &str, e: std::io::Error| io_error(root, what, &e);
+  pack::claim(&dir, def).map_err(|e| io("making the folder", e))?;
 
   let receipt = pack::read_receipt(&dir);
   let mut todo = Vec::new();
@@ -162,7 +164,7 @@ pub fn download(
         done += model.bytes;
       }
       FileState::Wrong => {
-        pack::delete(&dir.join(&model.file)).map_err(|e| disk("deleting a damaged file", e))?;
+        pack::delete(&dir.join(&model.file)).map_err(|e| io("deleting a damaged file", e))?;
         todo.push(model);
       }
       FileState::Absent => todo.push(model),
@@ -197,10 +199,13 @@ fn cancelled() -> DownloadError {
   DownloadError::new(Kind::Cancelled, "cancelled")
 }
 
-fn disk_error(root: &Path, what: &str, e: &std::io::Error) -> DownloadError {
-  let full = e.raw_os_error() == Some(112); // ERROR_DISK_FULL
-  let text = if full { format!("{what}: the disk is full") } else { format!("{what}: {e}") };
-  DownloadError::new(Kind::Disk, without_path(&text, root, "<speech-pack>"))
+/// A failed file operation under `root`: `disk` only when the disk (or the user's quota) is full, `write` otherwise.
+pub(crate) fn io_error(root: &Path, what: &str, e: &std::io::Error) -> DownloadError {
+  use std::io::ErrorKind;
+  // ERROR_DISK_FULL, ERROR_HANDLE_DISK_FULL.
+  let full = matches!(e.raw_os_error(), Some(112 | 39)) || matches!(e.kind(), ErrorKind::StorageFull | ErrorKind::QuotaExceeded);
+  let (kind, text) = if full { (Kind::Disk, format!("{what}: the disk is full")) } else { (Kind::Write, format!("{what}: {e}")) };
+  DownloadError::new(kind, without_path(&text, root, "<speech-pack>"))
 }
 
 fn part_of(dir: &Path, model: &ModelDef) -> PathBuf {
@@ -225,10 +230,10 @@ fn fetch(
   progress: &mut Progress<'_>,
 ) -> Result<(), DownloadError> {
   let part = part_of(dir, model);
-  let disk = |what: &str, e: std::io::Error| disk_error(root, what, &e);
+  let io = |what: &str, e: std::io::Error| io_error(root, what, &e);
   let mut have = len_of(&part);
   if have > model.bytes {
-    pack::delete(&part).map_err(|e| disk("deleting a partial file", e))?;
+    pack::delete(&part).map_err(|e| io("deleting a partial file", e))?;
     have = 0;
   }
   if have < model.bytes {
@@ -244,14 +249,14 @@ fn fetch(
     let _ = pack::delete(&part);
     return Err(DownloadError::new(Kind::Blocked, format!("{}: {size} bytes, expected {}", model.file, model.bytes)));
   }
-  let sha256 = pack::sha256_of(&part).map_err(|e| disk("reading the download", e))?;
+  let sha256 = pack::sha256_of(&part).map_err(|e| io("reading the download", e))?;
   if !sha256.eq_ignore_ascii_case(&model.sha256) {
     let _ = pack::delete(&part);
     return Err(DownloadError::new(Kind::Mismatch, format!("{}: SHA-256 {sha256}", model.file)));
   }
   let target = dir.join(&model.file);
-  pack::delete(&target).map_err(|e| disk("replacing the old file", e))?;
-  std::fs::rename(&part, &target).map_err(|e| disk("naming the file", e))?;
+  pack::delete(&target).map_err(|e| io("replacing the old file", e))?;
+  std::fs::rename(&part, &target).map_err(|e| io("naming the file", e))?;
   if let Some(entry) = pack::entry_for(dir, model, sha256) {
     pack::record_verified(dir, def, entry);
   }
@@ -350,13 +355,13 @@ fn receive(
     return Err(fail(Kind::Blocked, format!("{} bytes on offer, expected {}", start + length, model.bytes)));
   }
 
-  let disk = |what: &str, e: std::io::Error| disk_error(root, what, &e);
+  let io = |what: &str, e: std::io::Error| io_error(root, what, &e);
   let mut file = if resumed {
     std::fs::OpenOptions::new().append(true).open(part)
   } else {
     std::fs::File::create(part)
   }
-  .map_err(|e| disk("opening the download", e))?;
+  .map_err(|e| io("opening the download", e))?;
   let mut buffer = vec![0u8; 1 << 20];
   let mut written = 0u64;
   progress.report(before + start, false);
@@ -377,11 +382,11 @@ fn receive(
       let _ = pack::delete(part);
       return Err(fail(Kind::Blocked, format!("more than the {} bytes listed", model.bytes)));
     }
-    file.write_all(&buffer[..n]).map_err(|e| disk("writing the download", e))?;
+    file.write_all(&buffer[..n]).map_err(|e| io("writing the download", e))?;
     written += n as u64;
     progress.report(before + start + written, false);
   }
-  file.flush().map_err(|e| disk("writing the download", e))?;
+  file.flush().map_err(|e| io("writing the download", e))?;
   Ok(())
 }
 

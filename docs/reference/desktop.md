@@ -229,16 +229,32 @@ DECISIONS.md D50, D51, D53; the engine and models in [local-stt.md](local-stt.md
   |---|---|
   | `stt_choose_recording` | Windows' Open dialog; hands the file to the page and returns its token, or `null` |
   | `stt_status` | `ready`, `missing` or `unusable` (`damaged`, `outdated`, `cpu`), with the pack's info |
-  | `stt_start { token, onProgress }` | One run at a time; progress on the channel; the words, segments and timings |
-  | `stt_cancel` | Ends the worker; `stt_start` then fails with `cancelled` |
+  | `stt_start { token, runId, onProgress }` | One run at a time; progress on the channel; the words, segments and timings |
+  | `stt_cancel { runId }` | Ends that run's worker; its `stt_start` then fails with `cancelled` |
   | `set_close_guard { active }` | Whether closing the window should ask first |
 
+- **Cancel and its run** (AUDIT-2026-11-19, BUG-3):
+  - `runId` is the page's `crypto.randomUUID()` for the run.
+  - `stt_cancel` is a sync command, so it runs on the main thread, and nothing orders it after `stt_start` taking the
+    run's place. A cancel for a run that hasn't begun is kept, for that id only (the last 8), and the run fails with
+    `cancelled` as it begins.
+  - A cancelled run holds its place while its worker is ended and its pipes close, tens of milliseconds. **Start
+    again** sits where **Cancel** was, so a new `stt_start` waits up to 3 s for a cancelled run to leave. A run that
+    wasn't cancelled is refused with `busy` at once.
+  - The place is freed by a guard's `Drop`, so a panic can't leave it held.
 - **The recording:** Rust chooses it (the dialog, or a native drop) and posts the page a read-only file handle with
   `PostWebMessageAsJsonWithAdditionalObjects`. The page calls `getFile()` (`src/desktop/recordings.ts`). The other way
   round fails: wry's message handler runs first and stops WebView2 calling later ones for any non-string message
   (D53).
+  - WebView2 may refuse the handover: a runtime without `ICoreWebView2_23` or `ICoreWebView2Environment14`, or a file
+    it won't open.
+  - `stt_choose_recording` waits for the answer and then fails with `recording`.
+  - A drop is reported with a plain `describe.drop-failed` message: `{ x, y, detail }`.
+  - The page also gives up if `getFile()` fails or no file arrives within 10 s. `FileDrop` then says it couldn't open
+    the file (AUDIT-2026-11-19, BUG-2).
 - **The worker:** `describe.exe --stt-worker`, in a job object with `KILL_ON_JOB_CLOSE`. Job on stdin (or
-  `--job <file>` for timing runs by hand), JSON events on stdout. It loads `nemo_speech_asr_c.dll` from beside the
+  `--job <file>` for timing runs by hand), JSON events on stdout. If the job object can't be made, Cancel ends the
+  process by its handle, and the worker exits (code 3) when a write to stdout fails, since the app has gone. It loads `nemo_speech_asr_c.dll` from beside the
   exe, or in a debug build from `DESCRIBE_STT_RUNTIME_DIR` or `src-tauri/stt-runtime/`.
 - **Keep awake:** a `PowerRequestSystemRequired` power request is held for the run.
 - **Closing:** while the page's guard is set or a local run is going, closing the window shows a task dialog
@@ -281,8 +297,8 @@ DECISIONS.md D54; the downloader as built and the S checks in [local-stt.md](loc
   | Command | What it does |
   |---|---|
   | `stt_status` | Also `downloading`, with `receivedBytes` and `totalBytes`, while a download runs |
-  | `stt_download { onProgress }` | Downloads the files `pack.json` lists, progress on the channel; fails with a kind (`blocked`, `offline`, `busy`, `disk`, `mismatch`, `gone`, `cancelled`, `in-use`) and a detail |
-  | `stt_download_cancel` | Stops it; the `.part` file is kept |
+  | `stt_download { downloadId, onProgress }` | Downloads the files `pack.json` lists, progress on the channel; fails with a kind (`blocked`, `offline`, `busy`, `disk`, `write`, `mismatch`, `gone`, `cancelled`, `in-use`) and a detail |
+  | `stt_download_cancel { downloadId }` | Stops that download; the `.part` file is kept. One that comes before the download begins is kept, as for `stt_cancel` |
   | `stt_remove_models` | Deletes the models, their parts and receipts, and older packs' folders |
 
   None takes a URL, a host or a folder. A run, a download and a removal refuse each other (`in-use`, or

@@ -1,14 +1,25 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, useTemplateRef } from 'vue';
+import {
+  computed,
+  nextTick,
+  onBeforeUnmount,
+  onMounted,
+  ref,
+  shallowRef,
+  useTemplateRef,
+} from 'vue';
 import { formatBytes, type FileCheck } from '../../domain/filecheck';
 import { formatTimestamp } from '../../domain/transcript';
+import type { ProviderError } from '../../providers/errors';
 import { useDesktopRecordingStore } from '../../stores/desktopRecording';
+import ErrorDetails from './ErrorDetails.vue';
 
 // The parent owns the file and its check (Setup uses the settings store).
 // `compact` is a one-line picker (`prompt`, if any, and a `chooseLabel` button) with no file details:
 // AudioBar's Attach.
 // In the desktop app the file comes from Rust (DECISIONS.md D53): the button opens Windows' Open dialog, and a file
-// dropped on the window arrives with where it landed, so it counts only on the zone, as a browser drop would.
+// dropped on the window arrives with where it landed, so it counts only on the zone, as a browser drop would. A file
+// Rust couldn't hand over shows why, until the next one is chosen or dropped.
 const props = withDefaults(
   defineProps<{
     file?: File | null;
@@ -39,6 +50,7 @@ const zone = useTemplateRef<HTMLDivElement>('zone');
 const desktop = __DESKTOP__ ? useDesktopRecordingStore() : null;
 const htmlDragging = ref(false);
 const dragging = computed(() => htmlDragging.value || (desktop?.dragging ?? false));
+const failure = shallowRef<ProviderError | null>(null);
 let dragDepth = 0;
 let stopDesktopDrops: (() => void) | null = null;
 
@@ -49,8 +61,10 @@ const durationText = computed(() => {
 
 async function choose(): Promise<void> {
   if (desktop) {
-    const picked = await desktop.choose();
-    if (picked) emit('select', picked);
+    failure.value = null;
+    const chosen = await desktop.choose();
+    if (chosen && 'error' in chosen) failure.value = chosen.error;
+    else if (chosen) emit('select', chosen.file);
     return;
   }
   input.value?.click();
@@ -108,11 +122,12 @@ onMounted(() => {
   window.addEventListener('dragover', blockStrayDrop);
   window.addEventListener('drop', blockStrayDrop);
   stopDesktopDrops =
-    desktop?.onDrop(({ file, x, y }) => {
+    desktop?.onDrop((drop) => {
       const rect = zone.value?.getBoundingClientRect();
-      if (rect && x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom) {
-        emit('select', file);
-      }
+      const { x, y } = drop;
+      if (!rect || x < rect.left || x > rect.right || y < rect.top || y > rect.bottom) return;
+      failure.value = 'error' in drop ? drop.error : null;
+      if ('file' in drop) emit('select', drop.file);
     }) ?? null;
 });
 
@@ -166,6 +181,11 @@ onBeforeUnmount(() => {
         </button>
       </template>
     </div>
+
+    <template v-if="failure">
+      <p class="error" role="alert">{{ failure.userMessage }}</p>
+      <ErrorDetails :error="failure" />
+    </template>
 
     <div v-if="!compact" class="issues" role="status">
       <ul v-if="check && (check.errors.length > 0 || check.warnings.length > 0)">

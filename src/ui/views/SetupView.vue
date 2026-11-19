@@ -20,7 +20,8 @@ const ids = {
   engine: `${id}-engine`,
 };
 
-// Whether This computer is offered depends on the speech models (Phase 36, decision 2): ask Rust each time Setup opens.
+// Whether This computer is offered depends on the speech models (Phase 36, decision 2): ask Rust each time Setup opens,
+// as well as at start (main.ts).
 if (__DESKTOP__) onMounted(() => void useSpeechPackStore().refresh());
 const local = computed(() => settings.transcriptionEngine === 'local');
 const supports = computed(() => settings.transcription.supports);

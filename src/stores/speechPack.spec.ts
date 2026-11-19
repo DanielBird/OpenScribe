@@ -41,6 +41,27 @@ describe('the speech pack store', () => {
     expect(store.size).toBe('0.8 GB');
   });
 
+  it('is checked once Rust answers, or fails to (audit BUG-6)', async () => {
+    const store = useSpeechPackStore();
+    bridge.hold();
+    const first = store.refresh();
+    expect(store.checked).toBe(false);
+    bridge.release();
+    await first;
+    expect(store.checked).toBe(true);
+
+    setActivePinia(createPinia());
+    const failing = useSpeechPackStore();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    bridge.hold();
+    const second = failing.refresh();
+    bridge.release(new Error('no answer'));
+    await second;
+    expect(failing.status).toBeNull();
+    expect(failing.checked).toBe(true);
+    warn.mockRestore();
+  });
+
   it('asks Rust once when asked twice at the same time', async () => {
     const store = useSpeechPackStore();
     await Promise.all([store.refresh(), store.refresh()]);
@@ -106,7 +127,7 @@ describe('the speech pack store', () => {
     await expect(store.remove()).resolves.toBe('removed');
     expect(store.status?.state).toBe('missing');
 
-    bridge.removeFails = new SpeechPackError('disk', 'removing: access denied');
+    bridge.removeFails = new SpeechPackError('write', 'removing: access denied');
     await expect(store.remove()).resolves.toBe('failed');
     expect(store.error?.userMessage).toContain("couldn't remove the speech models");
   });

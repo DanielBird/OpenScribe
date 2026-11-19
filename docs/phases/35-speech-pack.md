@@ -117,7 +117,8 @@ because Rust makes the requests. Update AGENTS.md's rule 2 with the code, and re
    | `blocked` | A refusal (401, 403, 407), a certificate that isn't trusted, or a "file" that is a web page (the wrong size or hash on a small HTML answer) | "Your network didn't allow the download from huggingface.co. Try another network, or ask IT to allow it." |
    | `offline` | No connection, DNS failure, timeout | "Couldn't reach huggingface.co. Check your connection and try again." |
    | `busy` | 429 or 503 | "Hugging Face is busy. Try again in a few minutes." |
-   | `disk` | Not enough space, or a write fails | "Not enough disk space: the speech models need 0.8 GB." |
+   | `disk` | Not enough space (the free-space check, or Windows says the disk is full) | "Not enough disk space: the speech models need 0.8 GB." |
+   | `write` | Any other file operation fails: a file held by another app, no write access, a refused rename (BUG-4 in AUDIT-2026-11-19) | "DeScribe couldn't save the speech models. Close other apps that might use them, and try again." |
    | `mismatch` | A complete file with the wrong size or hash | "The download didn't arrive intact. Try again." |
    | `gone` | 404 or 410 | "This version of DeScribe can't download its speech models any more. Update DeScribe." |
 

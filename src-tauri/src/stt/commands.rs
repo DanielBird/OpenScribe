@@ -6,7 +6,7 @@ use super::error::{SttError, SttErrorKind};
 use super::pack::{self, PackState, SpeechPackInfo, Unusable};
 use super::protocol::{Event, Job, Segment, Word};
 use super::worker::{self, Running};
-use super::{Stt, cpu, power, recording};
+use super::{CANCELLED_RUN_WAIT, Stt, cpu, power, recording};
 use crate::close_guard::CLOSE_GUARD;
 use serde::Serialize;
 use std::path::PathBuf;
@@ -140,8 +140,8 @@ fn status_now(stt: &Stt) -> LocalSttStatus {
 
 // ---- The commands ----
 
-/// Shows Windows' Open dialog and hands the chosen file to the page (`recording.rs`). Returns its token, or `None` if
-/// the user cancelled.
+/// Shows Windows' Open dialog and hands the chosen file to the page (`recording.rs`). Returns its token once WebView2
+/// has taken the file, `None` if the user cancelled, or a `recording` error if the file couldn't be handed over.
 #[tauri::command]
 pub async fn stt_choose_recording<R: Runtime>(
   window: WebviewWindow<R>,
@@ -154,7 +154,7 @@ pub async fn stt_choose_recording<R: Runtime>(
   let Some(path) = path else { return Ok(None) };
   let path = recording::usable(&path).ok_or_else(|| SttError::new(SttErrorKind::Recording, "not a file"))?;
   let token = stt.recordings.add(path.clone());
-  hand_over(&window, &token, &path, None)?;
+  handed_over(hand_over(&window, &token, &path, None)?).await?;
   Ok(Some(token))
 }
 
@@ -167,23 +167,26 @@ pub async fn stt_status(stt: State<'_, Arc<Stt>>) -> Result<LocalSttStatus, SttE
     .map_err(|e| SttError::new(SttErrorKind::Engine, e.to_string()))
 }
 
-/// Transcribes the recording chosen under `token`, sending progress on `on_progress`. One run at a time.
+/// Transcribes the recording chosen under `token`, sending progress on `on_progress`. One run at a time. `run_id` is
+/// the page's name for the run, which `stt_cancel` takes.
 #[tauri::command]
 pub async fn stt_start(
   token: String,
+  run_id: String,
   on_progress: Channel<Progress>,
   stt: State<'_, Arc<Stt>>,
 ) -> Result<LocalSttResult, SttError> {
   let stt = Arc::clone(&stt);
-  tauri::async_runtime::spawn_blocking(move || start(&stt, &token, &on_progress))
+  tauri::async_runtime::spawn_blocking(move || start(&stt, &token, &run_id, &on_progress))
     .await
     .map_err(|e| SttError::new(SttErrorKind::Engine, e.to_string()))?
 }
 
-/// Ends the run, if there is one. The run's own `stt_start` then fails with `cancelled`.
+/// Ends the run named `run_id`. Its `stt_start` then fails with `cancelled`, even if this came first: this runs on the
+/// main thread, and nothing orders it after `stt_start` taking the run's place.
 #[tauri::command]
-pub fn stt_cancel(stt: State<'_, Arc<Stt>>) {
-  stt.cancel();
+pub fn stt_cancel(run_id: String, stt: State<'_, Arc<Stt>>) {
+  stt.cancel_run(&run_id);
 }
 
 /// Whether the page has work running that closing the window would lose (`close_guard.rs`).
@@ -193,10 +196,12 @@ pub fn set_close_guard(active: bool) {
 }
 
 /// Downloads the speech models this build lists (`download.rs`), sending progress on `on_progress`. It takes nothing
-/// that names a URL, a host or a folder: those come from the list compiled into the app.
+/// that names a URL, a host or a folder: those come from the list compiled into the app. `download_id` is the page's
+/// name for the download, which `stt_download_cancel` takes.
 #[tauri::command]
 pub async fn stt_download<R: Runtime>(
   app: AppHandle<R>,
+  download_id: String,
   on_progress: Channel<DownloadProgress>,
   stt: State<'_, Arc<Stt>>,
 ) -> Result<(), DownloadError> {
@@ -204,10 +209,9 @@ pub async fn stt_download<R: Runtime>(
   let user_agent = format!("DeScribe/{}", app.package_info().version);
   tauri::async_runtime::spawn_blocking(move || {
     let def = pack::definition();
-    let state = stt.begin_download(Downloading::new(def.info().download_bytes))?;
-    let result = run_download(def, &state, user_agent, &on_progress);
-    stt.end_download();
-    result
+    let next = Downloading::new(def.info().download_bytes);
+    let held = stt.begin_download(next, Some(&download_id), CANCELLED_RUN_WAIT)?;
+    run_download(def, &held.state, user_agent, &on_progress)
   })
   .await
   .map_err(|e| DownloadError::new(DownloadErrorKind::Offline, e.to_string()))?
@@ -220,7 +224,7 @@ fn run_download(
   progress: &Channel<DownloadProgress>,
 ) -> Result<(), DownloadError> {
   let root = pack::root()
-    .ok_or_else(|| DownloadError::new(DownloadErrorKind::Disk, "the app has no folder to keep them in"))?;
+    .ok_or_else(|| DownloadError::new(DownloadErrorKind::Write, "the app has no folder to keep them in"))?;
   let _awake = power::KeepAwake::new("DeScribe is downloading its speech models");
   let free = download::free_bytes;
   let opts = download::Options { user_agent, allow_loopback_http: pack::is_test_list(), free_bytes: &free };
@@ -229,10 +233,10 @@ fn run_download(
   })
 }
 
-/// Stops the download, if one is going. Its `stt_download` then fails with `cancelled`.
+/// Stops the download named `download_id`. Its `stt_download` then fails with `cancelled`, even if this came first.
 #[tauri::command]
-pub fn stt_download_cancel(stt: State<'_, Arc<Stt>>) {
-  stt.cancel_download();
+pub fn stt_download_cancel(download_id: String, stt: State<'_, Arc<Stt>>) {
+  stt.cancel_download(&download_id);
 }
 
 /// **Remove** in Settings: deletes the speech models and anything a download left (`pack::remove`).
@@ -240,36 +244,19 @@ pub fn stt_download_cancel(stt: State<'_, Arc<Stt>>) {
 pub async fn stt_remove_models(stt: State<'_, Arc<Stt>>) -> Result<(), DownloadError> {
   let stt = Arc::clone(&stt);
   tauri::async_runtime::spawn_blocking(move || {
-    let _held = stt.begin_download(Downloading::removal())?;
-    let result = match pack::root() {
-      Some(root) => pack::remove(&root, pack::definition()).map_err(|e| {
-        let detail = super::error::without_path(&format!("removing: {e}"), &root, "<speech-pack>");
-        DownloadError::new(DownloadErrorKind::Disk, detail)
-      }),
+    let _held = stt.begin_download(Downloading::removal(), None, CANCELLED_RUN_WAIT)?;
+    match pack::root() {
+      Some(root) => pack::remove(&root, pack::definition()).map_err(|e| download::io_error(&root, "removing", &e)),
       None => Ok(()),
-    };
-    stt.end_download();
-    result
+    }
   })
   .await
-  .map_err(|e| DownloadError::new(DownloadErrorKind::Disk, e.to_string()))?
+  .map_err(|e| DownloadError::new(DownloadErrorKind::Write, e.to_string()))?
 }
 
-fn start(stt: &Stt, token: &str, progress: &Channel<Progress>) -> Result<LocalSttResult, SttError> {
-  let running = Arc::new(Running::default());
-  {
-    let mut current = stt.running.lock().unwrap_or_else(|e| e.into_inner());
-    if current.is_some() {
-      return Err(SttError::new(SttErrorKind::Busy, "a transcription is already running"));
-    }
-    if stt.current_download().is_some() {
-      return Err(SttError::new(SttErrorKind::Downloading, "the speech models are being downloaded or removed"));
-    }
-    *current = Some(Arc::clone(&running));
-  }
-  let result = run(token, &running, progress, &stt.recordings);
-  *stt.running.lock().unwrap_or_else(|e| e.into_inner()) = None;
-  result
+fn start(stt: &Stt, token: &str, run_id: &str, progress: &Channel<Progress>) -> Result<LocalSttResult, SttError> {
+  let held = stt.begin_run(run_id, CANCELLED_RUN_WAIT)?;
+  run(token, &held.running, progress, &stt.recordings)
 }
 
 fn run(
@@ -349,15 +336,20 @@ async fn choose<R: Runtime>(_window: &WebviewWindow<R>) -> Result<Option<PathBuf
   Ok(None)
 }
 
+/// What `handed_over` reports, before the reason.
+const NOT_HANDED_OVER: &str = "couldn't hand the file to the page";
+
+/// Posts the file to the page. `Err` only if the message couldn't be sent to the main thread at all; whether WebView2
+/// took the file comes back on the receiver (`handed_over`).
 #[cfg(windows)]
 fn hand_over<R: Runtime>(
   window: &WebviewWindow<R>,
   token: &str,
   path: &std::path::Path,
   at: Option<(f64, f64)>,
-) -> Result<(), SttError> {
+) -> Result<recording::Posted, SttError> {
   recording::native::post_file(window, recording::recording_message(token, at), path)
-    .map_err(|e| SttError::new(SttErrorKind::Recording, format!("couldn't hand the file to the page: {e}")))
+    .map_err(|e| SttError::new(SttErrorKind::Recording, format!("{NOT_HANDED_OVER}: {e}")))
 }
 
 #[cfg(not(windows))]
@@ -366,12 +358,25 @@ fn hand_over<R: Runtime>(
   _token: &str,
   _path: &std::path::Path,
   _at: Option<(f64, f64)>,
-) -> Result<(), SttError> {
-  Ok(())
+) -> Result<recording::Posted, SttError> {
+  let (done, posted) = std::sync::mpsc::sync_channel(1);
+  let _ = done.send(Ok(()));
+  Ok(posted)
+}
+
+/// Waits, on a blocking thread, for WebView2 to take the file `hand_over` posted.
+async fn handed_over(posted: recording::Posted) -> Result<(), SttError> {
+  let fail = |detail: String| SttError::new(SttErrorKind::Recording, format!("{NOT_HANDED_OVER}: {detail}"));
+  tauri::async_runtime::spawn_blocking(move || posted.recv())
+    .await
+    .map_err(|e| fail(e.to_string()))?
+    .unwrap_or_else(|_| Err("the window was gone".to_owned()))
+    .map_err(fail)
 }
 
 /// A file dragged onto the window (`dragDropEnabled: true`, so the page's own drop events don't fire). The page hears
-/// when a drag is over the window, and gets the first dropped file with where it landed, to check it against its zone.
+/// when a drag is over the window, and gets the first dropped file with where it landed, to check it against its zone,
+/// or, if WebView2 wouldn't take the file, a `describe.drop-failed` message saying why.
 pub fn on_drag_drop<R: Runtime>(window: &WebviewWindow<R>, stt: &Stt, event: &DragDropEvent) {
   #[cfg(windows)]
   {
@@ -385,8 +390,17 @@ pub fn on_drag_drop<R: Runtime>(window: &WebviewWindow<R>, stt: &Stt, event: &Dr
         post(false);
         let Some(path) = paths.iter().find_map(|p| recording::usable(p)) else { return };
         let scale = window.scale_factor().unwrap_or(1.0);
+        let at = (position.x / scale, position.y / scale);
         let token = stt.recordings.add(path.clone());
-        let _ = hand_over(window, &token, &path, Some((position.x / scale, position.y / scale)));
+        let Ok(posted) = hand_over(window, &token, &path, Some(at)) else { return };
+        // This is the main thread, which runs the handover; wait for its result elsewhere.
+        let window = window.clone();
+        tauri::async_runtime::spawn_blocking(move || {
+          if let Ok(Err(detail)) = posted.recv() {
+            let detail = format!("{NOT_HANDED_OVER}: {detail}");
+            let _ = recording::native::post(&window, recording::drop_failed_message(at, &detail));
+          }
+        });
       }
       _ => {}
     }
@@ -446,32 +460,160 @@ mod tests {
       assert!(capability.contains(&format!("\"allow-{}\"", command.replace('_', "-"))), "not granted: {command}");
     }
   }
+
+  #[test]
+  fn choosing_waits_for_webview2_to_take_the_file() {
+    let posted = |result: Option<Result<(), String>>| {
+      let (done, posted) = std::sync::mpsc::sync_channel(1);
+      if let Some(result) = result {
+        done.send(result).unwrap();
+      }
+      posted // `done` is dropped here, as when the closure never ran
+    };
+    let wait = |p| tauri::async_runtime::block_on(handed_over(p));
+    assert_eq!(wait(posted(Some(Ok(())))), Ok(()));
+    let refused = wait(posted(Some(Err("No such interface supported (0x80004002)".into())))).unwrap_err();
+    assert_eq!(refused.kind, SttErrorKind::Recording);
+    assert_eq!(refused.detail, "couldn't hand the file to the page: No such interface supported (0x80004002)");
+    let gone = wait(posted(None)).unwrap_err();
+    assert_eq!(gone.kind, SttErrorKind::Recording);
+    assert_eq!(gone.detail, "couldn't hand the file to the page: the window was gone");
+  }
 }
 
 #[cfg(test)]
 mod exclusion_tests {
+  use super::super::EARLY_CANCELS;
   use super::*;
+  use std::time::{Duration, Instant};
+
+  const NO_WAIT: Duration = Duration::ZERO;
+
+  fn channel() -> Channel<Progress> {
+    Channel::new(|_| Ok(()))
+  }
 
   #[test]
   fn a_run_a_download_and_a_removal_exclude_each_other() {
     let stt = Stt::default();
-    let held = stt.begin_download(Downloading::new(10)).unwrap();
+    let held = stt.begin_download(Downloading::new(10), Some("d"), NO_WAIT).unwrap();
     assert!(stt.is_busy());
-    assert_eq!(stt.begin_download(Downloading::removal()).unwrap_err().kind, DownloadErrorKind::InUse);
-    let channel: Channel<Progress> = Channel::new(|_| Ok(()));
-    assert_eq!(start(&stt, "no-such-token", &channel).unwrap_err().kind, SttErrorKind::Downloading);
+    assert_eq!(stt.begin_download(Downloading::removal(), None, NO_WAIT).unwrap_err().kind, DownloadErrorKind::InUse);
+    assert_eq!(start(&stt, "no-such-token", "r", &channel()).unwrap_err().kind, SttErrorKind::Downloading);
     assert!(matches!(status_now(&stt), LocalSttStatus::Downloading { total_bytes: 10, .. }));
-    stt.cancel_download();
-    assert!(held.is_cancelled());
-    stt.end_download();
+    stt.cancel_any_download();
+    assert!(held.state.is_cancelled());
+    drop(held);
     assert!(!stt.is_busy());
 
-    *stt.running.lock().unwrap() = Some(Arc::new(Running::default()));
-    assert_eq!(stt.begin_download(Downloading::new(10)).unwrap_err().kind, DownloadErrorKind::InUse);
-    *stt.running.lock().unwrap() = None;
+    let run = stt.begin_run("r", NO_WAIT).unwrap();
+    assert!(stt.is_busy());
+    let refused = stt.begin_download(Downloading::new(10), Some("d"), NO_WAIT).unwrap_err();
+    assert_eq!(refused.kind, DownloadErrorKind::InUse);
+    drop(run);
+    assert!(!stt.is_running());
 
-    let _removal = stt.begin_download(Downloading::removal()).unwrap();
+    let _removal = stt.begin_download(Downloading::removal(), None, NO_WAIT).unwrap();
     assert!(!stt.is_busy(), "a removal doesn't hold the window open");
     assert!(!matches!(status_now(&stt), LocalSttStatus::Downloading { .. }));
+  }
+
+  #[test]
+  fn a_cancel_that_arrives_before_its_run_is_kept() {
+    let stt = Stt::default();
+    stt.cancel_run("a");
+    assert_eq!(start(&stt, "no-such-token", "a", &channel()).unwrap_err().kind, SttErrorKind::Cancelled);
+    assert!(!stt.is_running());
+    // It counts once.
+    assert_eq!(start(&stt, "no-such-token", "a", &channel()).unwrap_err().kind, SttErrorKind::Recording);
+  }
+
+  #[test]
+  fn a_cancel_stops_only_the_run_it_names() {
+    let stt = Stt::default();
+    stt.cancel_run("old");
+    assert_eq!(start(&stt, "no-such-token", "b", &channel()).unwrap_err().kind, SttErrorKind::Recording);
+
+    let held = stt.begin_run("c", NO_WAIT).unwrap();
+    stt.cancel_run("other");
+    assert!(!held.running.is_cancelled());
+    stt.cancel_run("c");
+    assert!(held.running.is_cancelled());
+    drop(held);
+    assert!(!stt.is_running(), "the place is freed when the run ends");
+  }
+
+  #[test]
+  fn only_the_last_few_early_cancels_are_kept() {
+    let stt = Stt::default();
+    for i in 0..=EARLY_CANCELS {
+      stt.cancel_run(&format!("r{i}"));
+    }
+    assert_eq!(start(&stt, "no-such-token", "r0", &channel()).unwrap_err().kind, SttErrorKind::Recording);
+    let last = format!("r{EARLY_CANCELS}");
+    assert_eq!(start(&stt, "no-such-token", &last, &channel()).unwrap_err().kind, SttErrorKind::Cancelled);
+  }
+
+  #[test]
+  fn a_run_needs_a_usable_id() {
+    let stt = Stt::default();
+    assert_eq!(start(&stt, "no-such-token", "", &channel()).unwrap_err().kind, SttErrorKind::Engine);
+    let long = "x".repeat(65);
+    stt.cancel_run(&long);
+    assert_eq!(start(&stt, "no-such-token", &long, &channel()).unwrap_err().kind, SttErrorKind::Engine);
+    let refused = stt.begin_download(Downloading::new(10), Some(""), NO_WAIT).unwrap_err();
+    assert_eq!(refused.kind, DownloadErrorKind::Offline);
+  }
+
+  #[test]
+  fn a_new_run_waits_for_a_cancelled_one_to_end() {
+    let stt = Stt::default();
+    let held = stt.begin_run("a", NO_WAIT).unwrap();
+
+    let asked = Instant::now();
+    assert_eq!(stt.begin_run("b", Duration::from_secs(5)).err().map(|e| e.kind), Some(SttErrorKind::Busy));
+    assert!(asked.elapsed() < Duration::from_secs(1), "a run that wasn't cancelled is refused at once");
+
+    stt.cancel_run("a");
+    let refused = stt.begin_run("b", Duration::from_millis(50)).err().map(|e| e.kind);
+    assert_eq!(refused, Some(SttErrorKind::Busy), "a cancelled run that doesn't end is waited for only so long");
+
+    std::thread::scope(|s| {
+      s.spawn(move || {
+        std::thread::sleep(Duration::from_millis(50));
+        drop(held);
+      });
+      let next = stt.begin_run("b", Duration::from_secs(5));
+      assert!(next.is_ok(), "Start again straight after Cancel gets the place");
+    });
+  }
+
+  #[test]
+  fn a_download_cancel_that_arrives_first_is_kept() {
+    let stt = Stt::default();
+    stt.cancel_download("d");
+    let refused = stt.begin_download(Downloading::new(10), Some("d"), NO_WAIT).unwrap_err();
+    assert_eq!(refused.kind, DownloadErrorKind::Cancelled);
+    assert!(stt.current_download().is_none());
+
+    stt.cancel_download("old");
+    let held = stt.begin_download(Downloading::new(10), Some("e"), NO_WAIT).unwrap();
+    assert!(!held.state.is_cancelled());
+    stt.cancel_download("e");
+    assert!(held.state.is_cancelled());
+  }
+
+  #[test]
+  fn a_download_waits_for_a_cancelled_run_to_end() {
+    let stt = Stt::default();
+    let held = stt.begin_run("a", NO_WAIT).unwrap();
+    stt.cancel_run("a");
+    std::thread::scope(|s| {
+      s.spawn(move || {
+        std::thread::sleep(Duration::from_millis(50));
+        drop(held);
+      });
+      assert!(stt.begin_download(Downloading::new(10), Some("d"), Duration::from_secs(5)).is_ok());
+    });
   }
 }

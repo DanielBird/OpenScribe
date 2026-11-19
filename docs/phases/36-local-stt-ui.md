@@ -32,6 +32,7 @@ They override the text below where they differ ([reference/local-stt.md](../refe
   - No length limit up to three hours, so Task 3's "Phase 33's length limit" doesn't arise.
   - **Ogg Opus can't be read** locally. The file check names it and offers ElevenLabs.
 - **"Slower"** on Setup: at the estimate, an hour takes about 5–6 minutes on the laptop. Word it after the checkpoint.
+  *Corrected by the laptop (2026-11-17): about 8 minutes plugged in (7.4×); see the Handoff.*
 - **The transcript is verbatim** ("um", repeated words, no digits). Phase 34 adds the maintainer's clean-up; if it
   becomes a choice, it belongs here.
 - **About:** the two models, NVIDIA's own files from Hugging Face. No copy hosted by Dtype.
@@ -337,3 +338,28 @@ Tasks 1–5 and 7, and the Hugging Face parts of Tasks 8 and 9.
 - **Outside the phase, at the maintainer's request:** a quote's **Open** (D57). Quote cards and search hits open
   their turn on Output, the copy buttons are icons (`src/ui/icons/`), and the search is kept on the way back to
   Analyse.
+
+**The work laptop's first runs (2026-11-17).** The maintainer, 1.3.0 from the Store, plugged in, Balanced. Details in
+[reference/local-stt.md](../reference/local-stt.md#the-work-laptops-numbers-phase-36-l9).
+- **Phase 35's S1 passes on the work laptop:** the models downloaded on the company network.
+- **`test_audio.m4a` (37 min 22 s):**
+  - 314 s (7.1×) with other apps open;
+  - 301 s (7.4×) with them closed: words 301.4 s, peak memory 1.11 GB, 8 threads.
+- **At the target:** an hour in about 8 minutes. D51's list of changes isn't needed.
+- **The emulation was 1.45× too fast** (*Laptop* estimated 10.8×). The new cap is to be found against the engine's
+  own run, not Cinebench. *Not done yet.*
+- **Timings' Speakers** follows the words by design (the shared decoder's queues), so it doesn't show the speakers'
+  own speed.
+- **Still open in L9:**
+  - the 1-hour and 3-hour files plugged in;
+  - the 1-hour file on battery and during a Teams call;
+  - fans and heat.
+
+  Then the "Slower" wording. It must not promise more than "about 8 minutes an hour, plugged in" until battery is
+  measured.
+
+**Audit BUG-6 (2026-11-19).** Setup now trusts the saved engine until Rust's first status answer, which `main.ts`
+asks for at start. The speech-pack store's `checked` says when the answer is in. Until then, with This computer saved,
+Next waits with "Wait while the speech models are checked.". Before the fix, a language only the pack offers (`lt`,
+`mt`, `sl`) was lost at every restart. Details in [AUDIT-2026-11-19.md](../AUDIT-2026-11-19.md). Not checked in the
+real app.

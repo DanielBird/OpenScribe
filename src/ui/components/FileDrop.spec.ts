@@ -1,10 +1,29 @@
 import { flushPromises, mount } from '@vue/test-utils';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { createPinia, setActivePinia } from 'pinia';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { defineComponent, h, shallowRef } from 'vue';
+import { RecordingError, type DroppedRecording } from '../../desktop/recordings';
 import type { FileCheck } from '../../domain/filecheck';
 import FileDrop from './FileDrop.vue';
 
 const OK: FileCheck = { ok: true, errors: [], warnings: [] };
+
+// The desktop app's Rust side, faked (the web build's tests never reach it).
+const recordings = vi.hoisted(() => ({
+  chooseRecording: vi.fn<() => Promise<File | null>>(),
+  dropListener: null as ((drop: DroppedRecording) => void) | null,
+}));
+vi.mock('../../desktop/recordings', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../desktop/recordings')>()),
+  chooseRecording: recordings.chooseRecording,
+  onDragOverWindow: () => () => {},
+  onDroppedRecording: (listener: (drop: DroppedRecording) => void) => {
+    recordings.dropListener = listener;
+    return () => {
+      recordings.dropListener = null;
+    };
+  },
+}));
 
 describe('FileDrop', () => {
   let wrapper: ReturnType<typeof mount<typeof FileDrop>> | null = null;
@@ -156,5 +175,79 @@ describe('FileDrop', () => {
     expect(onRemove).toHaveBeenCalledTimes(1);
     expect(document.activeElement?.textContent?.trim()).toBe('Choose file…');
     host.unmount();
+  });
+
+  describe('in the desktop app', () => {
+    beforeEach(() => {
+      vi.stubGlobal('__DESKTOP__', true);
+      setActivePinia(createPinia());
+      recordings.chooseRecording.mockReset();
+    });
+
+    afterEach(() => vi.unstubAllGlobals());
+
+    const alert = () => wrapper!.find('[role="alert"]');
+    const MESSAGE =
+      "DeScribe couldn't open this file. Try again, or restart DeScribe if it keeps happening.";
+
+    /** The zone covers 0–100 × 0–100 CSS pixels; happy-dom lays nothing out. */
+    function mountOnDesktop(props: Partial<InstanceType<typeof FileDrop>['$props']> = {}) {
+      mountDrop(props);
+      const zone = wrapper!.get('[data-testid="drop-zone"]').element;
+      vi.spyOn(zone, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 0, 100, 100));
+    }
+
+    it('emits the file the Open dialog chose', async () => {
+      const file = new File(['x'], 'a.wav');
+      recordings.chooseRecording.mockResolvedValueOnce(file);
+      mountOnDesktop();
+      await button('Choose file…')!.trigger('click');
+      await flushPromises();
+      expect(wrapper!.emitted('select')).toEqual([[file]]);
+      expect(alert().exists()).toBe(false);
+    });
+
+    it("says when the chosen file couldn't be opened, until the next choice", async () => {
+      recordings.chooseRecording
+        .mockRejectedValueOnce(new RecordingError("couldn't hand the file to the page: refused"))
+        .mockResolvedValueOnce(null);
+      mountOnDesktop();
+      await button('Choose file…')!.trigger('click');
+      await flushPromises();
+      expect(alert().text()).toBe(MESSAGE);
+      expect(wrapper!.get('details pre').text()).toContain(
+        "recording: couldn't hand the file to the page: refused",
+      );
+      expect(wrapper!.emitted('select')).toBeUndefined();
+
+      await button('Choose file…')!.trigger('click');
+      await flushPromises();
+      expect(alert().exists()).toBe(false);
+    });
+
+    it('says so in the compact picker too', async () => {
+      recordings.chooseRecording.mockRejectedValueOnce(new RecordingError('refused'));
+      mountOnDesktop({ compact: true });
+      await button('Choose file…')!.trigger('click');
+      await flushPromises();
+      expect(alert().text()).toBe(MESSAGE);
+    });
+
+    it("takes a drop on the zone, says why one couldn't be opened, and ignores drops elsewhere", async () => {
+      mountOnDesktop();
+      recordings.dropListener!({ error: new RecordingError('refused'), x: 500, y: 500 });
+      await flushPromises();
+      expect(alert().exists()).toBe(false);
+
+      recordings.dropListener!({ error: new RecordingError('refused'), x: 50, y: 50 });
+      await flushPromises();
+      expect(alert().text()).toBe(MESSAGE);
+
+      const file = new File(['x'], 'b.wav');
+      recordings.dropListener!({ file, x: 50, y: 50 });
+      await flushPromises();
+      expect(wrapper!.emitted('select')).toEqual([[file]]);
+      expect(alert().exists()).toBe(false);
+    });
   });
 });

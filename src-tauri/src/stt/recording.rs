@@ -7,6 +7,9 @@
 //! `getFile()` on it and has a disk-backed `File` for playback, the duration probe and an ElevenLabs upload, as before.
 //! `stt_start` then takes the token, so the page never names a path.
 //!
+//! WebView2 can refuse the handover (a runtime too old for these calls, or a file it won't open). The Open dialog's
+//! command then fails; a drop is reported with a plain message, which every WebView2 runtime can post.
+//!
 //! (The other way round, the page posting its File to Rust, doesn't work here: wry's message handler runs first and
 //! fails on every message that isn't a string, which stops WebView2 calling any later handler. Phase 34, step 2.)
 
@@ -21,6 +24,7 @@ use std::time::{Duration, Instant, SystemTime};
 /// What the page's messages are tagged with.
 pub const RECORDING_KIND: &str = "describe.recording";
 pub const DRAG_KIND: &str = "describe.drag";
+pub const DROP_FAILED_KIND: &str = "describe.drop-failed";
 /// How long a chosen recording stays usable by its token.
 const KEEP_FOR: Duration = Duration::from_secs(24 * 60 * 60);
 /// At most this many recordings are remembered; older ones are dropped.
@@ -97,6 +101,15 @@ pub fn drag_message(over: bool) -> String {
   json!({ "kind": DRAG_KIND, "over": over }).to_string()
 }
 
+/// The message posted when a dropped file couldn't be handed to the page: where it was dropped, and why.
+pub fn drop_failed_message((x, y): (f64, f64), detail: &str) -> String {
+  json!({ "kind": DROP_FAILED_KIND, "x": x, "y": y, "detail": detail }).to_string()
+}
+
+/// Whether WebView2 took a file `native::post_file` posted: the error's detail if not. The receiver disconnects
+/// without a value if the closure never ran (the web view was gone).
+pub type Posted = std::sync::mpsc::Receiver<Result<(), String>>;
+
 /// A debug build can name the file the dialog would return (`DESCRIBE_STT_PICK`), so CDP can drive Choose file.
 pub fn picked_for_tests() -> Option<PathBuf> {
   if !cfg!(debug_assertions) {
@@ -108,7 +121,8 @@ pub fn picked_for_tests() -> Option<PathBuf> {
 #[cfg(windows)]
 pub mod native {
   //! Windows' Open dialog, and WebView2's file handles.
-  use super::MEDIA_EXTENSIONS;
+  use super::{MEDIA_EXTENSIONS, Posted};
+  use crate::stt::error::without_path;
   use std::path::{Path, PathBuf};
   use webview2_com::Microsoft::Web::WebView2::Win32::{
     COREWEBVIEW2_FILE_SYSTEM_HANDLE_PERMISSION_READ_ONLY, ICoreWebView2_23, ICoreWebView2Environment14,
@@ -163,8 +177,15 @@ pub mod native {
     }
   }
 
-  /// Posts `json` to the page with a read-only handle to `path`. Runs on the main thread (`with_webview`).
-  pub fn post_file<R: tauri::Runtime>(window: &tauri::WebviewWindow<R>, json: String, path: &Path) -> tauri::Result<()> {
+  /// Posts `json` to the page with a read-only handle to `path`, on the main thread (`with_webview`). That runs later
+  /// unless this is the main thread, and its result comes back on the receiver, with the path left out of the detail.
+  pub fn post_file<R: tauri::Runtime>(
+    window: &tauri::WebviewWindow<R>,
+    json: String,
+    path: &Path,
+  ) -> tauri::Result<Posted> {
+    let (done, posted_rx) = std::sync::mpsc::sync_channel(1);
+    let recording = path.to_path_buf();
     let path = HSTRING::from(path.as_os_str());
     window.with_webview(move |platform| {
       // SAFETY: the environment and the web view live as long as the window; the handle and collection are COM
@@ -185,10 +206,9 @@ pub mod native {
           )
         })()
       };
-      if let Err(error) = posted {
-        eprintln!("DeScribe: couldn't hand the recording to the page: {error}");
-      }
-    })
+      let _ = done.send(posted.map_err(|error| without_path(&error.to_string(), &recording, "<recording>")));
+    })?;
+    Ok(posted_rx)
   }
 
   /// Posts `json` to the page with nothing attached.
@@ -253,5 +273,7 @@ mod tests {
     assert_eq!(drop["via"], "drop");
     assert_eq!(drop["x"], 10.5);
     assert_eq!(serde_json::from_str::<serde_json::Value>(&drag_message(true)).unwrap()["over"], true);
+    let failed: serde_json::Value = serde_json::from_str(&drop_failed_message((10.5, 20.0), "why")).unwrap();
+    assert_eq!(failed, json!({ "kind": "describe.drop-failed", "x": 10.5, "y": 20.0, "detail": "why" }));
   }
 }

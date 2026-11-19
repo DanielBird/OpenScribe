@@ -368,8 +368,8 @@ MVP = Phases 0–5. Each phase is sized for one agent session (or a few) and end
 | 32 | [Launch splash and hidden start](phases/32-launch-splash.md) | 24 | 23, 25 | ☑ Done (manual check W16 open) |
 | 33 | [Spike: local speech models, and downloading them](phases/33-local-stt-spike.md) | 24 | 23, 25 | ☑ Done: provisional go at the target (D51); D8's network and sleep steps open, and the real check on the work laptop is Phase 36's |
 | 34 | [Local transcription engine](phases/34-local-stt-engine.md) | 33 | – | ☑ Done (Translate on Output with a local transcript by hand, and a local transcript's language for Phase 36, open) |
-| 35 | [The speech pack: downloading the models](phases/35-speech-pack.md) | 33, 34 | – | ◐ Built; the maintainer's checks open (S1–S10 on the PC, S1, S2, S5, S6 and S8 on the work laptop from the Store, the licence reading, the Store submission) |
-| 36 | [Transcribe on this computer: the choice, progress and About](phases/36-local-stt-ui.md) | 34, 35 | – | ◐ Built; the maintainer's checks open (L9 on the work laptop, L3's network off, L4, L5's screen reader, L7 and L10 with the real models, the Store submission) |
+| 35 | [The speech pack: downloading the models](phases/35-speech-pack.md) | 33, 34 | – | ◐ Built; the maintainer's checks open (S1–S10 on the PC, S2, S5, S6 and S8 on the work laptop from the Store, the licence reading). S1 passes on the work laptop (1.3.0, 2026-11-17) |
+| 36 | [Transcribe on this computer: the choice, progress and About](phases/36-local-stt-ui.md) | 34, 35 | – | ◐ Built; the maintainer's checks open (the rest of L9 on the work laptop, L3's network off, L4, L5's screen reader, L7 and L10 with the real models). L9's first runs: 7.4× plugged in, at the target (2026-11-17) |
 
 Status values: ☐ Not started · ◐ In progress · ☑ Done.
 

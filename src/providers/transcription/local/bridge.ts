@@ -26,6 +26,7 @@ export const DOWNLOAD_ERROR_KINDS = [
   'offline',
   'busy',
   'disk',
+  'write',
   'mismatch',
   'gone',
   'cancelled',
@@ -199,12 +200,15 @@ export function createTauriSttBridge(): LocalSttBridge {
         const progress = bridgeSchemas().progress.safeParse(message);
         if (progress.success) onProgress(progress.data);
       });
+      // The cancel names the run: nothing orders it after Rust has taken the run's place, so Rust keeps one that comes
+      // first, for this run only.
+      const runId = crypto.randomUUID();
       const cancel = () => {
-        invokeCommand('stt_cancel').catch(() => {});
+        invokeCommand('stt_cancel', { runId }).catch(() => {});
       };
       signal.addEventListener('abort', cancel, { once: true });
       try {
-        const reply = await invokeCommand('stt_start', { token, onProgress: channel });
+        const reply = await invokeCommand('stt_start', { token, runId, onProgress: channel });
         const result = bridgeSchemas().result.safeParse(reply);
         if (!result.success) {
           throw new LocalSttError('engine', 'the engine sent an unreadable result');
@@ -223,12 +227,13 @@ export function createTauriSttBridge(): LocalSttBridge {
         const progress = bridgeSchemas().downloadProgress.safeParse(message);
         if (progress.success) onProgress(progress.data.receivedBytes, progress.data.totalBytes);
       });
+      const downloadId = crypto.randomUUID();
       const cancel = () => {
-        invokeCommand('stt_download_cancel').catch(() => {});
+        invokeCommand('stt_download_cancel', { downloadId }).catch(() => {});
       };
       signal.addEventListener('abort', cancel, { once: true });
       try {
-        await invokeCommand('stt_download', { onProgress: channel });
+        await invokeCommand('stt_download', { downloadId, onProgress: channel });
       } catch (error) {
         throw toSpeechPackError(error);
       } finally {
