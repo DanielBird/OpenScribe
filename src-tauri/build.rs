@@ -4,6 +4,7 @@ fn main() {
   let commands: &'static [&'static str] = &[
     "stt_choose_recording",
     "stt_status",
+    "stt_devices",
     "stt_start",
     "stt_cancel",
     "set_close_guard",

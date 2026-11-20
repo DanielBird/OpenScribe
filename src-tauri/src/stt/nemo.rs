@@ -3,14 +3,48 @@
 //! Used only in the worker process.
 //!
 //! Settings the C API leaves to the caller, from the NeMo source (the spike drove only `diar.h`):
-//! - `gpu: -1` explicitly: the C++ default is GPU 0. The engine is built without a GPU backend anyway.
+//! - `gpu`: `-1` is the processor, and must be explicit (the C++ default is GPU 0). `N` is the Nth ggml device of type
+//!   GPU or integrated GPU, counted as `runtime/ggml/backend.cpp` counts (`gpu_index`). Only the Vulkan engine has any
+//!   (Phase 37). The processor engine is built without a GPU backend.
+//! - one piece of audio per call, never batched (`batching: null`): batching chunks on a card is broken in v0.3.0, an
+//!   assert or, worse, empty words with no error (Phase 37, Task 1).
 //! - word times and punctuation must be asked for (`recognition_options_default()` is zeroed): without punctuation
 //!   the text comes back lower-case and unpunctuated. As the CLI does (`app/transcribe.cpp`).
 //! - word times are int32 milliseconds; segments are seconds.
 //! - threads can't be set: words use min(8, hardware threads), the diarizer 4 (`ggml_runtime::Params`).
 
+use super::protocol::{Device, GpuDevice, GpuKind};
 use std::ffi::{CStr, CString, c_char, c_void};
 use std::path::Path;
+
+/// Loads `dll` from `dir`, which also holds its dependencies: they are found there, then in System32, and nowhere
+/// else. The module is never freed (the worker exits instead).
+#[cfg(windows)]
+fn open(dir: &Path, dll: &str) -> Result<windows::Win32::Foundation::HMODULE, String> {
+  use windows::Win32::System::LibraryLoader::{
+    LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR, LOAD_LIBRARY_SEARCH_SYSTEM32, LoadLibraryExW,
+  };
+  let path = windows::core::HSTRING::from(dir.join(dll).as_os_str());
+  // SAFETY: loading a library; its exports are read with `sym!`.
+  unsafe { LoadLibraryExW(&path, None, LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR | LOAD_LIBRARY_SEARCH_SYSTEM32) }
+    .map_err(|e| format!("loading the engine ({dll}): {e}"))
+}
+
+/// The export `$name` of `$module`, as the type of the field it is assigned to. Returns early with an error if absent.
+#[cfg(windows)]
+macro_rules! sym {
+  ($module:expr, $name:literal) => {{
+    // SAFETY: the export's type is the one its header declares for it (asr.h, diar.h, ggml-backend.h).
+    let p = unsafe {
+      windows::Win32::System::LibraryLoader::GetProcAddress($module, windows::core::PCSTR(concat!($name, "\0").as_ptr()))
+    }
+    .ok_or(concat!("the engine has no ", $name))?;
+    // The target type is the field's, written once in the struct.
+    #[allow(clippy::missing_transmute_annotations)]
+    let f = unsafe { std::mem::transmute::<unsafe extern "system" fn() -> isize, _>(p) };
+    f
+  }};
+}
 
 /// 0 is OK. 2 is out of memory.
 pub type Status = i32;
@@ -141,45 +175,28 @@ impl Api {
   /// OpenMP runtimes): they are found there, then in System32, and nowhere else.
   #[cfg(windows)]
   pub fn load(dir: &Path) -> Result<Self, String> {
-    use windows::Win32::System::LibraryLoader::{
-      GetProcAddress, LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR, LOAD_LIBRARY_SEARCH_SYSTEM32, LoadLibraryExW,
-    };
-    use windows::core::{HSTRING, PCSTR};
-    let dll = dir.join("nemo_speech_asr_c.dll");
-    // SAFETY: loading a library and reading its exports; the module is never freed (the worker exits instead).
-    let module = unsafe {
-      LoadLibraryExW(&HSTRING::from(dll.as_os_str()), None, LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR | LOAD_LIBRARY_SEARCH_SYSTEM32)
-    }
-    .map_err(|e| format!("loading the engine (nemo_speech_asr_c.dll): {e}"))?;
-    macro_rules! sym {
-      ($name:literal) => {{
-        // SAFETY: the export's type is the one asr.h / diar.h declare for it.
-        let p = unsafe { GetProcAddress(module, PCSTR(concat!($name, "\0").as_ptr())) }
-          .ok_or(concat!("the engine has no ", $name))?;
-        unsafe { std::mem::transmute::<unsafe extern "system" fn() -> isize, _>(p) }
-      }};
-    }
+    let m = open(dir, "nemo_speech_asr_c.dll")?;
     Ok(Self {
-      last_error: sym!("nemo_speech_asr_last_error"),
-      options_default: sym!("nemo_speech_asr_recognition_options_default"),
-      asr_create: sym!("nemo_speech_asr_create"),
-      asr_destroy: sym!("nemo_speech_asr_destroy"),
-      recognize: sym!("nemo_speech_asr_recognize_f32"),
-      word_count: sym!("nemo_speech_asr_result_word_count"),
-      word_text: sym!("nemo_speech_asr_result_word_text"),
-      word_start: sym!("nemo_speech_asr_result_word_start_time"),
-      word_end: sym!("nemo_speech_asr_result_word_end_time"),
-      word_confidence: sym!("nemo_speech_asr_result_word_confidence"),
-      language_count: sym!("nemo_speech_asr_result_language_count"),
-      language_code: sym!("nemo_speech_asr_result_language_code"),
-      result_destroy: sym!("nemo_speech_asr_result_destroy"),
-      diar_create: sym!("nemo_speech_diar_create"),
-      diar_destroy: sym!("nemo_speech_diar_destroy"),
-      diar_open: sym!("nemo_speech_diar_stream_open"),
-      diar_push: sym!("nemo_speech_diar_stream_push_f32"),
-      diar_finish: sym!("nemo_speech_diar_stream_finish"),
-      diar_close: sym!("nemo_speech_diar_stream_close"),
-      diar_segments: sym!("nemo_speech_diar_segments"),
+      last_error: sym!(m, "nemo_speech_asr_last_error"),
+      options_default: sym!(m, "nemo_speech_asr_recognition_options_default"),
+      asr_create: sym!(m, "nemo_speech_asr_create"),
+      asr_destroy: sym!(m, "nemo_speech_asr_destroy"),
+      recognize: sym!(m, "nemo_speech_asr_recognize_f32"),
+      word_count: sym!(m, "nemo_speech_asr_result_word_count"),
+      word_text: sym!(m, "nemo_speech_asr_result_word_text"),
+      word_start: sym!(m, "nemo_speech_asr_result_word_start_time"),
+      word_end: sym!(m, "nemo_speech_asr_result_word_end_time"),
+      word_confidence: sym!(m, "nemo_speech_asr_result_word_confidence"),
+      language_count: sym!(m, "nemo_speech_asr_result_language_count"),
+      language_code: sym!(m, "nemo_speech_asr_result_language_code"),
+      result_destroy: sym!(m, "nemo_speech_asr_result_destroy"),
+      diar_create: sym!(m, "nemo_speech_diar_create"),
+      diar_destroy: sym!(m, "nemo_speech_diar_destroy"),
+      diar_open: sym!(m, "nemo_speech_diar_stream_open"),
+      diar_push: sym!(m, "nemo_speech_diar_stream_push_f32"),
+      diar_finish: sym!(m, "nemo_speech_diar_stream_finish"),
+      diar_close: sym!(m, "nemo_speech_diar_stream_close"),
+      diar_segments: sym!(m, "nemo_speech_diar_segments"),
     })
   }
 
@@ -196,6 +213,103 @@ impl Api {
     };
     EngineError { status, message: format!("{what}: {message}") }
   }
+}
+
+/// ggml's device types (`enum ggml_backend_dev_type`, ggml-backend.h): CPU 0, GPU 1, IGPU 2, ACCEL 3, META 4.
+const DEV_TYPE_GPU: i32 = 1;
+const DEV_TYPE_IGPU: i32 = 2;
+
+/// ggml's device registry (Phase 37, decision 2). The registry is exported by `ggml.dll`, the devices' accessors by
+/// `ggml-base.dll` (Task 1). Listing devices doesn't start one: Vulkan reads its settings when a model starts it.
+#[allow(clippy::type_complexity)]
+pub struct Registry {
+  dev_count: unsafe extern "C" fn() -> usize,
+  dev_get: unsafe extern "C" fn(usize) -> Opaque,
+  dev_type: unsafe extern "C" fn(Opaque) -> i32,
+  dev_description: unsafe extern "C" fn(Opaque) -> *const c_char,
+  dev_memory: unsafe extern "C" fn(Opaque, *mut usize, *mut usize),
+}
+
+/// One of ggml's devices, of any type.
+#[derive(Debug, Clone, PartialEq)]
+pub struct RawDevice {
+  pub name: String,
+  pub kind: i32,
+  pub total_bytes: u64,
+}
+
+impl Registry {
+  /// Loads the registry from the engine in `dir`. For the Vulkan engine this fails where Windows has no
+  /// `vulkan-1.dll`.
+  #[cfg(windows)]
+  pub fn load(dir: &Path) -> Result<Self, String> {
+    let ggml = open(dir, "ggml.dll")?;
+    let base = open(dir, "ggml-base.dll")?;
+    Ok(Self {
+      dev_count: sym!(ggml, "ggml_backend_dev_count"),
+      dev_get: sym!(ggml, "ggml_backend_dev_get"),
+      dev_type: sym!(base, "ggml_backend_dev_type"),
+      dev_description: sym!(base, "ggml_backend_dev_description"),
+      dev_memory: sym!(base, "ggml_backend_dev_memory"),
+    })
+  }
+
+  #[cfg(not(windows))]
+  pub fn load(_dir: &Path) -> Result<Self, String> {
+    Err("the engine runs on Windows only".into())
+  }
+
+  /// Every device, in ggml's order, the processor included.
+  pub fn list(&self) -> Vec<RawDevice> {
+    // SAFETY: plain C accessors on devices the registry owns for the process's lifetime; the description is copied.
+    unsafe {
+      (0..(self.dev_count)())
+        .filter_map(|i| {
+          let dev = (self.dev_get)(i);
+          if dev.is_null() {
+            return None;
+          }
+          let text = (self.dev_description)(dev);
+          let name = if text.is_null() { String::new() } else { CStr::from_ptr(text).to_string_lossy().trim().to_owned() };
+          let (mut free, mut total) = (0usize, 0usize);
+          (self.dev_memory)(dev, &mut free, &mut total);
+          Some(RawDevice { name, kind: (self.dev_type)(dev), total_bytes: total as u64 })
+        })
+        .collect()
+    }
+  }
+}
+
+/// The graphics cards among ggml's devices, in its order: GPUs and integrated GPUs. The processor, accelerators and
+/// software renderers that report as the processor are left out. A card whose driver gives no description is named by
+/// its place, "Graphics card 2", since the page refuses an empty name and would list no card at all (audit GPU-5). It
+/// is named, not dropped: `gpu_index` counts every card, so dropping one would move the cards after it.
+pub fn gpus(devices: &[RawDevice]) -> Vec<GpuDevice> {
+  devices
+    .iter()
+    .filter_map(|d| {
+      let kind = match d.kind {
+        DEV_TYPE_GPU => GpuKind::Gpu,
+        DEV_TYPE_IGPU => GpuKind::IntegratedGpu,
+        _ => return None,
+      };
+      Some((d, kind))
+    })
+    .enumerate()
+    .map(|(i, (d, kind))| {
+      let name = match d.name.trim() {
+        "" => format!("Graphics card {}", i + 1),
+        name => name.to_owned(),
+      };
+      GpuDevice { name, kind, memory_bytes: d.total_bytes }
+    })
+    .collect()
+}
+
+/// The engine's `gpu` index for the saved card: its place among `gpus`. None if there's no such card.
+pub fn gpu_index(gpus: &[GpuDevice], device: &Device) -> Option<i32> {
+  let mut same = gpus.iter().enumerate().filter(|(_, g)| g.name == device.name);
+  same.nth(device.nth as usize).and_then(|(i, _)| i32::try_from(i).ok())
 }
 
 /// A model's path as the engine wants it: UTF-8. It opens models with ggml's `ggml_fopen`, which converts UTF-8 to wide
@@ -225,9 +339,10 @@ pub struct Words<'a> {
 }
 
 impl<'a> Words<'a> {
-  pub fn load(api: &'a Api, model: &Path) -> Result<Self, EngineError> {
+  /// Loads the model on the processor (`gpu` -1) or the card `gpu` counts to (`gpu_index`).
+  pub fn load(api: &'a Api, model: &Path, gpu: i32) -> Result<Self, EngineError> {
     let path = c_path(model)?;
-    let backend = BackendConfig { size: size_of::<BackendConfig>(), gpu: -1 };
+    let backend = BackendConfig { size: size_of::<BackendConfig>(), gpu };
     let model = ModelConfig { size: size_of::<ModelConfig>(), path: path.as_ptr(), name: std::ptr::null() };
     let config = RecognizerConfig {
       size: size_of::<RecognizerConfig>(),
@@ -325,14 +440,15 @@ pub struct Speakers<'a> {
 }
 
 impl<'a> Speakers<'a> {
-  /// Loads the model with the `v3-offline` geometry (10× faster on a file than the default) and opens a stream.
-  pub fn load(api: &'a Api, model: &Path) -> Result<Self, EngineError> {
+  /// Loads the model with the `v3-offline` geometry (10× faster on a file than the default) and opens a stream, on the
+  /// processor (`gpu` -1) or the card `gpu` counts to.
+  pub fn load(api: &'a Api, model: &Path, gpu: i32) -> Result<Self, EngineError> {
     let path = c_path(model)?;
     let preset = CString::new("v3-offline").unwrap_or_default();
     let config = DiarModelConfig {
       size: size_of::<DiarModelConfig>(),
       model_path: path.as_ptr(),
-      gpu: -1,
+      gpu,
       preset: preset.as_ptr(),
       chunk_frames: 0,
       right_context_frames: 0,
@@ -414,5 +530,69 @@ mod tests {
     assert_eq!(size_of::<RecognitionOptions>(), 72);
     assert_eq!(size_of::<DiarModelConfig>(), 56);
     assert_eq!(size_of::<DiarSegment>(), 24);
+  }
+
+  fn raw(name: &str, kind: i32) -> RawDevice {
+    RawDevice { name: name.into(), kind, total_bytes: 1 << 30 }
+  }
+
+  fn card(name: &str, nth: u32) -> Device {
+    Device { name: name.into(), nth }
+  }
+
+  #[test]
+  fn only_graphics_cards_are_listed_in_ggmls_order() {
+    let listed = gpus(&[
+      raw("llvmpipe (LLVM 15.0.7, 256 bits)", 0),
+      raw("NVIDIA GeForce RTX 2070 SUPER", DEV_TYPE_GPU),
+      raw("Some NPU", 3),
+      raw("Intel(R) UHD Graphics 770", DEV_TYPE_IGPU),
+      raw("Meta", 4),
+      raw("13th Gen Intel(R) Core(TM) i7-13700K", 0),
+    ]);
+    let names: Vec<_> = listed.iter().map(|g| (g.name.as_str(), g.kind)).collect();
+    assert_eq!(
+      names,
+      [("NVIDIA GeForce RTX 2070 SUPER", GpuKind::Gpu), ("Intel(R) UHD Graphics 770", GpuKind::IntegratedGpu)]
+    );
+    assert_eq!(listed[0].memory_bytes, 1 << 30);
+  }
+
+  #[test]
+  fn a_card_with_no_description_is_named_by_its_place() {
+    // The page refuses an empty name, and with it every card (audit GPU-5).
+    let listed = gpus(&[
+      raw("13th Gen Intel(R) Core(TM) i7-13700K", 0),
+      raw("", DEV_TYPE_IGPU),
+      raw("NVIDIA RTX A2000", DEV_TYPE_GPU),
+      raw("   ", DEV_TYPE_GPU),
+    ]);
+    let names: Vec<_> = listed.iter().map(|g| g.name.as_str()).collect();
+    assert_eq!(names, ["Graphics card 1", "NVIDIA RTX A2000", "Graphics card 3"]);
+    assert_eq!(listed[0].kind, GpuKind::IntegratedGpu);
+  }
+
+  #[test]
+  fn a_card_with_no_description_keeps_the_cards_after_it_in_place() {
+    // Dropping the unnamed card instead would move the A2000 to the engine's 0, the wrong card.
+    let listed = gpus(&[raw("", DEV_TYPE_IGPU), raw("NVIDIA RTX A2000", DEV_TYPE_GPU)]);
+    assert_eq!(gpu_index(&listed, &card("Graphics card 1", 0)), Some(0));
+    assert_eq!(gpu_index(&listed, &card("NVIDIA RTX A2000", 0)), Some(1));
+  }
+
+  #[test]
+  fn a_saved_card_resolves_to_the_engines_index() {
+    let listed = gpus(&[
+      raw("13th Gen Intel(R) Core(TM) i7-13700K", 0),
+      raw("AMD Radeon 740M Graphics", DEV_TYPE_IGPU),
+      raw("NVIDIA RTX A2000", DEV_TYPE_GPU),
+      raw("NVIDIA RTX A2000", DEV_TYPE_GPU),
+    ]);
+    assert_eq!(gpu_index(&listed, &card("AMD Radeon 740M Graphics", 0)), Some(0), "the processor doesn't count");
+    assert_eq!(gpu_index(&listed, &card("NVIDIA RTX A2000", 0)), Some(1));
+    assert_eq!(gpu_index(&listed, &card("NVIDIA RTX A2000", 1)), Some(2), "two identical cards");
+    assert_eq!(gpu_index(&listed, &card("NVIDIA RTX A2000", 2)), None);
+    assert_eq!(gpu_index(&listed, &card("AMD Radeon 780M Graphics", 0)), None, "a card that's gone");
+    assert_eq!(gpu_index(&[], &card("AMD Radeon 740M Graphics", 0)), None);
   }
 }

@@ -12,6 +12,7 @@ import AudioBar from '../components/AudioBar.vue';
 import ExportButton from '../components/ExportButton.vue';
 import FolderNotice from '../components/FolderNotice.vue';
 import JobStatus from '../components/JobStatus.vue';
+import ReplaceDialog from '../components/ReplaceDialog.vue';
 import SpeakerPanel from '../components/SpeakerPanel.vue';
 import StepFooter from '../components/StepFooter.vue';
 import TranscriptHeader from '../components/TranscriptHeader.vue';
@@ -69,6 +70,31 @@ function toggleEditing(): void {
   editAnnouncement.value = editing.value ? 'Editing' : 'Editing finished';
 }
 
+// Find and replace (DECISIONS.md D59) works on the version on screen. Offered when Edit text is, and not while editing.
+const replacing = ref(false);
+const initialFind = ref('');
+
+/** The longest selection that fills Find: a name, not a passage. */
+const MAX_SELECTED_FIND = 100;
+
+/** The text selected inside one turn's text, on one line and short enough to be a name; otherwise ''. */
+function selectedFind(): string {
+  const selection = window.getSelection();
+  if (!selection || selection.isCollapsed || selection.rangeCount === 0) return '';
+  const range = selection.getRangeAt(0);
+  const textOf = (node: Node) =>
+    (node instanceof Element ? node : node.parentElement)?.closest('[data-turn-id] .text');
+  const start = textOf(range.startContainer);
+  if (!start || start !== textOf(range.endContainer)) return '';
+  const text = selection.toString().trim();
+  return text.length <= MAX_SELECTED_FIND && !/[\r\n]/.test(text) ? text : '';
+}
+
+function openReplace(): void {
+  initialFind.value = selectedFind();
+  replacing.value = true;
+}
+
 // The focused button (Cancel, Try again) can disappear with a status change. Keep keyboard and
 // screen-reader users in the view instead of at the top of the page.
 const heading = useTemplateRef<HTMLElement>('heading');
@@ -101,6 +127,14 @@ watch(
             @click="toggleEditing"
           >
             {{ editing ? 'Done' : 'Edit text' }}
+          </button>
+          <button
+            v-if="!editing && !translation.isRunning && !pipelineWorking"
+            type="button"
+            class="button"
+            @click="openReplace"
+          >
+            Find and replace…
           </button>
           <template v-if="!editing">
             <TranslateButton v-if="!pipelineWorking" />
@@ -135,6 +169,12 @@ watch(
           @edit="(turnId, text) => transcript.editTurnText(turnId, text)"
         />
         <AudioBar />
+        <ReplaceDialog
+          :open="replacing"
+          :version="transcript.view"
+          :initial-find="initialFind"
+          @close="replacing = false"
+        />
       </template>
       <p v-else class="empty">No speech was detected in this recording.</p>
     </template>

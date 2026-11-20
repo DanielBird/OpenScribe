@@ -1,7 +1,9 @@
-//! Once a second, with PDH (Windows' performance counters): the clock of the pinned logical processors, and how
-//! much any GPU engine is used by the processes being measured. Reading counters changes nothing.
+//! Once a second, with PDH (Windows' performance counters): the clock of the pinned logical processors, how much any
+//! GPU engine is used by the processes being measured, and (Phase 37) per graphics adapter, their engine use and GPU
+//! memory. Reading counters changes nothing.
 
 use serde::Serialize;
+use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
@@ -23,6 +25,34 @@ pub struct Summary {
     pub gpu_max_percent: f64,
     /// Engine instances that showed any use (pid, adapter LUID, engine type), so a non-zero value can be explained.
     pub gpu_engines_used: Vec<String>,
+    /// Per graphics adapter (Phase 37), for the measured processes: which card was busy, and how much of its memory
+    /// they held. Only adapters on which they used an engine or held memory are listed.
+    pub gpu_adapters: Vec<GpuAdapter>,
+}
+
+#[derive(Debug, Clone, Default, Serialize)]
+pub struct GpuAdapter {
+    /// As PDH names it ("0x00000000_0x00017912"); `vulkaninfo`'s `deviceLUID` is the same number, bytes reversed.
+    pub luid: String,
+    /// Each second, the busiest engine of this adapter (summed over the processes); then the max and the mean.
+    pub engine_max_percent: f64,
+    pub engine_mean_percent: f64,
+    /// Engine types that showed use ("Compute_0", "3D", …).
+    pub engine_types: Vec<String>,
+    /// `GPU Process Memory(*)\Dedicated Usage` and `\Shared Usage`, summed over the processes; the peak.
+    pub dedicated_peak_bytes: u64,
+    pub shared_peak_bytes: u64,
+}
+
+/// "pid_1234_luid_0x00000000_0x0000C2A1_phys_0[_eng_0_engtype_3D]" → (1234, "0x00000000_0x0000C2A1", engine type).
+fn parse_instance(name: &str) -> Option<(u32, String, Option<String>)> {
+    let rest = name.strip_prefix("pid_")?;
+    let (pid, rest) = rest.split_once('_')?;
+    let rest = rest.strip_prefix("luid_")?;
+    let mut parts = rest.splitn(3, '_');
+    let luid = format!("{}_{}", parts.next()?, parts.next()?);
+    let engtype = name.split_once("_engtype_").map(|(_, t)| t.to_string());
+    Some((pid.parse().ok()?, luid, engtype))
 }
 
 pub struct Sampler {
@@ -57,6 +87,8 @@ struct Query {
     perf: PDH_HCOUNTER,
     freq: PDH_HCOUNTER,
     gpu: Option<PDH_HCOUNTER>,
+    gpu_dedicated: Option<PDH_HCOUNTER>,
+    gpu_shared: Option<PDH_HCOUNTER>,
 }
 
 fn open() -> Option<Query> {
@@ -73,7 +105,9 @@ fn open() -> Option<Query> {
     let freq = add(r"\Processor Information(*)\Processor Frequency")?;
     // Missing on a PC without the GPU counters: then GPU use is reported as 0 with no engines.
     let gpu = add(r"\GPU Engine(*)\Utilization Percentage");
-    Some(Query { query, perf, freq, gpu })
+    let gpu_dedicated = add(r"\GPU Process Memory(*)\Dedicated Usage");
+    let gpu_shared = add(r"\GPU Process Memory(*)\Shared Usage");
+    Some(Query { query, perf, freq, gpu, gpu_dedicated, gpu_shared })
 }
 
 fn values(counter: PDH_HCOUNTER) -> Vec<(String, f64)> {
@@ -101,6 +135,15 @@ fn values(counter: PDH_HCOUNTER) -> Vec<(String, f64)> {
         .collect()
 }
 
+#[derive(Default)]
+struct AdapterAcc {
+    engine_max_percent: f64,
+    engine_sum: f64,
+    engine_types: Vec<String>,
+    dedicated_peak_bytes: u64,
+    shared_peak_bytes: u64,
+}
+
 fn run(lps: Vec<u32>, pids: PidSource, stop: Arc<AtomicBool>, summary: Arc<Mutex<Summary>>) {
     let Some(q) = open() else { return };
     // Rate counters need two collections before the first value.
@@ -108,6 +151,8 @@ fn run(lps: Vec<u32>, pids: PidSource, stop: Arc<AtomicBool>, summary: Arc<Mutex
     let (mut sum, mut n, mut min, mut max) = (0.0f64, 0u32, f64::MAX, 0.0f64);
     let mut gpu_max = 0.0f64;
     let mut engines: Vec<String> = Vec::new();
+    let mut adapters: HashMap<String, AdapterAcc> = HashMap::new();
+    let mut ticks = 0u32;
     while !stop.load(Ordering::SeqCst) {
         // Sleep in small steps so finish() doesn't wait a whole second.
         for _ in 0..10 {
@@ -137,8 +182,54 @@ fn run(lps: Vec<u32>, pids: PidSource, stop: Arc<AtomicBool>, summary: Arc<Mutex
             min = min.min(mean);
             max = max.max(mean);
         }
+        let watched = pids();
+        ticks += 1;
+        // Per adapter this second: the busiest engine (summed over the watched processes), and memory summed.
+        let mut engine_now: HashMap<(String, String), f64> = HashMap::new();
+        let mut dedicated_now: HashMap<String, f64> = HashMap::new();
+        let mut shared_now: HashMap<String, f64> = HashMap::new();
+        for (counter, target) in [(q.gpu_dedicated, &mut dedicated_now), (q.gpu_shared, &mut shared_now)] {
+            let Some(counter) = counter else { continue };
+            for (name, value) in values(counter) {
+                if let Some((pid, luid, _)) = parse_instance(&name)
+                    && watched.contains(&pid)
+                {
+                    *target.entry(luid).or_default() += value;
+                }
+            }
+        }
         if let Some(gpu) = q.gpu {
-            let watched = pids();
+            for (name, value) in values(gpu) {
+                if let Some((pid, luid, Some(engtype))) = parse_instance(&name)
+                    && watched.contains(&pid)
+                {
+                    *engine_now.entry((luid, engtype)).or_default() += value;
+                }
+            }
+        }
+        let mut busiest: HashMap<String, f64> = HashMap::new();
+        for ((luid, engtype), value) in &engine_now {
+            let b = busiest.entry(luid.clone()).or_default();
+            *b = b.max(*value);
+            let acc = adapters.entry(luid.clone()).or_default();
+            if *value > 0.0 && !acc.engine_types.contains(engtype) {
+                acc.engine_types.push(engtype.clone());
+            }
+        }
+        for (luid, value) in busiest {
+            let acc = adapters.entry(luid).or_default();
+            acc.engine_max_percent = acc.engine_max_percent.max(value);
+            acc.engine_sum += value;
+        }
+        for (luid, value) in dedicated_now {
+            let acc = adapters.entry(luid).or_default();
+            acc.dedicated_peak_bytes = acc.dedicated_peak_bytes.max(value as u64);
+        }
+        for (luid, value) in shared_now {
+            let acc = adapters.entry(luid).or_default();
+            acc.shared_peak_bytes = acc.shared_peak_bytes.max(value as u64);
+        }
+        if let Some(gpu) = q.gpu {
             for (name, value) in values(gpu) {
                 // "pid_1234_luid_0x00000000_0x0000C2A1_phys_0_eng_0_engtype_3D"
                 let pid = name
@@ -162,6 +253,20 @@ fn run(lps: Vec<u32>, pids: PidSource, stop: Arc<AtomicBool>, summary: Arc<Mutex
             }
             s.gpu_max_percent = gpu_max;
             s.gpu_engines_used = engines.clone();
+            let mut list: Vec<GpuAdapter> = adapters
+                .iter()
+                .filter(|(_, a)| a.engine_max_percent > 0.0 || a.dedicated_peak_bytes > 0 || a.shared_peak_bytes > 0)
+                .map(|(luid, a)| GpuAdapter {
+                    luid: luid.clone(),
+                    engine_max_percent: a.engine_max_percent,
+                    engine_mean_percent: if ticks > 0 { a.engine_sum / ticks as f64 } else { 0.0 },
+                    engine_types: a.engine_types.clone(),
+                    dedicated_peak_bytes: a.dedicated_peak_bytes,
+                    shared_peak_bytes: a.shared_peak_bytes,
+                })
+                .collect();
+            list.sort_by(|a, b| a.luid.cmp(&b.luid));
+            s.gpu_adapters = list;
         }
     }
     unsafe { PdhCloseQuery(q.query) };

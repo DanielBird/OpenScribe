@@ -6,6 +6,7 @@
   "permissions": [
     "allow-stt-choose-recording",
     "allow-stt-status",
+    "allow-stt-devices",
     "allow-stt-start",
     "allow-stt-cancel",
     "allow-set-close-guard",

@@ -117,10 +117,12 @@ const PREBUNDLED_CARGO = {
 /**
  * The speech engine's DLLs (src-tauri/stt-runtime.json, DECISIONS.md D53), which no package manager here knows: what
  * the engine's build links in, read from its THIRD_PARTY_NOTICES.md and the vcpkg packages its ASR build installs.
- * `checked` is the stt-runtime.json version this list was made for; any other stops the script.
+ * The Vulkan engine (Phase 37) adds ggml-vulkan.dll, which compiles in the Vulkan SDK's vulkan.hpp/vulkan_core.h and
+ * spirv.hpp. Its shaders are ggml's, and it links only vulkan-1.lib's import stubs; vulkan-1.dll is the driver's.
+ * `checked` is the stt-runtime.json version, and the Vulkan SDK, this list was made for; any other stops the script.
  */
 const NATIVE_DESKTOP = {
-  checked: '0.3.0',
+  checked: { version: '0.3.0', vulkanSdk: '1.4.363.0' },
   includes: [
     {
       name: 'NeMo-Speech.cpp (nemo_speech_asr.dll, nemo_speech_asr_c.dll), with its NOTICE and third-party notices',
@@ -130,11 +132,27 @@ const NATIVE_DESKTOP = {
       file: 'nemo-speech.txt',
     },
     {
-      name: 'ggml (ggml.dll, ggml-base.dll, ggml-cpu.dll), from llama.cpp',
+      name: 'ggml (ggml.dll, ggml-base.dll, ggml-cpu.dll, ggml-vulkan.dll), from llama.cpp',
       version: 'bd4f514d',
       license: 'MIT',
       url: 'https://github.com/ggml-org/llama.cpp',
       file: 'ggml.txt',
+    },
+    {
+      // Apache-2.0 OR MIT: the MIT text, as chooseTexts does for packages.
+      name: 'Vulkan-Headers (vulkan.h, and vulkan.hpp from Vulkan-Hpp, in ggml-vulkan.dll)',
+      version: '1.4.363',
+      license: 'MIT',
+      url: 'https://github.com/KhronosGroup/Vulkan-Headers',
+      file: 'vulkan-headers.txt',
+    },
+    {
+      // The LICENSE's part for "all files except" its XML, build tools and Markdown.
+      name: 'SPIRV-Headers (spirv.hpp, in ggml-vulkan.dll)',
+      version: 'vulkan-sdk-1.4.363.0',
+      license: 'MIT',
+      url: 'https://github.com/KhronosGroup/SPIRV-Headers',
+      file: 'spirv-headers.txt',
     },
     {
       name: 'SentencePiece',
@@ -380,10 +398,18 @@ async function npmEntries(mode = 'production') {
 /** The engine's native libraries (NATIVE_DESKTOP), checked against the runtime the app is built with. */
 function nativeEntries() {
   const runtime = JSON.parse(read(path('src-tauri/stt-runtime.json')));
-  if (runtime.version !== NATIVE_DESKTOP.checked) {
+  const { checked } = NATIVE_DESKTOP;
+  if (runtime.version !== checked.version) {
     stop(
       `src-tauri/stt-runtime.json is ${runtime.name} ${runtime.version}, but NATIVE_DESKTOP lists what ` +
-        `${NATIVE_DESKTOP.checked} contains. Check what the new build links in, then update the list.`,
+        `${checked.version} contains. Check what the new build links in, then update the list.`,
+    );
+  }
+  if (runtime.vulkan?.vulkanSdk !== checked.vulkanSdk) {
+    stop(
+      `src-tauri/stt-runtime.json's Vulkan engine is built with Vulkan SDK ${runtime.vulkan?.vulkanSdk}, but ` +
+        `NATIVE_DESKTOP lists the headers of ${checked.vulkanSdk}. Check which of the SDK's headers ggml-vulkan ` +
+        'compiles in, then update the list.',
     );
   }
   return NATIVE_DESKTOP.includes.map((item) => {

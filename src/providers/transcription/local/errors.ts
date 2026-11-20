@@ -1,12 +1,13 @@
 // Local failures as ProviderErrors, each with a message that says what to do (DECISIONS.md D41: the technical detail
 // stays behind Technical details). Kinds that need a change before trying again are 'validation', which hides Try
-// again (JobStatus); the rest keep it. The speech models' own failures offer Settings, where they are downloaded.
+// again (JobStatus); the rest keep it. The speech models' own failures offer Settings, where they are downloaded. A
+// failure on a graphics card names it and offers the processor (Phase 37, decision 6).
 import { ProviderError, type ProviderErrorKind } from '../../errors';
 import type { LocalErrorKind, LocalSttError } from './bridge';
 
 const MESSAGES: Record<
   LocalErrorKind,
-  { kind: ProviderErrorKind; message: string; fixIn?: 'settings' }
+  { kind: ProviderErrorKind; message: string; fixIn?: 'settings'; retryOn?: 'processor' }
 > = {
   busy: { kind: 'unknown', message: 'Another transcription is already running on this computer.' },
   downloading: {
@@ -50,18 +51,36 @@ const MESSAGES: Record<
     kind: 'server',
     message: 'Transcribing on this computer stopped unexpectedly. Try again.',
   },
+  gpu: {
+    kind: 'server',
+    message: 'The graphics card stopped while transcribing.',
+    retryOn: 'processor',
+  },
   cancelled: { kind: 'aborted', message: 'Transcription cancelled.' },
 };
 
 const OPUS_MESSAGE =
   "DeScribe can't read Ogg Opus files on this computer. Use an MP3 or M4A, or transcribe with ElevenLabs.";
 
-/** `error` as the ProviderError the job store shows. `fileName` names an Ogg Opus file in its message. */
-export function toProviderError(error: LocalSttError, fileName: string): ProviderError {
-  const { kind, message, fixIn } = MESSAGES[error.kind];
+/** The message for a failure on `card`, naming it when it's known. */
+function gpuMessage(card: string | null): string {
+  return card ? `The graphics card (${card}) stopped while transcribing.` : MESSAGES.gpu.message;
+}
+
+/**
+ * `error` as the ProviderError the job store shows. `fileName` names an Ogg Opus file in its message; `card` is the
+ * graphics card the run was on, or null for the processor.
+ */
+export function toProviderError(
+  error: LocalSttError,
+  { fileName, card }: { fileName: string; card: string | null },
+): ProviderError {
+  const { kind, message, fixIn, retryOn } = MESSAGES[error.kind];
   const opus = error.kind === 'unreadable' && /\.opus$/i.test(fileName);
-  return new ProviderError(kind, opus ? OPUS_MESSAGE : message, {
+  const text = opus ? OPUS_MESSAGE : error.kind === 'gpu' ? gpuMessage(card) : message;
+  return new ProviderError(kind, text, {
     detail: `${error.kind}: ${error.detail}`.trim(),
     fixIn,
+    retryOn,
   });
 }

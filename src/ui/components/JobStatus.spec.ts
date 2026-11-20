@@ -163,6 +163,46 @@ describe('JobStatus', () => {
     expect(useNavStore().mode).toBe('settings');
   });
 
+  describe('a failure on a graphics card (Phase 37)', () => {
+    const gpuFailure = () =>
+      new ProviderError(
+        'server',
+        'The graphics card (AMD Radeon 740M Graphics) stopped while transcribing.',
+        { retryOn: 'processor', detail: 'gpu: ErrorDeviceLost' },
+      );
+
+    afterEach(() => vi.unstubAllGlobals());
+
+    it('names the card and offers Try again and Try on the processor', async () => {
+      vi.stubGlobal('__DESKTOP__', true);
+      const job = mountIn({ status: 'error' });
+      job.error = gpuFailure();
+      const retry = vi.spyOn(job, 'retry').mockResolvedValue();
+      const onProcessor = vi.spyOn(job, 'retryOnProcessor').mockResolvedValue();
+      await wrapper!.vm.$nextTick();
+      expect(status()).toBe(
+        'The graphics card (AMD Radeon 740M Graphics) stopped while transcribing.',
+      );
+      expect(buttons()).toEqual(['Try again', 'Try on the processor']);
+      await wrapper!.findAll('button')[1]!.trigger('click');
+      expect(onProcessor).toHaveBeenCalledOnce();
+      expect(retry).not.toHaveBeenCalled();
+    });
+
+    it('offers only Try again for any other failure, and in the web build', async () => {
+      const job = mountIn({ status: 'error' });
+      job.error = gpuFailure();
+      await wrapper!.vm.$nextTick();
+      expect(buttons()).toEqual(['Try again']);
+      wrapper!.unmount();
+      vi.stubGlobal('__DESKTOP__', true);
+      wrapper = mount(JobStatus);
+      job.error = new ProviderError('server', 'Transcribing on this computer stopped.');
+      await wrapper.vm.$nextTick();
+      expect(buttons()).toEqual(['Try again']);
+    });
+  });
+
   it('keeps one live region across status changes, so changes are announced', async () => {
     const job = mountIn({ status: 'uploading', progress: { loaded: 0, total: 10 } });
     const region = wrapper!.get('[role="status"]').element;

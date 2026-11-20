@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { setLocalSttBridgeForTests } from '../../providers';
 import { SpeechPackError, type LocalSttStatus } from '../../providers/transcription/local/bridge';
 import { useSavedDataStore } from '../../stores/savedData';
+import { useSettingsStore } from '../../stores/settings';
 import { fakeLocalBridge, TEST_PACK, type FakeBridge } from '../../testing/localBridge';
 import SpeechPackSection from './SpeechPackSection.vue';
 
@@ -88,7 +89,9 @@ describe('SpeechPackSection', () => {
         speakersSec: 410,
         totalSec: 872,
         threads: 8,
+        device: null,
         peakMemoryBytes: 2_150_000_000,
+        fellBack: null,
       },
     };
     const ready: LocalSttStatus = { state: 'ready', pack: TEST_PACK };
@@ -115,9 +118,62 @@ describe('SpeechPackSection', () => {
         ['Words', '600.0 s'],
         ['Speakers', '410.0 s'],
         ['Total', '872.0 s'],
-        ['Threads', '8'],
+        ['Ran on', 'Processor (8 threads)'],
         ['Peak memory', '2.15 GB'],
       ]);
+    });
+
+    it('says which card a run on one ran on, as Run on names it, and reads an older record as the processor', async () => {
+      const ranOn = () => {
+        const dts = wrapper!.findAll('dt');
+        const i = dts.findIndex((dt) => dt.text() === 'Ran on');
+        return wrapper!.findAll('dd')[i]!.text();
+      };
+      localStorage.setItem(
+        'describe.v1.lastLocalRun',
+        JSON.stringify({
+          ...record,
+          // The second of two identical cards (audit GPU-6).
+          timings: {
+            ...record.timings,
+            threads: null,
+            device: { name: 'NVIDIA RTX A2000', nth: 1 },
+          },
+        }),
+      );
+      await mountWith(ready);
+      expect(ranOn()).toBe('NVIDIA RTX A2000 (2)');
+      wrapper!.unmount();
+      const { device: _device, fellBack: _fellBack, ...before } = record.timings;
+      localStorage.setItem(
+        'describe.v1.lastLocalRun',
+        JSON.stringify({ ...record, timings: before }),
+      );
+      setActivePinia(createPinia());
+      await mountWith(ready);
+      expect(ranOn()).toBe('Processor (8 threads)');
+    });
+
+    it('says when a run fell back to the processor, and why (audit GPU-3)', async () => {
+      const fellBack = {
+        device: { name: 'NVIDIA RTX A2000', nth: 1 },
+        reason: 'the Vulkan engine found no graphics card',
+      };
+      localStorage.setItem(
+        'describe.v1.lastLocalRun',
+        JSON.stringify({ ...record, timings: { ...record.timings, fellBack } }),
+      );
+      await mountWith(ready);
+      const details = wrapper!.get('details');
+      const pairs = details
+        .findAll('dt')
+        .map((dt, i) => [dt.text(), details.findAll('dd')[i]!.text()]);
+      expect(pairs).toContainEqual(['Ran on', 'Processor (8 threads), not NVIDIA RTX A2000 (2)']);
+      expect(pairs).toContainEqual(['Why', 'the Vulkan engine found no graphics card']);
+      // Decision 5: no message, only the Timings.
+      expect(wrapper!.get('.last-run > p').text()).toBe(
+        'Last recording: 01:02:10 of audio in 00:14:32.',
+      );
     });
 
     it('says when peak memory was not measured', async () => {
@@ -142,6 +198,74 @@ describe('SpeechPackSection', () => {
       localStorage.setItem('describe.v1.lastLocalRun', JSON.stringify(record));
       await mountWith({ state: 'missing', pack: TEST_PACK });
       expect(wrapper!.text()).not.toContain('Last recording');
+    });
+  });
+
+  describe('Run on (Phase 37)', () => {
+    const ready: LocalSttStatus = { state: 'ready', pack: TEST_PACK };
+    const RTX = { name: 'NVIDIA GeForce RTX 2070 SUPER', kind: 'gpu', memoryBytes: 8e9 } as const;
+    const UHD = {
+      name: 'Intel(R) UHD Graphics 770',
+      kind: 'integrated-gpu',
+      memoryBytes: 0,
+    } as const;
+    const radios = () =>
+      wrapper!.findAll('input[type="radio"]').map((r) => ({
+        label: r.element.parentElement!.textContent!.trim(),
+        checked: (r.element as HTMLInputElement).checked,
+      }));
+
+    it('is not offered without a card', async () => {
+      await mountWith(ready);
+      expect(bridge.calls).toContain('devices');
+      expect(wrapper!.find('fieldset').exists()).toBe(false);
+    });
+
+    it('asks for the cards only once the models are ready', async () => {
+      bridge.nextDevices = [RTX];
+      await mountWith({ state: 'missing', pack: TEST_PACK });
+      expect(bridge.calls).not.toContain('devices');
+      expect(wrapper!.find('fieldset').exists()).toBe(false);
+    });
+
+    it('offers the processor, checked, then each card by name', async () => {
+      bridge.nextDevices = [RTX, UHD];
+      await mountWith(ready);
+      const group = wrapper!.get('fieldset');
+      expect(group.get('legend').text()).toBe('Run on');
+      expect(radios()).toEqual([
+        { label: 'Processor', checked: true },
+        { label: RTX.name, checked: false },
+        { label: UHD.name, checked: false },
+      ]);
+    });
+
+    it('saves the card chosen, and checks the processor while the saved card is gone', async () => {
+      bridge.nextDevices = [RTX, UHD];
+      await mountWith(ready);
+      await wrapper!.findAll('input[type="radio"]')[2]!.setValue(true);
+      expect(useSettingsStore().localDevice).toEqual({ name: UHD.name, nth: 0 });
+      wrapper!.unmount();
+      setActivePinia(createPinia());
+      bridge.nextDevices = [RTX];
+      await mountWith(ready);
+      expect(radios().map((r) => r.checked)).toEqual([true, false]);
+      expect(useSettingsStore().localDevice).toEqual({ name: UHD.name, nth: 0 });
+    });
+
+    it('saves the processor clicked while the saved card is gone, so the card doesn’t come back', async () => {
+      useSettingsStore().setLocalDevice({ name: UHD.name, nth: 0 });
+      bridge.nextDevices = [RTX];
+      await mountWith(ready);
+      const processor = wrapper!.findAll('input[type="radio"]')[0]!;
+      expect((processor.element as HTMLInputElement).checked).toBe(true);
+      await processor.trigger('click');
+      expect(useSettingsStore().localDevice).toBe('cpu');
+      wrapper!.unmount();
+      setActivePinia(createPinia());
+      bridge.nextDevices = [RTX, UHD];
+      await mountWith(ready);
+      expect(radios().map((r) => r.checked)).toEqual([true, false, false]);
     });
   });
 

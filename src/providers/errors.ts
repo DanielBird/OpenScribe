@@ -21,6 +21,8 @@ export class ProviderError extends Error {
       detail?: string;
       /** Where the user can fix it, when that's a place in the app: Settings (Phase 36). */
       fixIn?: 'settings';
+      /** A run on a graphics card that failed can run again on the processor (Phase 37, decision 6). */
+      retryOn?: 'processor';
     } = {},
   ) {
     super(userMessage);

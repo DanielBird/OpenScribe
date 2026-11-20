@@ -102,6 +102,14 @@ What's different on this computer:
 - **Up to 8 speakers.** Number of speakers and Zero retention aren't offered.
 - **Ogg Opus files can't be read.** Convert them to MP3, or transcribe them with ElevenLabs.
 
+**On the graphics card:** if your computer has a graphics card, Settings → **Transcribe on this computer** shows
+**Run on**, with **Processor** and each card by name. **Processor** is the default. A card may be faster or slower than
+the processor, depending on the computer: try one recording on each and compare **Last recording**. Under
+**Timings**, **Ran on** says which one the last recording used. The first run on a card takes a few seconds longer
+to start. If a card you chose isn't there (a laptop undocked from it, say), DeScribe uses the processor: **Ran on**
+names the card it didn't use, and **Why** says what went wrong. It goes back to the card when the card returns, unless
+you choose **Processor** meanwhile.
+
 To free the space, click **Remove** on Settings. Setup then goes back to ElevenLabs. Uninstalling DeScribe removes the
 models too.
 
@@ -323,6 +331,7 @@ what it finds, and uses the summaries for an overview. Then it answers in Englis
 | The speech models don't download: "Your network didn't allow the download from huggingface.co" | A company network may block Hugging Face. Try another network (at home, or a phone's hotspot), or ask IT to allow `huggingface.co` and `us.aws.cdn.hf.co`. |
 | "The speech models aren't on this computer any more" | Click **Open Settings** and download them again, or choose **ElevenLabs** on Setup. |
 | "This computer ran out of memory while transcribing" | Close other apps and click **Try again**, or transcribe with ElevenLabs. |
+| "The graphics card (…) stopped while transcribing" | Click **Try on the processor** to run this recording on the processor. If it keeps happening, choose **Processor** under **Run on** in Settings, or update the card's driver. |
 | "This browser can't open project folders" | Open DeScribe in Edge or Chrome. |
 | "This folder isn't a DeScribe project" | Choose the folder that has `describe-project.json` in it, or use **New project…**. |
 | "This file is only in OneDrive and the computer is offline" | Connect to the internet, or set the project folder to **Always keep on this device**. |

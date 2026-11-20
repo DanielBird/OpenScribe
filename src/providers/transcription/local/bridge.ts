@@ -3,7 +3,7 @@
 import { invokeCommand, openChannel } from '../../../desktop/ipc';
 import { tokenOf } from '../../../desktop/recordings';
 import { z } from '../../../lib/zod';
-import type { TranscriptionProgress } from '../types';
+import type { GpuChoice, TranscriptionProgress } from '../types';
 
 export const LOCAL_ERROR_KINDS = [
   'busy',
@@ -16,6 +16,7 @@ export const LOCAL_ERROR_KINDS = [
   'unreadable',
   'out-of-memory',
   'engine',
+  'gpu',
   'cancelled',
 ] as const;
 export type LocalErrorKind = (typeof LOCAL_ERROR_KINDS)[number];
@@ -69,8 +70,17 @@ function makeSchemas() {
     maxSpeakers: z.number().int().positive(),
     downloadBytes: z.number().int().nonnegative(),
   });
+  const gpuDevice = z.object({
+    name: z.string().min(1),
+    kind: z.enum(['gpu', 'integrated-gpu']),
+    memoryBytes: z.number().int().nonnegative(),
+  });
+  // A card as the job named it, so two identical cards stay apart (audit GPU-6).
+  const card = z.object({ name: z.string().min(1), nth: z.number().int().nonnegative() });
   return {
     pack,
+    gpuDevice,
+    devices: z.array(gpuDevice),
     status: z.discriminatedUnion('state', [
       z.object({ state: z.literal('ready'), pack }),
       z.object({ state: z.literal('missing'), pack }),
@@ -110,8 +120,10 @@ function makeSchemas() {
         wordsSec: finite,
         speakersSec: finite,
         totalSec: finite,
-        threads: z.number().int().positive(),
+        threads: z.number().int().positive().nullable(),
+        device: card.nullable(),
         peakMemoryBytes: z.number().int().nonnegative().nullable(),
+        fellBack: z.object({ device: card, reason: z.string() }).nullable(),
       }),
     }),
     progress: z.discriminatedUnion('phase', [
@@ -138,6 +150,8 @@ export type SpeechPackInfo = z.infer<Schemas['pack']>;
 export type LocalSttStatus = z.infer<Schemas['status']>;
 export type LocalSttResult = z.infer<Schemas['result']>;
 export type LocalSttTimings = LocalSttResult['timings'];
+/** A graphics card the desktop app's Vulkan engine found, in ggml's order (Phase 37). */
+export type GpuDevice = z.infer<Schemas['gpuDevice']>;
 
 /** What Rust rejected with, as a LocalSttError. Anything unexpected is an engine failure. */
 export function toLocalError(raw: unknown): LocalSttError {
@@ -171,9 +185,12 @@ export interface LocalSttBridge {
   }): Promise<void>;
   /** Deletes the speech models and anything a download left. Rejects with a SpeechPackError. */
   removeModels(): Promise<void>;
+  /** The graphics cards the models can run on: none without one, or without Vulkan. */
+  devices(): Promise<GpuDevice[]>;
+  /** `device` is the card to run on; null is the processor. Rust falls back to the processor when it's gone. */
   transcribe(
     file: File,
-    options: { languageHint: string; numSpeakers: number | null },
+    options: { languageHint: string; numSpeakers: number | null; device: GpuChoice | null },
     opts: { signal: AbortSignal; onProgress: (p: TranscriptionProgress) => void },
   ): Promise<LocalSttResult>;
 }
@@ -189,7 +206,15 @@ export function createTauriSttBridge(): LocalSttBridge {
       }
     },
 
-    async transcribe(file, _options, { signal, onProgress }) {
+    async devices() {
+      try {
+        return bridgeSchemas().devices.parse(await invokeCommand('stt_devices'));
+      } catch (error) {
+        throw toLocalError(error);
+      }
+    },
+
+    async transcribe(file, { device }, { signal, onProgress }) {
       // The engine names the recording by the token Rust chose it under; a File from anywhere else has none.
       const token = tokenOf(file);
       if (token === null) {
@@ -208,7 +233,13 @@ export function createTauriSttBridge(): LocalSttBridge {
       };
       signal.addEventListener('abort', cancel, { once: true });
       try {
-        const reply = await invokeCommand('stt_start', { token, runId, onProgress: channel });
+        // A run on the processor sends what it did before Phase 37.
+        const reply = await invokeCommand('stt_start', {
+          token,
+          runId,
+          ...(device ? { device: { name: device.name, nth: device.nth } } : {}),
+          onProgress: channel,
+        });
         const result = bridgeSchemas().result.safeParse(reply);
         if (!result.success) {
           throw new LocalSttError('engine', 'the engine sent an unreadable result');

@@ -1,6 +1,7 @@
 // Transcription on this computer (DECISIONS.md D50, D51, D53): a second TranscriptionProvider. The engine runs in the
 // desktop app's Rust side, through the injected bridge; this maps its result to NormalizedTokens, so segmentation, the
 // doc, playback, translation, export and projects don't know which engine ran.
+import { cardLabel } from '../../../domain/gpuCard';
 import { ProviderError } from '../../errors';
 import type { TranscriptionProvider } from '../types';
 import { LocalSttError, toLocalError, type LocalSttBridge } from './bridge';
@@ -26,7 +27,11 @@ export function createLocalProvider(bridge: LocalSttBridge): TranscriptionProvid
         // speakers (Phase 33). The hint still becomes the doc's language when the engine reports none.
         const result = await bridge.transcribe(
           input.file,
-          { languageHint: input.languageHint, numSpeakers: input.numSpeakers },
+          {
+            languageHint: input.languageHint,
+            numSpeakers: input.numSpeakers,
+            device: input.device ?? null,
+          },
           { signal, onProgress },
         );
         if (signal.aborted) throw new LocalSttError('cancelled', 'cancelled');
@@ -43,7 +48,10 @@ export function createLocalProvider(bridge: LocalSttBridge): TranscriptionProvid
         const local = signal.aborted
           ? new LocalSttError('cancelled', 'cancelled')
           : toLocalError(error);
-        throw toProviderError(local, input.file.name);
+        throw toProviderError(local, {
+          fileName: input.file.name,
+          card: input.device ? cardLabel(input.device) : null,
+        });
       }
     },
   };

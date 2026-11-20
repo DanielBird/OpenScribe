@@ -44,7 +44,7 @@ set it yourself for any `winapp` command run by hand.
 |---|---|
 | `npm run desktop:dev` | `tauri dev`: the window on the Vite dev server in desktop mode, with hot reload. Rust changes rebuild and restart the window. |
 | `npm run desktop:build` | `tauri build --no-bundle`: runs `build:desktop`, then makes `src-tauri/target/release/describe.exe`. |
-| `npm run desktop:pack` | `scripts/pack-desktop.mjs`: checks the third-party notices are up to date (D36), runs `desktop:build`, then makes an unsigned x64 MSIX, `release/DeScribe-v<version>-x64.msix`, for the Store. |
+| `npm run desktop:pack` | `scripts/pack-desktop.mjs`: checks both speech engines against their `built.json` and the third-party notices are up to date (D36), runs `desktop:build`, then makes an unsigned x64 MSIX, `release/DeScribe-v<version>-x64.msix`, for the Store, with the processor engine beside the exe and the Vulkan one in `vulkan\`. |
 | `npm run desktop:pack -- --sign` | The same, signed with a development certificate, `devcert.pfx`, so it installs on this PC. |
 
 **Sizes (2026-10-31, version 1.0.0):**
@@ -255,7 +255,8 @@ DECISIONS.md D50, D51, D53; the engine and models in [local-stt.md](local-stt.md
 - **The worker:** `describe.exe --stt-worker`, in a job object with `KILL_ON_JOB_CLOSE`. Job on stdin (or
   `--job <file>` for timing runs by hand), JSON events on stdout. If the job object can't be made, Cancel ends the
   process by its handle, and the worker exits (code 3) when a write to stdout fails, since the app has gone. It loads `nemo_speech_asr_c.dll` from beside the
-  exe, or in a debug build from `DESCRIBE_STT_RUNTIME_DIR` or `src-tauri/stt-runtime/`.
+  exe, or in a debug build from `DESCRIBE_STT_RUNTIME_DIR` or `src-tauri/stt-runtime/`. A run on a graphics card loads
+  the Vulkan engine from `vulkan\` under the same folder ([Phase 37](#on-the-graphics-card-phase-37)).
 - **Keep awake:** a `PowerRequestSystemRequired` power request is held for the run.
 - **Closing:** while the page's guard is set or a local run is going, closing the window shows a task dialog
   (**Keep open** / **Close**). Checked first: WebView2's `beforeunload` didn't stop the window closing.
@@ -272,8 +273,13 @@ DECISIONS.md D50, D51, D53; the engine and models in [local-stt.md](local-stt.md
 - **The engine pref:** until Phase 36 there is no UI. In DevTools, set `localStorage['describe.v1.prefs']` to include
   `"transcriptionEngine": "local"` and reload. `"localTextCleanUp": false` keeps the text verbatim.
 - **The certification kit:** `release/DeScribe-v1.2.0-x64.msix` with the engine **passed** (the maintainer, 2026-11-15).
+  So did `release/DeScribe-v1.3.0-x64.msix` with both engines (the maintainer, 2026-11-20; Phase 37's G10).
 - **Size:** the MSIX is **5.3 MB** with the engine (version 1.2.0, 2026-11-15), against 3.0 MB without. The engine's
   DLLs are 6.7 MB uncompressed.
+  - **With the Vulkan engine** (Phase 37, version 1.3.0, 2026-11-20, unsigned): the MSIX is **21.1 MB** (22,115,564 bytes),
+    against 5.5 MB (5,743,233 bytes) from the same tree with the processor engine only. Installed, it's 65.5 MB against
+    16.6 MB. `vulkan\` adds 48.9 MB uncompressed, 44.3 MB of it `ggml-vulkan.dll`, and about 15.6 MB to the MSIX.
+    D58 lifts D50's 40 MB for this.
 
 | ID | Check | Maintainer's PC | Work laptop |
 |---|---|---|---|
@@ -284,7 +290,7 @@ DECISIONS.md D50, D51, D53; the engine and models in [local-stt.md](local-stt.md
 | E10 | A real drop on the window. | **Pass** (the maintainer, `npm run desktop:dev`): on Setup's zone the file is chosen; elsewhere in the window nothing happens. | |
 | E5 | The capability grants only the app's commands. | **Pass:** `plugin:opener|open_url`, `plugin:window|close` and an unknown command were refused. | |
 | E6 | *Laptop* profile: 1 h and 3 h within Phase 33's thresholds, within 15 % of the harness, word times at the end. | **Pass** (2026-11-15; the release exe's worker, pinned to `0xfff0`, "DeScribe laptop emulation" at 3,375 MHz, measured clock 3,294 MHz): **1 h in 328.3 s (11.0×)**, against the harness's 334.1 s; **3 h in 972.6 s (11.1×)**, against 998.2 s. Target 400 s for an hour, floor 600 s. Peak commit 4.9 GB; GPU 0.0 %. In the last 10 minutes of the 3-hour file, 1,533 of 1,644 words match the same word in the first copy, all within 0.5 s (median 0.08 s). | *Phase 36* |
-| E7 | No GPU used; no GPU backend. | **Pass:** `pinrun` saw 0.0 % on every GPU engine in the 5-minute and 1-hour runs; the build has `GGML_CUDA` and `GGML_VULKAN` off and no GPU DLL. | |
+| E7 | No GPU used with **Processor** chosen; the processor engine has no GPU backend (Phase 37: the Vulkan engine is a separate folder, G3). | **Pass:** `pinrun` saw 0.0 % on every GPU engine in the 5-minute and 1-hour runs; the build has `GGML_CUDA` and `GGML_VULKAN` off and no GPU DLL. | |
 | E8 | No connections during a local run. | **Pass from the page** (E1's requests). *Rust's side by capture: by hand.* | |
 | E9 | The C API's words as fast as the CLI's; both models in one worker. | **Pass** (pinned to `0xfff0`, full clock): 5 min in 18.8 s (Phase 33: 19.4 s), 1 h in 224.6 s (229.1 s). | |
 
@@ -352,6 +358,51 @@ Also checked:
   target size); neither is this phase's UI;
 - no console errors.
 
+## On the graphics card (Phase 37)
+
+DECISIONS.md D58; the engines and the numbers in [local-stt.md](local-stt.md#as-built-phase-37).
+
+- **The commands** (`src-tauri/src/stt/commands.rs`), beside Phase 34's:
+
+  | Command | What it does |
+  |---|---|
+  | `stt_devices` | The graphics cards, `{ name, kind: 'gpu' \| 'integrated-gpu', memoryBytes }[]` in ggml's order, from the Vulkan engine's probe (`--stt-worker --devices`, ended after 15 s). Empty without a `vulkan\` engine, without AVX2, or when the probe fails, and for the rest of the session once listing the cards has hung (audit GPU-2). Settings calls it when the band shows *ready*; nothing calls it at launch. |
+  | `stt_start { …, device }` | `device` is optional, `{ name, nth }`. Left out, or with no Vulkan engine, the run is on the processor. On `device-missing` the same job runs once more on the processor, with no message. The worker must say `device-found` or `device-missing` within 15 s. If it doesn't, it's ended and not waited for, the job runs on the processor, and until the app restarts runs skip the card (audit GPU-2). In a run on a card, `engine`, `out-of-memory` and a worker that dies become `gpu`. The timings gain `device` (the card as the job named it, `{ name, nth }`, or null), and `threads` is null on a card. A run that asked for a card and ran on the processor has `fellBack: { device, reason }` (else null): the card it didn't use, `{ name, nth }`, and why, from `device-missing`'s `reason`, a hang, a hang earlier in the session, or no Vulkan engine (audit GPU-3). |
+
+- **Debug-build switches** (none work in a release build), beside Phase 34's:
+
+  | Variable | Effect |
+  |---|---|
+  | `DESCRIBE_STT_FAKE_DEVICES` | A JSON array of cards for `stt_devices` to return. With `DESCRIBE_STT_FAKE`, the fake worker looks for the job's card in it and says `device-missing` when it isn't there, so the real fallback runs. |
+  | `DESCRIBE_STT_PRETEND_NO_GPU` | `1`: no cards, and `stt_start` ignores the device |
+
+  The fake script's `cardFailure` (a kind, such as `gpu`) ends a run on a card with that failure, as given; on the
+  processor the script runs as usual. `fixtures/local-stt/fake-gpu.json` is `fake-run.json` with `cardFailure: gpu`.
+
+  **Which failures are the card's (`gpu`):** in a run on a card, the worker gives `gpu` for the models' failures
+  (loading, recognising, out of memory) and for the Vulkan engine not loading. The app adds a worker that dies without
+  saying why (its crash and out of memory; an illegal instruction stays `cpu`). The decoder's failures (Media Foundation)
+  and the app's own (finding the app, starting the worker) keep their kind, since the processor would fail the same
+  way (audit GPU-1). A panic in the decoder thread still reads as the card's: the worker dies, and a crash can't say
+  where it came from.
+- **In the MSIX:** the processor engine beside `describe.exe` and the Vulkan engine in `vulkan\`
+  ([Size](#transcribing-on-this-computer-phase-34)). `vulkan-1.dll` is the graphics driver's and isn't in the package.
+- **The agent's rows** ran on the debug exe over CDP, as in Phase 36, with `DESCRIBE_STT_PICK=tone-5s.wav`, and with
+  the fakes where a row says so. The script isn't in the repo.
+
+| ID | Check | Maintainer's PC | Work laptop |
+|---|---|---|---|
+| G1 | With the models ready: Settings shows **Run on** with **Processor** checked and each card by name. The choice survives a restart. Without the models: no group. | **Pass (the agent, 2026-11-20):** with `fake-gpu.json` and one made-up card, **Processor** was checked first, and the card stayed checked after a restart. With the real engine the probe listed the RTX 2070 SUPER and the UHD 770 (227 ms). Without the models: `SpeechPackSection.spec.ts`. | *The maintainer: the Radeon 740M.* |
+| G2 | A 5-minute recording on each card: a transcript with speakers; Timings says **Ran on** the card; Task Manager shows the card busy and the processor mostly free. | **In part (the agent):** in the app, `tone-5s.wav` on each card said **Ran on** that card, with no console errors. The app's worker on the 5-minute recording: speakers on both cards, the card busy (42 % and 100 % max) and 1.9 and 1.1 logical processors busy ([local-stt.md](local-stt.md#as-built-phase-37)). *The 5-minute recording in the app, with Task Manager: the maintainer.* | *The maintainer.* |
+| G3 | **Processor** chosen: the run is as before (E7's GPU 0.0 %), Timings says "Processor (8 threads)". | **Pass (the agent):** the processor runs (Tasks 3–5) showed no card use, and Timings said "Processor (8 threads)". The MSIX's processor files are Phase 33's, byte for byte (Task 6). | |
+| G4 | Cancel during a run on a card: it stops at once, and the next run starts normally. Closing the window during one asks first, as today. | **Pass for the worker (the agent):** ended in 80–133 ms on each card, the card's memory freed, the next run finished. *In the app, and closing the window: the maintainer.* The close guard is E4's, unchanged. | *The maintainer.* |
+| G5 | A failure on the card (`fake-gpu.json`): the message names the card; **Try on the processor** runs it on the processor; Settings still says the card. Screen reader: the message is announced, both buttons reachable. | **Pass (the agent):** "The graphics card (NAME) stopped while transcribing." with **Try again** and **Try on the processor**. The second gave a transcript, Settings still had the card, Timings said "Processor (8 threads)". No console errors. *A screen reader: the maintainer (Narrator).* | |
+| G6 | The saved card gone (`DESCRIBE_STT_FAKE_DEVICES` without it): Settings checks **Processor**; a run uses the processor without a message; the card back, the choice is back. | **Pass (the agent).** | |
+| G7 | No Vulkan (`DESCRIBE_STT_PRETEND_NO_GPU=1`): no group; runs as before. | **Pass (the agent).** | |
+| G8 | A 1-hour recording on the RTX 2070 SUPER and on the UHD 770: times, peak memory, the cards' memory. | **Pass (the agent, the app's worker):** 25.8 s and 335.2 s, against 201.9 s on the processor. Peak commit 9.4 and 8.7 GB; the RTX 1.6 GB of its own memory, the UHD 770 1.1 GB shared. No empty 30 s window. In [local-stt.md](local-stt.md#as-built-phase-37). | |
+| G9 | The work laptop: Phase 36's L9 recordings on the Radeon 740M, plugged in and on battery, and the 1-hour one during a Teams call. Measured, not a gate (D58). | | *The maintainer: [local-stt.md](local-stt.md#the-work-laptop-on-its-graphics-card-phase-37-g9).* |
+| G10 | The MSIX: its size before and after, both engines inside, the Windows App Certification Kit passes. | **Pass.** The agent (2026-11-20): 21.1 MB against 5.5 MB without the Vulkan engine; installed 65.5 MB against 16.6 MB; all 19 engine files inside with their built hashes. **The maintainer** (2026-11-20): the certification kit passed on the latest build, `release/DeScribe-v1.3.0-x64.msix` with both engines. | |
+
 ## Input for Phase 25
 
 **Can stay as it is** (it works in the web view): the API calls (CORS accepts `http://tauri.localhost`, D35), the
@@ -406,4 +457,7 @@ localStorage in the app's own profile, the keys' Remember setting, and Clear sav
 | 2026-11-08 | Maintainer's PC, release exe, a scratch profile (the agent) | W16: a script polling the app's own windows, `PrintWindow`, and CDP for the page's paint timings, focus and reload | As in the checklist. In the run with paint timings: page loaded at 686 ms, window shown at 727 ms, first paint at 803 ms after the process started. |
 | 2026-11-08 | Maintainer's PC, debug exe with the page-load reveal disabled (not committed) | The 15 s watchdog | The window appeared and the splash closed at 15.2 s. |
 | 2026-11-16 | Maintainer's PC, debug exe over CDP, the stand-in server (the agent) | Phase 35's S1 (missing, installed), S2, S4, S5, S6, S9 | As in local-stt.md's S table. |
+| 2026-11-20 | Maintainer's PC, debug exe over CDP (the agent) | Phase 37's G1, G5, G6, G7, and runs on each card with the real engine | As in the [G table](#on-the-graphics-card-phase-37). |
+| 2026-11-20 | Maintainer's PC (the agent) | `npm run desktop:pack`, before and after the Vulkan engine | 5.5 MB, then 21.1 MB; the engine files checked against `built.json` inside the MSIX. |
+| 2026-11-20 | Maintainer's PC (the maintainer) | Windows App Certification Kit on the 1.3.0 MSIX with both engines (G10) | **Passed.** |
 | – | Work laptop | W1–W16 from the direct link | Not run |

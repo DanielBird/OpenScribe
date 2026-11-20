@@ -1,21 +1,30 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, useId, useTemplateRef } from 'vue';
+import { computed, nextTick, onMounted, ref, useId, useTemplateRef, watch } from 'vue';
 import { formatDownloadSize } from '../../domain/filecheck';
+import { cardLabel } from '../../domain/gpuCard';
 import { formatTimestamp } from '../../domain/transcript';
-import { useJobStore } from '../../stores/job';
+import { useJobStore, type LocalRunRecord } from '../../stores/job';
+import { useSettingsStore } from '../../stores/settings';
 import { useSpeechPackStore, type SpeechPackOutcome } from '../../stores/speechPack';
 import { useConfirm } from '../composables/useConfirm';
 import ConfirmDialog from './ConfirmDialog.vue';
 import ErrorDetails from './ErrorDetails.vue';
 
 // Settings' band for the speech models (DECISIONS.md D50, D54), desktop only: SettingsView renders it only when
-// `__DESKTOP__` is true. Download, its progress and Cancel, Remove; one state at a time (D13).
+// `__DESKTOP__` is true. Download, its progress and Cancel, Remove; one state at a time (D13). With the models ready
+// and a graphics card found, where they run (Phase 37).
 const store = useSpeechPackStore();
 const job = useJobStore();
+const settings = useSettingsStore();
 const { confirm, dialog: confirmDialog } = useConfirm();
 
 const id = useId();
-const ids = { heading: `${id}-heading`, progress: `${id}-progress`, size: `${id}-size` };
+const ids = {
+  heading: `${id}-heading`,
+  progress: `${id}-progress`,
+  size: `${id}-size`,
+  device: `${id}-device`,
+};
 const action = useTemplateRef<HTMLButtonElement>('action');
 const cancelButton = useTemplateRef<HTMLButtonElement>('cancelButton');
 
@@ -38,6 +47,28 @@ const progressText = computed(() => {
 
 const seconds = (sec: number) => `${sec.toFixed(1)} s`;
 
+/** Settings asks for the graphics cards when the models are ready, never at launch (Phase 37, decision 2). */
+watch(
+  () => view.value === 'ready',
+  (ready) => {
+    if (ready) void settings.refreshDevices();
+  },
+  { immediate: true },
+);
+
+/** The choice is offered only when it is one: a card was found (decision 4). */
+const showDevices = computed(() => settings.gpuDevices.length > 0);
+
+/**
+ * Where a run went: the card, labelled as in **Run on** (audit GPU-6), or the processor with its threads. A record
+ * without either was the processor. A run that fell back names the card it didn't use (audit GPU-3).
+ */
+function ranOn(t: LocalRunRecord['timings']): string {
+  if (t.device !== null) return cardLabel(t.device);
+  const processor = t.threads === null ? 'Processor' : `Processor (${t.threads} threads)`;
+  return t.fellBack ? `${processor}, not ${cardLabel(t.fellBack.device)}` : processor;
+}
+
 /** The last run on this computer: what a colleague can expect, and how the work laptop is measured (Phase 36). */
 const lastRun = computed(() => {
   const run = job.lastLocalRun;
@@ -54,7 +85,9 @@ const lastRun = computed(() => {
       { label: 'Words', value: seconds(t.wordsSec) },
       { label: 'Speakers', value: seconds(t.speakersSec) },
       { label: 'Total', value: seconds(t.totalSec) },
-      { label: 'Threads', value: String(t.threads) },
+      { label: 'Ran on', value: ranOn(t) },
+      // Why the card wasn't used, for whoever helps (audit GPU-3). Decision 5: no message, only this.
+      ...(t.fellBack ? [{ label: 'Why', value: t.fellBack.reason }] : []),
       {
         label: 'Peak memory',
         value:
@@ -130,6 +163,22 @@ async function remove(): Promise<void> {
 
       <template v-else-if="view === 'ready'">
         <p>Speech models are installed.</p>
+        <fieldset v-if="showDevices" class="run-on">
+          <legend class="legend">Run on</legend>
+          <div class="choices">
+            <label v-for="option in settings.deviceOptions" :key="option.id" class="choice">
+              <input
+                type="radio"
+                :name="ids.device"
+                :value="option.id"
+                :checked="option.id === settings.checkedDevice.id"
+                @change="settings.setLocalDevice(option.choice)"
+                @click="settings.setLocalDevice(option.choice)"
+              />
+              {{ option.label }}
+            </label>
+          </div>
+        </fieldset>
         <div v-if="lastRun" class="last-run">
           <p>{{ lastRun.line }}</p>
           <details>
@@ -191,6 +240,37 @@ async function remove(): Promise<void> {
 </template>
 
 <style scoped>
+.run-on {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.legend {
+  padding: 0;
+  font-weight: 600;
+}
+
+.choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-5);
+}
+
+.choice {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  cursor: pointer;
+}
+
+.choice input {
+  margin: 0;
+  accent-color: var(--color-accent);
+}
+
 .last-run {
   display: grid;
   gap: var(--space-2);

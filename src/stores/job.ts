@@ -46,6 +46,15 @@ export interface LocalRunRecord {
 
 const LAST_LOCAL_RUN_KEY = 'lastLocalRun';
 
+/**
+ * A card in the record: `{ name, nth }`, or the name alone from before audit GPU-6, which reads as the first card with
+ * that name.
+ */
+const savedCard = z.union([
+  z.object({ name: z.string(), nth: z.number().int().nonnegative() }),
+  z.string().transform((name) => ({ name, nth: 0 })),
+]);
+
 const LocalRunSchema = z.object({
   at: z.string(),
   audioSec: z.number().nullable(),
@@ -54,8 +63,12 @@ const LocalRunSchema = z.object({
     wordsSec: z.number(),
     speakersSec: z.number(),
     totalSec: z.number(),
-    threads: z.number(),
+    threads: z.number().nullable(),
+    // A run saved before Phase 37 has none: it ran on the processor.
+    device: savedCard.nullable().catch(null),
     peakMemoryBytes: z.number().nullable(),
+    // A run saved before audit GPU-3 has none: it didn't fall back, or doesn't say.
+    fellBack: z.object({ device: savedCard, reason: z.string() }).nullable().catch(null),
   }),
 });
 
@@ -125,6 +138,11 @@ export const useJobStore = defineStore('job', () => {
         zeroRetention,
         keyterms,
         cleanUp: settings.localTextCleanUp,
+        // The saved card, even when Settings doesn't list it: Rust runs on the processor when it's gone (Phase 37).
+        device:
+          provider.id === 'local' && settings.localDevice !== 'cpu'
+            ? { ...settings.localDevice }
+            : null,
       },
       source: {
         fileName: file.name,
@@ -251,6 +269,17 @@ export const useJobStore = defineStore('job', () => {
   }
 
   /**
+   * Repeats the last run on this computer on the processor, after a graphics card failed (Phase 37, decision 6). The
+   * saved choice stays the card: Try again repeats this run, and the next Transcribe uses Settings again.
+   */
+  function retryOnProcessor(): Promise<void> {
+    if (isActive.value || !lastSnapshot || lastSnapshot.provider.id !== 'local') {
+      return Promise.resolve();
+    }
+    return run({ ...lastSnapshot, input: { ...lastSnapshot.input, device: null } });
+  }
+
+  /**
    * Clears a run that has ended (done, failed or cancelled): Output shows the transcript again, and
    * after "Clear saved data" Output can't be entered. An active run is left alone.
    */
@@ -287,6 +316,7 @@ export const useJobStore = defineStore('job', () => {
     start,
     cancel,
     retry,
+    retryOnProcessor,
     dismiss,
   };
 });

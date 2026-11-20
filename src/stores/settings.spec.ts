@@ -680,6 +680,7 @@ describe('settings store', () => {
       transcribe: () => Promise.reject(new Error('unused')),
       download: () => Promise.reject(new Error('unused')),
       removeModels: () => Promise.reject(new Error('unused')),
+      devices: () => Promise.reject(new Error('unused')),
     };
     const ready: LocalSttStatus = { state: 'ready', pack: TEST_PACK };
 
@@ -930,6 +931,122 @@ describe('settings store', () => {
       setActivePinia(createPinia());
       localStorage.setItem('describe.v1.prefs', JSON.stringify({ localTextCleanUp: false }));
       expect(useSettingsStore().localTextCleanUp).toBe(false);
+    });
+  });
+
+  describe('where the models run (Phase 37)', () => {
+    const RTX = { name: 'NVIDIA GeForce RTX 2070 SUPER', kind: 'gpu', memoryBytes: 8e9 } as const;
+    const UHD = {
+      name: 'Intel(R) UHD Graphics 770',
+      kind: 'integrated-gpu',
+      memoryBytes: 0,
+    } as const;
+
+    afterEach(() => {
+      setLocalSttBridgeForTests(null);
+      vi.unstubAllGlobals();
+    });
+
+    /** The desktop app's settings, with Rust listing `devices`. */
+    async function withDevices(devices: (typeof RTX | typeof UHD)[]) {
+      vi.stubGlobal('__DESKTOP__', true);
+      const bridge = fakeLocalBridge();
+      bridge.nextDevices = devices;
+      setLocalSttBridgeForTests(bridge);
+      const settings = useSettingsStore();
+      await settings.refreshDevices();
+      return { settings, bridge };
+    }
+
+    it('is the processor by default, and for an unreadable pref', () => {
+      expect(useSettingsStore().localDevice).toBe('cpu');
+      for (const bad of [{ name: 3 }, { name: '', nth: 0 }, { name: 'x', nth: -1 }, 'gpu']) {
+        setActivePinia(createPinia());
+        localStorage.setItem('describe.v1.prefs', JSON.stringify({ localDevice: bad }));
+        expect(useSettingsStore().localDevice).toBe('cpu');
+      }
+    });
+
+    it('lists nothing in the web build, and asks Rust nothing', async () => {
+      const bridge = fakeLocalBridge();
+      bridge.nextDevices = [RTX];
+      setLocalSttBridgeForTests(bridge);
+      const settings = useSettingsStore();
+      await settings.refreshDevices();
+      expect(settings.gpuDevices).toEqual([]);
+      expect(bridge.calls).not.toContain('devices');
+    });
+
+    it('offers the processor, then each card, with the processor checked', async () => {
+      const { settings } = await withDevices([RTX, UHD]);
+      expect(settings.deviceOptions.map((o) => o.label)).toEqual(['Processor', RTX.name, UHD.name]);
+      expect(settings.checkedDevice.id).toBe('cpu');
+    });
+
+    it('saves a card, which survives a restart, and resetPrefs forgets it', async () => {
+      const { settings } = await withDevices([RTX, UHD]);
+      settings.setLocalDevice({ name: UHD.name, nth: 0 });
+      expect(storedPrefs()).toMatchObject({ localDevice: { name: UHD.name, nth: 0 } });
+      setActivePinia(createPinia());
+      const again = (await withDevices([RTX, UHD])).settings;
+      expect(again.localDevice).toEqual({ name: UHD.name, nth: 0 });
+      expect(again.checkedDevice.label).toBe(UHD.name);
+      again.resetPrefs();
+      expect(again.localDevice).toBe('cpu');
+    });
+
+    it('checks the processor while the saved card is gone, and keeps it for when it is back', async () => {
+      localStorage.setItem(
+        'describe.v1.prefs',
+        JSON.stringify({ localDevice: { name: UHD.name, nth: 0 } }),
+      );
+      const { settings, bridge } = await withDevices([RTX]);
+      expect(settings.checkedDevice.id).toBe('cpu');
+      expect(settings.localDevice).toEqual({ name: UHD.name, nth: 0 });
+      bridge.nextDevices = [RTX, UHD];
+      await settings.refreshDevices();
+      expect(settings.checkedDevice.label).toBe(UHD.name);
+    });
+
+    it('saves the processor chosen while the saved card is gone, and writes nothing for the same choice again', async () => {
+      localStorage.setItem(
+        'describe.v1.prefs',
+        JSON.stringify({ localDevice: { name: UHD.name, nth: 0 } }),
+      );
+      const { settings, bridge } = await withDevices([RTX]);
+      settings.setLocalDevice('cpu');
+      expect(storedPrefs()).toMatchObject({ localDevice: 'cpu' });
+      // A stand-in written behind the store's back shows whether the same choice again writes.
+      const marker = JSON.stringify({ localDevice: { name: 'marker', nth: 0 } });
+      localStorage.setItem('describe.v1.prefs', marker);
+      settings.setLocalDevice('cpu');
+      expect(localStorage.getItem('describe.v1.prefs')).toBe(marker);
+      settings.setLocalDevice({ name: RTX.name, nth: 0 });
+      localStorage.setItem('describe.v1.prefs', marker);
+      settings.setLocalDevice({ name: RTX.name, nth: 0 });
+      expect(localStorage.getItem('describe.v1.prefs')).toBe(marker);
+      settings.setLocalDevice('cpu');
+      bridge.nextDevices = [RTX, UHD];
+      await settings.refreshDevices();
+      expect(settings.checkedDevice.id).toBe('cpu');
+    });
+
+    it('tells two identical cards apart', async () => {
+      const { settings } = await withDevices([RTX, RTX]);
+      expect(settings.deviceOptions.slice(1)).toMatchObject([
+        { label: RTX.name, choice: { name: RTX.name, nth: 0 } },
+        { label: `${RTX.name} (2)`, choice: { name: RTX.name, nth: 1 } },
+      ]);
+      settings.setLocalDevice({ name: RTX.name, nth: 1 });
+      expect(settings.checkedDevice.label).toBe(`${RTX.name} (2)`);
+    });
+
+    it('lists none when Rust can’t', async () => {
+      vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const { settings, bridge } = await withDevices([RTX]);
+      bridge.nextDevices = new Error('no answer');
+      await settings.refreshDevices();
+      expect(settings.gpuDevices).toEqual([]);
     });
   });
 });

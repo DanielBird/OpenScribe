@@ -4,12 +4,15 @@
 //!       The cores, their efficiency classes and the 12-processor mask (six of the fastest cores and both of their
 //!       hyper-threads). --write stores the mask in profiles.json.
 //!
-//!   pinrun --profile laptop|throttled|uncapped [--memory-limit-mb N] [--cpu-rate PCT] [--report PATH] -- CMD ARGS…
+//!   pinrun --profile laptop|throttled|uncapped|unpinned [--memory-limit-mb N] [--cpu-rate PCT] [--report PATH]
+//!          -- CMD ARGS…
 //!       Puts itself in a job object whose affinity is the mask, so CMD and all its children are pinned from their
 //!       first instruction. `laptop` and `throttled` refuse to start unless the active power scheme is that
-//!       profile's (profiles.json); `uncapped` runs under whatever scheme is active and says so. Samples the pinned
-//!       processors' clock and the processes' GPU use once a second. Writes a JSON report (default
-//!       out/pinrun-last.json) and exits with CMD's exit code.
+//!       profile's (profiles.json); `uncapped` runs under whatever scheme is active and says so. `unpinned` (Phase
+//!       37: measuring the graphics cards, not the laptop) uses the same job without an affinity. Samples the
+//!       processors' clock and, per graphics adapter, the processes' GPU engine use and GPU memory (dedicated and
+//!       shared) once a second, and reports the job's CPU time. Writes a JSON report (default out/pinrun-last.json)
+//!       and exits with CMD's exit code.
 //!       --memory-limit-mb: a commit limit per process (M8). --cpu-rate: a hard cap on the job's CPU time as a
 //!       percentage of the pinned processors (the calibration fallback if the frequency cap is ignored).
 //!       --capture-console FILE: runs CMD on a pseudo console and saves what it prints there (Cinebench prints its
@@ -106,7 +109,7 @@ fn run(args: &[String]) -> Result<u8, String> {
         }
         i += 2;
     }
-    let profile = profile.ok_or("--profile laptop|throttled|uncapped is required")?;
+    let profile = profile.ok_or("--profile laptop|throttled|uncapped|unpinned is required")?;
     let profiles = read_json(&profiles_path()).unwrap_or_else(default_profiles);
     let mask = match profiles["mask"].as_str().and_then(sys::parse_mask) {
         Some(m) => m,
@@ -125,13 +128,18 @@ fn run(args: &[String]) -> Result<u8, String> {
             }
             true
         }
-        "uncapped" => false,
+        "uncapped" | "unpinned" => false,
         other => return Err(format!("unknown profile {other}")),
     };
+    let pinned = profile != "unpinned";
+    if !pinned && cpu_rate.is_some() {
+        return Err("--cpu-rate needs a pinned profile".into());
+    }
 
-    let job = sys::Job::new(mask, memory_limit_mb.map(|mb| mb * 1024 * 1024)).map_err(|e| format!("job object: {e}"))?;
-    let lps = sys::mask_to_list(mask);
     let total_lps = sys::cores().map(|c| c.iter().map(|c| c.logical.len()).sum::<usize>()).unwrap_or(24).max(1);
+    let job = sys::Job::new(pinned.then_some(mask), memory_limit_mb.map(|mb| mb * 1024 * 1024))
+        .map_err(|e| format!("job object: {e}"))?;
+    let lps = if pinned { sys::mask_to_list(mask) } else { (0..total_lps as u32).collect() };
     if let Some(pct) = cpu_rate {
         // Windows' rate is a share of every logical processor on the machine, in hundredths of a percent.
         let rate = (pct / 100.0 * lps.len() as f64 / total_lps as f64 * 10_000.0).round() as u32;
@@ -160,12 +168,14 @@ fn run(args: &[String]) -> Result<u8, String> {
     let wall = started.elapsed().as_secs_f64();
     let samples = sampler.finish();
     let peaks = job.peaks();
+    let (user_sec, kernel_sec) = job.cpu_seconds();
     let report = json!({
         "tool": "pinrun",
         "startedAt": started_at,
         "profile": profile,
         "capped": capped,
-        "mask": format!("0x{mask:x}"),
+        "pinned": pinned,
+        "mask": pinned.then(|| format!("0x{mask:x}")),
         "logicalProcessors": lps,
         "scheme": scheme,
         "command": command,
@@ -176,6 +186,10 @@ fn run(args: &[String]) -> Result<u8, String> {
         "error": error,
         "peakProcessCommitBytes": peaks.peak_process_commit_bytes,
         "peakJobCommitBytes": peaks.peak_job_commit_bytes,
+        // CPU time of every process in the job, so "the processor mostly free" is a number: cpuSec / wallSec is the
+        // average number of logical processors kept busy.
+        "cpuUserSec": user_sec,
+        "cpuKernelSec": kernel_sec,
         "samples": samples,
     });
     if let Some(dir) = report_path.parent() {
@@ -183,14 +197,26 @@ fn run(args: &[String]) -> Result<u8, String> {
     }
     let _ = std::fs::write(&report_path, serde_json::to_string_pretty(&report).unwrap_or_default() + "\n");
     eprintln!(
-        "pinrun: {profile} ({}), {} LPs, {wall:.1} s, exit {:?}, peak commit {:.0} MB, clock {:?} MHz, GPU max {:.1} %",
+        "pinrun: {profile} ({}), {} LPs, {wall:.1} s, exit {:?}, peak commit {:.0} MB, CPU {:.1} s, clock {:?} MHz, \
+         GPU max {:.1} %",
         if capped { "capped" } else { "uncapped" },
         lps.len(),
         exit_code,
         peaks.peak_process_commit_bytes as f64 / 1e6,
+        user_sec + kernel_sec,
         samples.clock_mean_mhz,
         samples.gpu_max_percent,
     );
+    for a in &samples.gpu_adapters {
+        eprintln!(
+            "pinrun:   GPU {}: engine max {:.1} % / mean {:.1} %, dedicated peak {:.0} MB, shared peak {:.0} MB",
+            a.luid,
+            a.engine_max_percent,
+            a.engine_mean_percent,
+            a.dedicated_peak_bytes as f64 / 1e6,
+            a.shared_peak_bytes as f64 / 1e6,
+        );
+    }
     if let Some(e) = error {
         return Err(e);
     }

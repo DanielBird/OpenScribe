@@ -20,7 +20,7 @@ The same source also builds a **Windows desktop app** (Tauri 2, packed as MSIX f
 | UI | Vue 3, Composition API, `<script setup lang="ts">` single-file components |
 | Language | TypeScript 6.0 (`~6.0`; `typescript-eslint` does not support 6.1+/7 yet), `strict: true`. Node ≥ 22.12. |
 | Build | Vite + `vite-plugin-singlefile` → `dist/describe.html` |
-| Desktop | Tauri 2 (`src-tauri/`, WebView2) embedding `vite build --mode desktop` → `dist-desktop/`; MSIX via Microsoft's `winapp` CLI. `__DESKTOP__` is the only switch in `src/`. Transcription on the computer (D50, D53): NVIDIA's NeMo-Speech.cpp in a worker process (`src-tauri/src/stt/`). |
+| Desktop | Tauri 2 (`src-tauri/`, WebView2) embedding `vite build --mode desktop` → `dist-desktop/`; MSIX via Microsoft's `winapp` CLI. `__DESKTOP__` is the only switch in `src/`. Transcription on the computer (D50, D53): NVIDIA's NeMo-Speech.cpp in a worker process (`src-tauri/src/stt/`), as two engines: the processor's, and a Vulkan one in `vulkan\` for the graphics card the user chooses (D58). |
 | State | Pinia |
 | Styling | Plain scoped CSS + design tokens in `src/ui/styles/tokens.css`. No UI kit, no CSS framework. |
 | Unit / component tests | Vitest + `@vue/test-utils` + `happy-dom` (+ `fake-indexeddb` where needed) |
@@ -48,8 +48,8 @@ explaining why. Dev dependencies are fine when needed.
 | `npm run desktop:dev` | The desktop window on the Vite dev server in desktop mode, with hot reload |
 | `npm run build:desktop` | `vue-tsc -b && vite build --mode desktop` → `dist-desktop/` (Tauri's `beforeBuildCommand`) |
 | `npm run desktop:build` | `tauri build --no-bundle` → `src-tauri/target/release/describe.exe` |
-| `npm run desktop:pack` | The release exe and the speech engine's DLLs as an unsigned x64 MSIX in `release/`, for the Store; `-- --sign` signs it for this PC |
-| `npm run desktop:stt-runtime` | Builds the speech engine (NeMo-Speech.cpp, `src-tauri/stt-runtime.json`) into `src-tauri/stt-runtime/` (gitignored); `-- -From <bin>` copies an existing build |
+| `npm run desktop:pack` | The release exe and both speech engines' DLLs as an unsigned x64 MSIX in `release/`, for the Store; `-- --sign` signs it for this PC |
+| `npm run desktop:stt-runtime` | Builds both speech engines (NeMo-Speech.cpp, `src-tauri/stt-runtime.json`) into `src-tauri/stt-runtime/` and its `vulkan/` (gitignored). The Vulkan one needs the LunarG Vulkan SDK that `stt-runtime.json` pins. `-- -Only cpu\|vulkan` builds one; `-- -Only <engine> -From <bin>` copies an existing build |
 | `npm run desktop:fetch-models` | Puts the speech models `src-tauri/speech-pack/pack.json` lists into `.speech-pack/` (gitignored) for debug builds; `-- --from <folder>` copies verified files |
 | `npm run desktop:test` | `cargo test` for `src-tauri/` |
 

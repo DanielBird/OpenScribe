@@ -2,11 +2,14 @@ import 'fake-indexeddb/auto';
 import { createStore, set } from 'idb-keyval';
 import { createPinia, setActivePinia } from 'pinia';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { findMatches, shiftMatches } from '../domain/replace';
+import type { TranscriptDoc, Word } from '../domain/transcript';
 import { turnSourceHashes } from '../domain/translation';
 import * as idb from '../storage/idb';
 import {
   makeDoc,
   TEST_TRANSLATION_TEXTS,
+  withEditedTurn,
   withSourceHashes,
   withTranslation,
 } from '../testing/transcriptDoc';
@@ -287,6 +290,213 @@ describe('transcript store', () => {
       expect(save.mock.calls[0]?.[0].turns[0]?.text).toBe('Hallo.');
       await vi.advanceTimersByTimeAsync(SAVE_DELAY_MS * 2);
       expect(save).toHaveBeenCalledOnce();
+    });
+  });
+
+  describe('replaceMatches', () => {
+    /** `makeDoc()` with Anna twice in t1, and in t3's words only (as after Edit text). */
+    function named(): TranscriptDoc {
+      const doc = makeDoc();
+      const word = (text: string, start: number): Word => ({
+        text,
+        start,
+        end: start + 0.4,
+        logprob: -0.2,
+      });
+      return {
+        ...doc,
+        turns: doc.turns.map((t) => {
+          if (t.id === 't1') {
+            return {
+              ...t,
+              text: 'Anna fragte Anna.',
+              words: [
+                word('Anna', t.start),
+                word('fragte', t.start + 0.5),
+                word('Anna.', t.start + 1),
+              ],
+            };
+          }
+          if (t.id === 't3') return { ...t, words: [...t.words, word('Anna', t.end)] };
+          return t;
+        }),
+      };
+    }
+    const matchesIn = (doc: TranscriptDoc, find: string, english = false) =>
+      findMatches(
+        doc.turns.map((t) => ({
+          turnId: t.id,
+          text: english ? (doc.translations.en?.texts[t.id] ?? '') : t.text,
+        })),
+        find,
+      );
+    const withFirstText = (doc: TranscriptDoc, text: string): TranscriptDoc => ({
+      ...doc,
+      turns: [{ ...doc.turns[0]!, text }, ...doc.turns.slice(1)],
+    });
+
+    it('changes the text and words of the matched turns only, nothing else', async () => {
+      const store = useTranscriptStore();
+      const before = withSourceHashes(withTranslation(named()));
+      await store.setDoc(before);
+
+      store.replaceMatches(
+        'original',
+        matchesIn(before, 'anna'),
+        '  Participant 1 ',
+        'anna',
+        'all',
+      );
+
+      const after = store.doc!;
+      expect(after.turns[0]?.text).toBe('Participant 1 fragte Participant 1.');
+      expect(after.turns[0]?.words.map((w) => w.text)).toEqual([
+        'Participant 1',
+        'fragte',
+        'Participant 1.',
+      ]);
+      expect(after.turns[0]?.words[0]).toMatchObject({
+        start: before.turns[0]?.start,
+        logprob: null,
+      });
+      // Replace all also takes the name out of words whose text no longer has it.
+      expect(after.turns[2]?.text).toBe(before.turns[2]?.text);
+      expect(after.turns[2]?.words.at(-1)?.text).toBe('Participant 1');
+      for (const i of [1, 3, 4]) expect(after.turns[i]).toBe(before.turns[i]);
+      const shape = (doc: TranscriptDoc) =>
+        doc.turns.map(({ id, speakerId, start, end }) => ({ id, speakerId, start, end }));
+      expect(shape(after)).toEqual(shape(before));
+      expect(after.speakers).toBe(before.speakers);
+      expect(after.translations).toBe(before.translations);
+    });
+
+    it("Replace changes the occurrence with the match's index in the words, in that turn only", async () => {
+      const store = useTranscriptStore();
+      const before = named();
+      await store.setDoc(before);
+
+      store.replaceMatches('original', [matchesIn(before, 'Anna')[1]!], 'P1', 'Anna', 'one');
+
+      const after = store.doc!;
+      expect(after.turns[0]?.text).toBe('Anna fragte P1.');
+      expect(after.turns[0]?.words.map((w) => w.text)).toEqual(['Anna', 'fragte', 'P1.']);
+      expect(after.turns[0]?.words[0]).toBe(before.turns[0]?.words[0]);
+      expect(after.turns[2]).toBe(before.turns[2]);
+    });
+
+    it('Replace changes every occurrence in the words when they have more than the text', async () => {
+      const store = useTranscriptStore();
+      const before = withFirstText(named(), 'Anna fragte.');
+      await store.setDoc(before);
+
+      store.replaceMatches('original', matchesIn(before, 'Anna'), 'P1', 'Anna', 'one');
+
+      expect(store.doc?.turns[0]?.text).toBe('P1 fragte.');
+      expect(store.doc?.turns[0]?.words.map((w) => w.text)).toEqual(['P1', 'fragte', 'P1.']);
+    });
+
+    it('changes only the English texts in the English, keeping what they were made from', async () => {
+      const store = useTranscriptStore();
+      const before = withSourceHashes(
+        withTranslation(makeDoc(), {
+          ...TEST_TRANSLATION_TEXTS,
+          t2: "Thank you, Anna, I'm pleased.",
+        }),
+      );
+      await store.setDoc(before);
+
+      store.replaceMatches('en', matchesIn(before, 'Anna', true), 'P1', 'Anna', 'all');
+
+      const after = store.doc!;
+      const en = after.translations.en!;
+      expect(en.texts.t2).toBe("Thank you, P1, I'm pleased.");
+      expect(en.texts.t1).toBe(TEST_TRANSLATION_TEXTS.t1);
+      expect(en.sourceHashes).toBe(before.translations.en?.sourceHashes);
+      expect(after.turns).toBe(before.turns);
+      expect(store.staleTurnIds).toEqual([]);
+    });
+
+    it("leaves a stale turn's English stale after a replacement in the English", async () => {
+      const store = useTranscriptStore();
+      const translated = withSourceHashes(
+        withTranslation(makeDoc(), { ...TEST_TRANSLATION_TEXTS, t2: 'Thanks, Anna.' }),
+      );
+      const before = withEditedTurn(translated, 't2', 'Danke, Anna.');
+      await store.setDoc(before);
+      expect(store.staleTurnIds).toEqual(['t2']);
+
+      store.replaceMatches('en', matchesIn(before, 'Anna', true), 'P1', 'Anna', 'all');
+
+      expect(store.doc?.translations.en?.texts.t2).toBe('Thanks, P1.');
+      expect(store.staleTurnIds).toEqual(['t2']);
+    });
+
+    it("marks the changed turns' English out of date (D39), also for a translation from before D39", async () => {
+      const store = useTranscriptStore();
+      const before = withTranslation(named());
+      await store.setDoc(before);
+      expect(store.staleTurnIds).toEqual([]);
+
+      store.replaceMatches('original', matchesIn(before, 'Anna'), 'P1', 'Anna', 'one');
+
+      expect(store.doc?.translations.en?.sourceHashes).toEqual(turnSourceHashes(before.turns));
+      expect(store.staleTurnIds).toEqual(['t1']);
+    });
+
+    it('does nothing for an empty replacement, no matches, a stale offset or no change', async () => {
+      const store = useTranscriptStore();
+      store.replaceMatches('original', [{ turnId: 't1', start: 0, end: 4 }], 'P1', 'Anna', 'one');
+      expect(store.doc).toBeNull();
+
+      useFakeTimeouts();
+      const before = withTranslation(named());
+      await store.setDoc(before);
+      save.mockClear();
+      const matches = matchesIn(before, 'Anna');
+
+      store.replaceMatches('original', matches, ' \n ', 'Anna', 'all');
+      store.replaceMatches('original', [], 'P1', 'Anna', 'all');
+      store.replaceMatches('original', [{ turnId: 't99', start: 0, end: 4 }], 'P1', 'Anna', 'one');
+      store.replaceMatches('original', [{ turnId: 't1', start: 1, end: 5 }], 'P1', 'Anna', 'one');
+      store.replaceMatches('original', matches, 'Anna', 'Anna', 'all');
+      store.replaceMatches('en', [{ turnId: 't1', start: 0, end: 5 }], 'P1', 'Guten', 'all');
+      expect(store.doc).toBe(before);
+      await vi.advanceTimersByTimeAsync(SAVE_DELAY_MS * 2);
+      expect(save).not.toHaveBeenCalled();
+    });
+
+    it('fixes the case of a name', async () => {
+      const store = useTranscriptStore();
+      const before = withFirstText(named(), 'anna fragte Anna.');
+      await store.setDoc(before);
+      store.replaceMatches(
+        'original',
+        matchesIn(before, 'anna').slice(0, 1),
+        'Anna',
+        'anna',
+        'one',
+      );
+      expect(store.doc?.turns[0]?.text).toBe('Anna fragte Anna.');
+    });
+
+    it('saves once, 500 ms after the last change', async () => {
+      useFakeTimeouts();
+      const store = useTranscriptStore();
+      await store.setDoc(named());
+      save.mockClear();
+
+      const [first, second] = matchesIn(store.doc!, 'Anna');
+      store.replaceMatches('original', [first!], 'P1', 'Anna', 'one');
+      await vi.advanceTimersByTimeAsync(SAVE_DELAY_MS - 100);
+      store.replaceMatches('original', shiftMatches([second!], first!, 'P1'), 'P1', 'Anna', 'one');
+      await vi.advanceTimersByTimeAsync(SAVE_DELAY_MS - 1);
+      expect(save).not.toHaveBeenCalled();
+
+      await vi.advanceTimersByTimeAsync(1);
+      expect(save).toHaveBeenCalledOnce();
+      const saved = save.mock.calls[0]?.[0];
+      expect(saved?.turns[0]?.text).toBe('P1 fragte P1.');
+      expect(saved?.turns[0]?.words.map((w) => w.text)).toEqual(['P1', 'fragte', 'P1.']);
     });
   });
 

@@ -5,17 +5,24 @@ import { toSessionText } from '../../domain/corpus/sessionText';
 import { ProviderError } from '../../providers/errors';
 import { useJobStore } from '../../stores/job';
 import { useNavStore } from '../../stores/nav';
+import { usePipelineStore, type PipelineJob } from '../../stores/pipeline';
 import { usePlaybackStore } from '../../stores/playback';
 import { useProjectStore } from '../../stores/project';
 import { useTranscriptStore } from '../../stores/transcript';
 import { useTranslationStore } from '../../stores/translation';
 import { makeProjectFile, makeSummaryFile } from '../../testing/projectSeed';
 import { makeProjectSession } from '../../testing/projectSessions';
-import { makeDoc, TEST_TRANSLATION_TEXTS, withTranslation } from '../../testing/transcriptDoc';
+import {
+  makeDoc,
+  TEST_TRANSLATION_TEXTS,
+  withEditedTurn,
+  withTranslation,
+} from '../../testing/transcriptDoc';
 import { resetProjectUi, useProjectUi } from '../composables/useProjectUi';
 import AudioBar from '../components/AudioBar.vue';
 import ExportButton from '../components/ExportButton.vue';
 import JobStatus from '../components/JobStatus.vue';
+import ReplaceDialog from '../components/ReplaceDialog.vue';
 import SpeakerPanel from '../components/SpeakerPanel.vue';
 import TranslateButton from '../components/TranslateButton.vue';
 import TurnList from '../components/TurnList.vue';
@@ -237,6 +244,107 @@ describe('OutputView', () => {
       wrapper = mount(OutputView);
       expect(editButton()?.text()).toBe('Edit text');
       expect(wrapper.findAll('li.turn textarea')).toHaveLength(0);
+    });
+  });
+
+  describe('Find and replace', () => {
+    const replaceButton = () =>
+      wrapper!.findAll('.actions button').find((b) => b.text() === 'Find and replace…');
+    const editButton = () =>
+      wrapper!.findAll('.actions button').find((b) => ['Edit text', 'Done'].includes(b.text()));
+    const dialog = () => wrapper!.getComponent(ReplaceDialog);
+
+    it('comes right after Edit text, and opens the dialog for the version on screen', async () => {
+      const transcript = useTranscriptStore();
+      await transcript.setDoc(withTranslation(makeDoc()));
+      transcript.view = 'en';
+      wrapper = mount(OutputView, { attachTo: document.body });
+      const names = wrapper.findAll('.actions > button').map((b) => b.text());
+      expect(names.indexOf('Find and replace…')).toBe(names.indexOf('Edit text') + 1);
+      expect(dialog().props('open')).toBe(false);
+
+      await replaceButton()!.trigger('click');
+      expect(dialog().props('open')).toBe(true);
+      expect(dialog().props('version')).toBe('en');
+      expect(dialog().props('initialFind')).toBe('');
+
+      dialog().vm.$emit('close');
+      await flushPromises();
+      expect(dialog().props('open')).toBe(false);
+    });
+
+    it('is hidden while editing', async () => {
+      await useTranscriptStore().setDoc(makeDoc());
+      wrapper = mount(OutputView);
+      expect(replaceButton()).toBeDefined();
+      await editButton()!.trigger('click');
+      expect(replaceButton()).toBeUndefined();
+      await editButton()!.trigger('click');
+      expect(replaceButton()).toBeDefined();
+    });
+
+    it('is hidden while a translation runs', async () => {
+      await useTranscriptStore().setDoc(makeDoc());
+      const translation = useTranslationStore();
+      translation.status = 'running';
+      wrapper = mount(OutputView);
+      expect(replaceButton()).toBeUndefined();
+      translation.status = 'idle';
+      await flushPromises();
+      expect(replaceButton()).toBeDefined();
+    });
+
+    it('is hidden while the pipeline works on this transcript', async () => {
+      await useTranscriptStore().setDoc(makeDoc());
+      vi.spyOn(usePipelineStore(), 'jobFor').mockReturnValue({} as PipelineJob);
+      wrapper = mount(OutputView);
+      expect(replaceButton()).toBeUndefined();
+      expect(editButton()).toBeUndefined();
+    });
+
+    it('is not offered without turns', async () => {
+      await useTranscriptStore().setDoc(makeDoc({ speakers: [], turns: [] }));
+      wrapper = mount(OutputView);
+      expect(replaceButton()).toBeUndefined();
+      expect(wrapper.findComponent(ReplaceDialog).exists()).toBe(false);
+    });
+
+    /** Selects from `startNode` at `start` to `endNode` at `end`. */
+    function select(startNode: Node, start: number, endNode: Node, end: number): void {
+      const range = document.createRange();
+      range.setStart(startNode, start);
+      range.setEnd(endNode, end);
+      const selection = window.getSelection()!;
+      selection.removeAllRanges();
+      selection.addRange(range);
+    }
+    const turnText = (index: number) =>
+      wrapper!.findAll('li.turn .text')[index]!.element.firstChild!;
+
+    it('fills Find with the text selected in a turn', async () => {
+      await useTranscriptStore().setDoc(makeDoc());
+      wrapper = mount(OutputView, { attachTo: document.body });
+      // t1: "Guten Tag und willkommen zu unserem Gespräch."
+      select(turnText(0), 6, turnText(0), 9);
+      await replaceButton()!.trigger('click');
+      expect(dialog().props('initialFind')).toBe('Tag');
+    });
+
+    it('ignores a selection across two turns, or one too long to be a name', async () => {
+      await useTranscriptStore().setDoc(
+        withEditedTurn(makeDoc(), 't2', `Danke ${'sehr '.repeat(30)}.`),
+      );
+      wrapper = mount(OutputView, { attachTo: document.body });
+      select(turnText(0), 6, turnText(1), 3);
+      await replaceButton()!.trigger('click');
+      expect(dialog().props('initialFind')).toBe('');
+
+      dialog().vm.$emit('close');
+      await flushPromises();
+      select(turnText(1), 0, turnText(1), 120);
+      await replaceButton()!.trigger('click');
+      expect(dialog().props('initialFind')).toBe('');
+      window.getSelection()!.removeAllRanges();
     });
   });
 

@@ -95,6 +95,9 @@ pub struct Stt {
   run_ended: Condvar,
   /// The download or removal going now, if any.
   download: Mutex<Slot<Downloading>>,
+  /// Listing the graphics cards hung, in the probe or a run on a card (audit GPU-2). Until the app restarts, runs are
+  /// on the processor and Settings lists no cards, so only the first run pays `worker::LISTING_TIMEOUT`.
+  pub listing_hung: std::sync::atomic::AtomicBool,
 }
 
 /// A run's place, held until this is dropped, however the run ends (a panic included).

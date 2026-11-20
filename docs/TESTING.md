@@ -258,12 +258,15 @@ Where results go:
   [reference/file-system-access.md](reference/file-system-access.md). A policy that blocks folder access is a
   no-go for projects on those laptops (PROJECTS.md §9 Q4).
 
-**The desktop app:** `npm run desktop:test` runs the Rust tests (`cargo test`). One test is opt-in, since it needs the
-real engine and models (`npm run desktop:stt-runtime`, `npm run desktop:fetch-models`): `cd src-tauri; cargo test --lib
--- --ignored model_paths_with_non_ascii` loads both models from a folder named with ø and ü. Run it after any change to
-the engine. For each desktop release, also run E1–E9
+**The desktop app:** `npm run desktop:test` runs the Rust tests (`cargo test`). Some tests are opt-in, since they need
+the real engines and models (`npm run desktop:stt-runtime`, `npm run desktop:fetch-models`). One process can't load
+both engines (their DLLs share names), so run them in two commands: `cd src-tauri; cargo test --lib -- --ignored
+on_the_processor`, then `cargo test --lib -- --ignored on_a_card` (on the first card; `DESCRIBE_STT_TEST_GPU=1` for the
+second). They load both models from a folder named with ø and ü, and list the cards (none on the processor engine). Run
+them after any change to an engine. For each desktop release, also run E1–E9
 (transcribing on this computer), S1–S10 (the speech models' download, [reference/local-stt.md](reference/local-stt.md#the-download-as-built-phase-35)),
-L1–L10 (the choice on Setup, [reference/desktop.md](reference/desktop.md#transcribe-on-this-computer-the-choice-phase-36))
+L1–L10 (the choice on Setup, [reference/desktop.md](reference/desktop.md#transcribe-on-this-computer-the-choice-phase-36)),
+G1–G10 (the graphics card, [reference/desktop.md](reference/desktop.md#on-the-graphics-card-phase-37))
 and W1–W15 in [reference/desktop.md](reference/desktop.md#checklist), on the maintainer's PC and on the work laptop.
 
 ### Results for 1.0.0

@@ -1,5 +1,6 @@
 // Test only: a scriptable LocalSttBridge (the desktop app's speech commands) for store and component specs.
 import type {
+  GpuDevice,
   LocalSttBridge,
   LocalSttStatus,
   SpeechPackInfo,
@@ -18,6 +19,8 @@ export interface FakeBridge extends LocalSttBridge {
   /** What `status()` answers next. */
   next: LocalSttStatus;
   calls: string[];
+  /** What `devices()` answers, or the error it fails with. */
+  nextDevices: GpuDevice[] | Error;
   /** Sends progress to the running download. */
   progress(receivedBytes: number, totalBytes?: number): void;
   /** Ends the running download: with an error kind, or successfully. */
@@ -42,6 +45,7 @@ export function fakeLocalBridge(
   const bridge: FakeBridge = {
     next: status,
     calls: [],
+    nextDevices: [],
     removeFails: null,
     get downloading() {
       return settle !== null;
@@ -53,6 +57,11 @@ export function fakeLocalBridge(
       return new Promise<LocalSttStatus>((resolve, reject) => {
         queue.push((error) => (error ? reject(error) : resolve(bridge.next)));
       });
+    },
+    devices() {
+      bridge.calls.push('devices');
+      const next = bridge.nextDevices;
+      return next instanceof Error ? Promise.reject(next) : Promise.resolve(next);
     },
     transcribe() {
       return Promise.reject(new Error('not used here'));
