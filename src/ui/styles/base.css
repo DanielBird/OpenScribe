@@ -92,6 +92,19 @@ textarea {
   color: var(--color-accent);
 }
 
+/* Icon only, the height of a text button: its name is the aria-label, and an .icon-tip says it on pointing. */
+.button-icon {
+  position: relative;
+  padding: var(--space-2);
+}
+
+.button-icon > svg,
+.button-icon > .spinner {
+  flex: none;
+  width: 1.25em;
+  height: 1.25em;
+}
+
 .button:disabled {
   border-color: transparent;
   color: var(--color-disabled);

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { TranscriptionProgress } from '../types';
+import type { GpuChoice, TranscriptionProgress } from '../types';
 
 // The bridge talks to Rust only through these two modules: both are faked here.
 const invoke = vi.fn<(command: string, args?: Record<string, unknown>) => Promise<unknown>>();
@@ -29,14 +29,20 @@ const RESULT = {
     speakersSec: 1,
     totalSec: 1.2,
     threads: 8,
+    device: null,
     peakMemoryBytes: null,
+    fellBack: null,
   },
 };
 const FILE = new File(['x'], 'a.m4a');
-const run = (onProgress: (p: TranscriptionProgress) => void = () => {}, signal?: AbortSignal) =>
+const run = (
+  onProgress: (p: TranscriptionProgress) => void = () => {},
+  signal?: AbortSignal,
+  device: GpuChoice | null = null,
+) =>
   createTauriSttBridge().transcribe(
     FILE,
-    { languageHint: 'auto', numSpeakers: null },
+    { languageHint: 'auto', numSpeakers: null, device },
     { signal: signal ?? new AbortController().signal, onProgress },
   );
 
@@ -95,6 +101,56 @@ describe('the bridge', () => {
     ]);
   });
 
+  it('sends the card only for a run on one (Phase 37)', async () => {
+    invoke.mockResolvedValue(RESULT);
+    const card = { name: 'AMD Radeon 740M Graphics', nth: 1 };
+    await run(undefined, undefined, card);
+    const args = invoke.mock.calls.find(([command]) => command === 'stt_start')?.[1];
+    expect(args).toMatchObject({ device: card });
+  });
+
+  it('reads a run on a card: no threads, the card as the job named it (audit GPU-6)', async () => {
+    const onCard = {
+      ...RESULT,
+      timings: { ...RESULT.timings, threads: null, device: { name: 'NVIDIA RTX A2000', nth: 1 } },
+    };
+    invoke.mockResolvedValueOnce(onCard);
+    await expect(run()).resolves.toEqual(onCard);
+  });
+
+  it('reads a run that fell back to the processor, and why (audit GPU-3)', async () => {
+    const fellBack = {
+      ...RESULT,
+      timings: {
+        ...RESULT.timings,
+        fellBack: {
+          device: { name: 'AMD Radeon 740M Graphics', nth: 0 },
+          reason: 'the Vulkan engine found no graphics card',
+        },
+      },
+    };
+    invoke.mockResolvedValueOnce(fellBack);
+    await expect(run()).resolves.toEqual(fellBack);
+  });
+
+  it('lists the graphics cards, and refuses a malformed list', async () => {
+    const cards = [
+      { name: 'NVIDIA GeForce RTX 2070 SUPER', kind: 'gpu', memoryBytes: 8_589_934_592 },
+      { name: 'Intel(R) UHD Graphics 770', kind: 'integrated-gpu', memoryBytes: 0 },
+    ];
+    invoke.mockResolvedValueOnce(cards);
+    await expect(createTauriSttBridge().devices()).resolves.toEqual(cards);
+    expect(invoke).toHaveBeenLastCalledWith('stt_devices', undefined);
+    for (const reply of [
+      null,
+      [{ name: '', kind: 'gpu', memoryBytes: 1 }],
+      [{ ...cards[0], kind: 'cpu' }],
+    ]) {
+      invoke.mockResolvedValueOnce(reply);
+      await expect(createTauriSttBridge().devices()).rejects.toMatchObject({ kind: 'engine' });
+    }
+  });
+
   it('refuses a File the app didn’t choose', async () => {
     token.mockReturnValue(null);
     await expect(run()).rejects.toMatchObject({ kind: 'recording' });
@@ -107,6 +163,12 @@ describe('the bridge', () => {
       { ...RESULT, words: [{ text: 'x', start: Number.NaN, end: 1, confidence: null }] },
       { ...RESULT, speakerSegments: [{ speaker: 1.5, start: 0, end: 1 }] },
       { ...RESULT, timings: { ...RESULT.timings, threads: 0 } },
+      { ...RESULT, timings: { ...RESULT.timings, device: undefined } },
+      { ...RESULT, timings: { ...RESULT.timings, device: 'AMD Radeon 740M Graphics' } },
+      { ...RESULT, timings: { ...RESULT.timings, device: { name: 'x', nth: -1 } } },
+      { ...RESULT, timings: { ...RESULT.timings, fellBack: undefined } },
+      { ...RESULT, timings: { ...RESULT.timings, fellBack: { device: { name: 'x', nth: 0 } } } },
+      { ...RESULT, timings: { ...RESULT.timings, fellBack: { device: 'x', reason: 'y' } } },
       { ...RESULT, durationSec: -1 },
     ]) {
       invoke.mockResolvedValueOnce(reply);
@@ -145,6 +207,7 @@ describe('the bridge', () => {
       kind: 'pack-damaged',
       detail: 'hash',
     });
+    expect(toLocalError({ kind: 'gpu', detail: 'ErrorDeviceLost' }).kind).toBe('gpu');
     expect(toLocalError({ kind: 'surprise', detail: 'x' }).kind).toBe('engine');
     expect(toLocalError('IPC said no').detail).toBe('IPC said no');
     expect(toLocalError(new Error('boom')).kind).toBe('engine');

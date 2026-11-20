@@ -59,6 +59,7 @@ pub fn run() {
     .invoke_handler(tauri::generate_handler![
       stt::commands::stt_choose_recording,
       stt::commands::stt_status,
+      stt::commands::stt_devices,
       stt::commands::stt_start,
       stt::commands::stt_cancel,
       stt::commands::set_close_guard,

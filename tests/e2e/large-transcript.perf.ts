@@ -3,13 +3,25 @@ import { fileURLToPath } from 'node:url';
 import type { Page, TestInfo } from '@playwright/test';
 import { expect, goToGlossary, mockElevenLabs, openApp, reloadApp, run, test } from './helpers';
 
-// Performance on a 3-hour, 4-speaker transcript (Phase 8; Edit text in Phase 9). Run with
-// `npm run test:perf`, which generates fixtures/large/large-3h.json first. Targets: render and Edit
-// text on < 1 s, rename and edit keystrokes < 100 ms, export < 5 s, asserted at normal speed. The same
-// run at 4× CPU throttling (a slow laptop) is reported only.
+// Performance on a 3-hour, 4-speaker transcript (Phase 8; Edit text in Phase 9; Find and replace in Phase 38). Run
+// with `npm run test:perf`, which generates fixtures/large/large-3h.json first. Targets: render, Edit text on and
+// Replace all < 1 s; rename and edit keystrokes, and Find's list, < 100 ms; export < 5 s; asserted at normal speed.
+// The same run at 4× CPU throttling (a slow laptop) is reported only.
 
 const LARGE_FIXTURE = fileURLToPath(new URL('../../fixtures/large/large-3h.json', import.meta.url));
-const TARGETS = { renderMs: 1000, renameMs: 100, editOnMs: 1000, editMs: 100, exportMs: 5000 };
+const TARGETS = {
+  renderMs: 1000,
+  renameMs: 100,
+  editOnMs: 1000,
+  editMs: 100,
+  findMs: 100,
+  replaceAllMs: 1000,
+  exportMs: 5000,
+};
+/** How long Find waits for the typing to stop before it searches (ReplaceDialog's SEARCH_DELAY_MS). */
+const FIND_DELAY_MS = 150;
+/** The name the fixture puts at the start of most utterances (scripts/make-large-fixture.mjs). */
+const NAME = 'Anna';
 
 interface Metrics {
   turns: number;
@@ -24,6 +36,13 @@ interface Metrics {
   /** From clicking Edit text to every turn painted as a text box. */
   editOnMs: number;
   edit: { meanMs: number; maxMs: number; allMs: number[] };
+  replace: {
+    matches: number;
+    /** From typing the name into Find to its list painted, less Find's wait for the typing to stop. */
+    findMs: number;
+    /** From confirming Replace all to the transcript painted without the name. */
+    replaceAllMs: number;
+  };
   exportMs: number;
   autosave: { putMs: number; getMs: number };
 }
@@ -172,14 +191,70 @@ async function measure(page: Page): Promise<Metrics> {
     page.locator('li.turn p.text', { hasText: 'checked against the recording by Dr. Schmidt.' }),
   ).toHaveCount(1);
 
-  // 6. Export the .docx.
+  // 6. Find and replace the name that is in most turns.
+  await page.getByRole('button', { name: 'Find and replace…' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Find and replace' });
+  await expect(dialog).toBeVisible();
+
+  //    a. Type it into Find: the input → the list painted, less Find's wait. A late timer counts against it.
+  const found = await page.evaluate(
+    async ({ name, delay }) => {
+      const dialog = document.querySelector('dialog[open]')!;
+      const input = dialog.querySelector<HTMLInputElement>('input')!; // Find comes first
+      const afterPaint = () =>
+        new Promise((resolve) => requestAnimationFrame(() => setTimeout(resolve)));
+      const listed = new Promise<void>((resolve) => {
+        const observer = new MutationObserver(() => {
+          if (!dialog.querySelector('[role="listbox"]')) return;
+          observer.disconnect();
+          resolve();
+        });
+        observer.observe(dialog, { childList: true, subtree: true });
+      });
+      input.value = name;
+      const start = performance.now();
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      await listed;
+      await afterPaint();
+      return {
+        ms: performance.now() - start - delay,
+        matches: dialog.querySelectorAll('[role="option"]').length,
+      };
+    },
+    { name: NAME, delay: FIND_DELAY_MS },
+  );
+
+  //    b. Replace all: from the confirmation's Replace all to the transcript painted without the name. The time is
+  //       taken before each check, so the check isn't counted.
+  await dialog.getByRole('textbox', { name: 'Replace with' }).fill('Participant 1');
+  await dialog.getByRole('button', { name: 'Replace all' }).click();
+  await expect(dialog.getByText(`Replace all ${found.matches}?`)).toBeVisible();
+  const replaceAllMs = await page.evaluate(async (name) => {
+    const afterPaint = () =>
+      new Promise((resolve) => requestAnimationFrame(() => setTimeout(resolve)));
+    const list = document.querySelector('ol.turn-list')!;
+    const confirm = document.querySelector<HTMLButtonElement>('dialog[open] .button-danger')!;
+    const start = performance.now();
+    confirm.click();
+    let end: number;
+    do {
+      await afterPaint();
+      end = performance.now();
+    } while (list.textContent!.includes(name));
+    return end - start;
+  }, NAME);
+  await expect(dialog.locator('.count')).toHaveText(`${found.matches} replaced`);
+  await page.keyboard.press('Escape');
+  await expect(dialog).toBeHidden();
+
+  // 7. Export the .docx.
   const exportStart = Date.now();
   const downloading = page.waitForEvent('download', { timeout: 120_000 });
   await page.getByRole('button', { name: 'Download .docx' }).click();
   await downloading;
   const exportMs = Date.now() - exportStart;
 
-  // 7. Autosave: write the saved doc again (what each save does) and read it back.
+  // 8. Autosave: write the saved doc again (what each save does) and read it back.
   const autosave = await page.evaluate(
     () =>
       new Promise<{ putMs: number; getMs: number }>((resolve, reject) => {
@@ -206,7 +281,7 @@ async function measure(page: Page): Promise<Metrics> {
       }),
   );
 
-  // 8. Reload: the saved transcript is loaded and checked, then opened from the Setup banner.
+  // 9. Reload: the saved transcript is loaded and checked, then opened from the Setup banner.
   await reloadApp(page);
   const startupMs = await probe(page, 'bannerAt');
   const renderOnOpenMs = await page.evaluate(async () => {
@@ -242,6 +317,7 @@ async function measure(page: Page): Promise<Metrics> {
       maxMs: round(Math.max(...editTimes)),
       allMs: editTimes.map(round),
     },
+    replace: { matches: found.matches, findMs: round(found.ms), replaceAllMs: round(replaceAllMs) },
     exportMs,
     autosave: { putMs: round(autosave.putMs), getMs: round(autosave.getMs) },
   };
@@ -257,6 +333,8 @@ function report(testInfo: TestInfo, label: string, m: Metrics) {
     `  rename (per keystroke)      mean ${m.rename.meanMs} ms, max ${m.rename.maxMs} ms   (target < ${TARGETS.renameMs}; ${m.rename.allMs.join(', ')})`,
     `  edit text on                ${m.editOnMs} ms   (target < ${TARGETS.editOnMs})`,
     `  edit (per keystroke)        mean ${m.edit.meanMs} ms, max ${m.edit.maxMs} ms   (target < ${TARGETS.editMs}; ${m.edit.allMs.join(', ')})`,
+    `  find (list painted)         ${m.replace.findMs} ms after the ${FIND_DELAY_MS} ms wait, ${m.replace.matches} matches   (target < ${TARGETS.findMs})`,
+    `  replace all                 ${m.replace.replaceAllMs} ms   (target < ${TARGETS.replaceAllMs})`,
     `  export .docx                ${m.exportMs} ms   (target < ${TARGETS.exportMs})`,
     `  autosave                    put ${m.autosave.putMs} ms, get ${m.autosave.getMs} ms`,
   ];
@@ -285,6 +363,9 @@ test('a 3-hour transcript meets the targets', async ({ page }, testInfo) => {
   expect(m.rename.maxMs).toBeLessThan(TARGETS.renameMs);
   expect(m.editOnMs).toBeLessThan(TARGETS.editOnMs);
   expect(m.edit.maxMs).toBeLessThan(TARGETS.editMs);
+  expect(m.replace.matches).toBeGreaterThan(m.turns / 2);
+  expect(m.replace.findMs).toBeLessThan(TARGETS.findMs);
+  expect(m.replace.replaceAllMs).toBeLessThan(TARGETS.replaceAllMs);
   expect(m.exportMs).toBeLessThan(TARGETS.exportMs);
 });
 

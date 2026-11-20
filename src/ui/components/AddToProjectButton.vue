@@ -6,6 +6,7 @@ import { useProjectStore } from '../../stores/project';
 import { useTranscriptStore } from '../../stores/transcript';
 import { useTranslationStore } from '../../stores/translation';
 import { useProjectUi } from '../composables/useProjectUi';
+import IconAdd from '../icons/IconAdd.vue';
 import AddToProjectDialog from './AddToProjectDialog.vue';
 import PipelineStatus from './PipelineStatus.vue';
 
@@ -91,10 +92,12 @@ function onAdd(): void {
       v-if="showButton"
       ref="mainButton"
       type="button"
-      class="button button-primary"
+      class="button button-primary button-icon"
+      aria-label="Add to project…"
       @click="choosing = true"
     >
-      Add to project…
+      <IconAdd />
+      <span class="icon-tip" aria-hidden="true">Add to project…</span>
     </button>
     <button
       v-else-if="showSummary"

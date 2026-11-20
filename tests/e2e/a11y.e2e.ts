@@ -162,6 +162,19 @@ test('Output with a playing transcript and a translation, and its dialogs', asyn
   await expectAccessible(page, testInfo, 'Export dialog');
   await page.keyboard.press('Escape');
 
+  // Find and replace (Phase 38): the list of matches, then Replace all's confirmation in place of the buttons.
+  await page.getByRole('button', { name: 'Find and replace…' }).click();
+  const replaceDialog = page.getByRole('dialog', { name: 'Find and replace' });
+  await replaceDialog.getByRole('textbox', { name: 'Find' }).fill('Tag');
+  await expect(replaceDialog.getByRole('option')).toHaveCount(1);
+  await expectAccessible(page, testInfo, 'Find and replace dialog');
+  await replaceDialog.getByRole('textbox', { name: 'Replace with' }).fill('Abend');
+  await replaceDialog.getByRole('button', { name: 'Replace all' }).click();
+  await expect(replaceDialog.getByText('Replace all 1?')).toBeVisible();
+  await expectAccessible(page, testInfo, 'Find and replace, Replace all confirmation');
+  await page.keyboard.press('Escape');
+  await expect(replaceDialog).toBeHidden();
+
   await openSettings(page);
   await expectAccessible(page, testInfo, 'Settings, with a key');
   await page.getByRole('button', { name: 'Clear saved data…' }).click();

@@ -3,6 +3,7 @@ import { computed, ref } from 'vue';
 import { languageName, type TranscriptVersion } from '../../domain/transcript';
 import { useExportStore } from '../../stores/export';
 import { useTranscriptStore } from '../../stores/transcript';
+import IconDownload from '../icons/IconDownload.vue';
 import ExportDialog from './ExportDialog.vue';
 
 // "Download .docx", the Output tab's main action. With an English translation, a dialog asks which
@@ -32,13 +33,15 @@ function onChoose(version: TranscriptVersion): void {
   <div class="export">
     <button
       type="button"
-      class="button"
+      class="button button-icon"
+      aria-label="Download .docx"
       :aria-disabled="exporter.busy || undefined"
       :class="{ busy: exporter.busy }"
       @click="onClick"
     >
       <span v-if="exporter.busy" class="spinner" aria-hidden="true" />
-      Download .docx
+      <IconDownload v-else />
+      <span class="icon-tip" aria-hidden="true">Download .docx</span>
     </button>
     <p v-if="exporter.error" class="error" role="alert">{{ exporter.error }}</p>
     <ExportDialog
@@ -66,8 +69,6 @@ function onChoose(version: TranscriptVersion): void {
 
 /* Drawn in the button's text colour. */
 .spinner {
-  width: 1em;
-  height: 1em;
   border-width: 2px;
   border-color: color-mix(in srgb, currentColor 35%, transparent);
   border-top-color: currentColor;

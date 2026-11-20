@@ -70,3 +70,19 @@ Turn text became editable in Phase 9 (DECISIONS D19). Still open:
   `bidirectional` on paragraphs and `rightToLeft` on runs).
 - **Translating into languages other than English.** English is the only target, and projects rely on it (summaries,
   quotes and search read the English text, PROJECTS.md A4), so this is a redesign rather than an option.
+
+## F5 — Finding personal data
+
+**Idea:** a model suggests the names and other personal data in a transcript, for Phase 38's **Find and replace**
+dialog (D59) to replace. NVIDIA's GLiNER PII model is the first candidate; another may do. Today the user finds each
+name by reading.
+
+**Hooks:** `domain/replace.ts` (`findMatches`, `replaceInText`, `replaceInWords`) and the transcript store's
+`replaceMatches` replace whatever is found, in the text and the word list.
+
+**Also left out by Phase 38**, for when this is picked up:
+- Several names at once, or a saved list of names, per project or on this computer.
+- Speaker labels, the recording's file name, and the glossary terms saved in `request.keyterms`.
+- Summaries, quotes and chats already in a project, and the project's other sessions.
+- Undo, a match-case or regex option, and highlighting the match in the transcript behind the dialog.
+- The audio, which still has the names.

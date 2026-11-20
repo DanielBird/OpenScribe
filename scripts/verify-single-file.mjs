@@ -27,6 +27,8 @@ const TAURI_MARKERS = [
   'postMessageWithAdditionalObjects',
   'stt_start',
   'stt_download',
+  'stt_devices',
+  'Try on the processor',
   'parakeet-tdt-0.6b-v3.q8_0.gguf',
   'Download speech models',
 ];

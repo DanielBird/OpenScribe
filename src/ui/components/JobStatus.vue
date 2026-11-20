@@ -66,6 +66,15 @@ const fixInSettings = computed(
   () => job.status === 'error' && job.error?.opts.fixIn === 'settings',
 );
 
+/**
+ * A run on a graphics card that failed can run again on the processor (Phase 37, decision 6). Desktop only: the label
+ * is a literal `''` in the web build, so its text isn't there.
+ */
+const processorLabel = __DESKTOP__ ? 'Try on the processor' : '';
+const retryOnProcessor = computed(
+  () => desktop && job.status === 'error' && job.error?.opts.retryOn === 'processor',
+);
+
 const canRetry = computed(
   () => job.status === 'error' && !NEEDS_SETUP_CHANGE.has(job.error?.kind ?? ''),
 );
@@ -122,7 +131,9 @@ const canRetry = computed(
     </p>
 
     <div
-      v-if="job.isActive || canRetry || fixInSettings || job.status === 'cancelled'"
+      v-if="
+        job.isActive || canRetry || retryOnProcessor || fixInSettings || job.status === 'cancelled'
+      "
       class="actions"
     >
       <button
@@ -136,6 +147,9 @@ const canRetry = computed(
       <button v-if="job.isActive" type="button" class="button" @click="job.cancel()">Cancel</button>
       <button v-if="canRetry" type="button" class="button button-primary" @click="job.retry()">
         Try again
+      </button>
+      <button v-if="retryOnProcessor" type="button" class="button" @click="job.retryOnProcessor()">
+        {{ processorLabel }}
       </button>
       <button
         v-if="job.status === 'cancelled'"

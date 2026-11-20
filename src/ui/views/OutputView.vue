@@ -11,7 +11,10 @@ import AddToProjectButton from '../components/AddToProjectButton.vue';
 import AudioBar from '../components/AudioBar.vue';
 import ExportButton from '../components/ExportButton.vue';
 import FolderNotice from '../components/FolderNotice.vue';
+import IconEdit from '../icons/IconEdit.vue';
+import IconSearch from '../icons/IconSearch.vue';
 import JobStatus from '../components/JobStatus.vue';
+import ReplaceDialog from '../components/ReplaceDialog.vue';
 import SpeakerPanel from '../components/SpeakerPanel.vue';
 import StepFooter from '../components/StepFooter.vue';
 import TranscriptHeader from '../components/TranscriptHeader.vue';
@@ -61,12 +64,38 @@ const editing = ref(false);
 watch(pipelineWorking, (working) => {
   if (working) editing.value = false;
 });
+const editLabel = computed(() => (editing.value ? 'Done' : 'Edit text'));
 const editAnnouncement = ref('');
 
 function toggleEditing(): void {
   editing.value = !editing.value;
   if (editing.value) transcript.view = 'original';
   editAnnouncement.value = editing.value ? 'Editing' : 'Editing finished';
+}
+
+// Find and replace (DECISIONS.md D59) works on the version on screen. Offered when Edit text is, and not while editing.
+const replacing = ref(false);
+const initialFind = ref('');
+
+/** The longest selection that fills Find: a name, not a passage. */
+const MAX_SELECTED_FIND = 100;
+
+/** The text selected inside one turn's text, on one line and short enough to be a name; otherwise ''. */
+function selectedFind(): string {
+  const selection = window.getSelection();
+  if (!selection || selection.isCollapsed || selection.rangeCount === 0) return '';
+  const range = selection.getRangeAt(0);
+  const textOf = (node: Node) =>
+    (node instanceof Element ? node : node.parentElement)?.closest('[data-turn-id] .text');
+  const start = textOf(range.startContainer);
+  if (!start || start !== textOf(range.endContainer)) return '';
+  const text = selection.toString().trim();
+  return text.length <= MAX_SELECTED_FIND && !/[\r\n]/.test(text) ? text : '';
+}
+
+function openReplace(): void {
+  initialFind.value = selectedFind();
+  replacing.value = true;
 }
 
 // The focused button (Cancel, Try again) can disappear with a status change. Keep keyboard and
@@ -97,10 +126,23 @@ watch(
           <button
             v-if="!translation.isRunning && !pipelineWorking"
             type="button"
-            class="button"
+            class="button button-icon"
+            :class="{ editing }"
+            :aria-label="editLabel"
             @click="toggleEditing"
           >
-            {{ editing ? 'Done' : 'Edit text' }}
+            <IconEdit />
+            <span class="icon-tip" aria-hidden="true">{{ editLabel }}</span>
+          </button>
+          <button
+            v-if="!editing && !translation.isRunning && !pipelineWorking"
+            type="button"
+            class="button button-icon"
+            aria-label="Find and replace…"
+            @click="openReplace"
+          >
+            <IconSearch />
+            <span class="icon-tip" aria-hidden="true">Find and replace</span>
           </button>
           <template v-if="!editing">
             <TranslateButton v-if="!pipelineWorking" />
@@ -135,6 +177,12 @@ watch(
           @edit="(turnId, text) => transcript.editTurnText(turnId, text)"
         />
         <AudioBar />
+        <ReplaceDialog
+          :open="replacing"
+          :version="transcript.view"
+          :initial-find="initialFind"
+          @close="replacing = false"
+        />
       </template>
       <p v-else class="empty">No speech was detected in this recording.</p>
     </template>
@@ -172,22 +220,56 @@ watch(
   gap: var(--space-5);
 }
 
-/* The name and its details on the left; the actions beside them, or below on a narrow window. */
+/* The name on its own line; its details and the actions share the row beneath it, or stack on a narrow window.
+   The header's grid is dissolved so its name and details take this grid's rows. */
 .title-block {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: var(--space-4) var(--space-6);
-  padding-bottom: var(--space-5);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-3) var(--space-6);
+  padding-bottom: var(--space-4);
   border-bottom: 1px solid var(--color-border);
+}
+
+.title-block :deep(.transcript-header) {
+  display: contents;
+}
+
+.title-block :deep(.file-name) {
+  grid-column: 1 / -1;
+  font-weight: 600;
+  line-height: 1.1;
+  letter-spacing: -0.025em;
+}
+
+.title-block :deep(.meta) {
+  grid-column: 1;
 }
 
 .actions {
   display: flex;
   flex-wrap: wrap;
+  grid-column: 2;
   align-items: center;
+  justify-content: flex-end;
   gap: var(--space-2);
+}
+
+@media (max-width: 40rem) {
+  .title-block {
+    grid-template-columns: 1fr;
+  }
+
+  .actions {
+    grid-column: 1;
+    justify-content: flex-start;
+  }
+}
+
+/* While editing, Edit text (named Done) shows it is on. */
+.editing {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
 }
 
 .notice {

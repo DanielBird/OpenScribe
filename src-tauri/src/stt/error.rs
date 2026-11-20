@@ -27,6 +27,10 @@ pub enum SttErrorKind {
   OutOfMemory,
   /// The engine failed, crashed or answered with something unreadable.
   Engine,
+  /// The graphics card failed during a run on it: a model's failure, out of memory, the Vulkan engine not loading, or
+  /// a worker that died (Phase 37, decision 6). Never the decoder's or the app's own (audit GPU-1). The page offers
+  /// the processor.
+  Gpu,
   /// The run was cancelled.
   Cancelled,
 }
@@ -76,6 +80,7 @@ mod tests {
     let json = serde_json::to_string(&SttError::new(SttErrorKind::PackOutdated, "x")).unwrap();
     assert_eq!(json, r#"{"kind":"pack-outdated","detail":"x"}"#);
     assert_eq!(serde_json::to_string(&SttErrorKind::OutOfMemory).unwrap(), r#""out-of-memory""#);
+    assert_eq!(serde_json::to_string(&SttErrorKind::Gpu).unwrap(), r#""gpu""#);
   }
 
   #[test]

@@ -6,14 +6,26 @@
 //! the app is gone (`run.rs`). Its peak memory is read through its process handle after it exits.
 
 use super::error::{SttError, SttErrorKind, without_path};
-use super::protocol::{Event, Job, WORKER_FLAG, WorkerResult};
+use super::protocol::{DEVICES_FLAG, Event, GpuDevice, Job, WORKER_FLAG, WorkerResult};
 use std::io::{BufRead, BufReader, Write};
+use std::path::Path;
 use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::mpsc::{Receiver, RecvTimeoutError};
 use std::sync::{Arc, Mutex, MutexGuard};
+use std::time::{Duration, Instant};
 
 /// The last lines of the engine's own logging, kept for a crash's detail.
 const STDERR_LINES: usize = 12;
+
+/// How long the Vulkan engine may take to list the graphics cards (Phase 37, decision 2): the probe, and a run on a
+/// card until its worker says whether the card is there (audit GPU-2). Listing took 0.23–0.44 s on the maintainer's
+/// PC.
+pub const LISTING_TIMEOUT: Duration = Duration::from_secs(15);
+
+/// Listing the graphics cards took longer than `LISTING_TIMEOUT`: a driver that hangs while listing.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ListingHung;
 
 /// One running worker, as cancel sees it.
 #[derive(Default)]
@@ -103,22 +115,92 @@ impl Stopper {
 }
 
 /// What a finished worker gave.
+#[derive(Debug)]
 pub struct Outcome {
   pub result: WorkerResult,
   pub peak_memory_bytes: Option<u64>,
 }
 
-/// Runs `job` in a worker, calling `on_event` for each `Started` and `Progress` event. Blocks until the worker exits.
-pub fn run(job: &Job, running: &Running, mut on_event: impl FnMut(&Event)) -> Result<Outcome, SttError> {
+/// How a worker that said why it stopped ended.
+#[derive(Debug)]
+pub enum Finished {
+  Done(Outcome),
+  /// The job's card isn't there (Phase 37, decision 5): nothing was done, and the job can run on the processor.
+  /// `reason` is the worker's, for the run's record (audit GPU-3).
+  DeviceMissing { reason: String },
+  /// Listing the cards hung (audit GPU-2): the worker was ended without being waited for, nothing was done, and the
+  /// job can run on the processor, as for a missing card.
+  ListingHung,
+}
+
+/// How the worker's events ended, before its peak memory is read.
+#[derive(Debug)]
+enum Ending {
+  Done(WorkerResult),
+  DeviceMissing(String),
+  ListingHung,
+}
+
+/// This exe as a worker, with no window: `--stt-worker` and `args`.
+fn worker_command(args: &[&std::ffi::OsStr]) -> Result<Command, SttError> {
   let exe = std::env::current_exe().map_err(|e| SttError::new(SttErrorKind::Engine, format!("finding the app: {e}")))?;
   let mut command = Command::new(exe);
-  command.arg(WORKER_FLAG).stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped());
+  command.arg(WORKER_FLAG).args(args);
   #[cfg(windows)]
   {
     use std::os::windows::process::CommandExt;
     const CREATE_NO_WINDOW: u32 = 0x0800_0000;
     command.creation_flags(CREATE_NO_WINDOW);
   }
+  Ok(command)
+}
+
+/// The graphics cards the engine in `runtime_dir` finds (Phase 37, decision 2), listed by a worker so that a driver
+/// that crashes or hangs can't take the app with it. Empty if the engine won't load, finds no card, or the worker
+/// fails; `ListingHung` if it hasn't answered within `timeout`, and it is ended.
+pub fn devices(runtime_dir: &Path, timeout: Duration) -> Result<Vec<GpuDevice>, ListingHung> {
+  let Ok(mut command) = worker_command(&[DEVICES_FLAG.as_ref(), runtime_dir.as_os_str()]) else {
+    return Ok(Vec::new());
+  };
+  command.stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::null());
+  let Ok(mut child) = command.spawn() else { return Ok(Vec::new()) };
+  let stopper = Stopper::for_child(&child);
+  let (found, listed) = std::sync::mpsc::sync_channel(1);
+  if let Some(stdout) = child.stdout.take() {
+    std::thread::spawn(move || {
+      let _ = found.send(devices_in(stdout));
+    });
+  }
+  let devices = match listed.recv_timeout(timeout) {
+    Ok(devices) => Ok(devices),
+    Err(RecvTimeoutError::Timeout) => Err(ListingHung),
+    Err(RecvTimeoutError::Disconnected) => Ok(Vec::new()),
+  };
+  // Done, or not answering: end it either way. Not waited for, since a driver that hangs might not let it end.
+  match &stopper {
+    Some(stopper) => stopper.stop(),
+    None => _ = child.kill(),
+  }
+  devices
+}
+
+/// The `Devices` line among the probe's output.
+fn devices_in(stdout: impl std::io::Read) -> Vec<GpuDevice> {
+  BufReader::new(stdout)
+    .lines()
+    .map_while(Result::ok)
+    .find_map(|line| match Event::from_line(&line) {
+      Some(Event::Devices { devices }) => Some(devices),
+      _ => None,
+    })
+    .unwrap_or_default()
+}
+
+/// Runs `job` in a worker, calling `on_event` for each `Started` and `Progress` event. Blocks until the worker exits,
+/// except when listing the job's card hangs (audit GPU-2): that worker is ended and not waited for, as the probe isn't.
+pub fn run(job: &Job, running: &Running, mut on_event: impl FnMut(&Event)) -> Result<Finished, SttError> {
+  let mut command = worker_command(&[])?;
+  command.stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped());
   if running.is_cancelled() {
     return Err(SttError::new(SttErrorKind::Cancelled, "cancelled before the engine started"));
   }
@@ -145,7 +227,20 @@ pub fn run(job: &Job, running: &Running, mut on_event: impl FnMut(&Event)) -> Re
     })
   });
 
-  let outcome = child.stdout.take().and_then(|stdout| read_events(stdout, running, &mut on_event));
+  // Only a run on a card lists the cards, and only that has a deadline, until the worker says the card is there.
+  let deadline = job.device.as_ref().map(|_| Instant::now() + LISTING_TIMEOUT);
+  let outcome = child.stdout.take().and_then(|stdout| read_events(&lines_of(stdout), running, deadline, &mut on_event));
+  if let Some(Ok(Ending::ListingHung)) = outcome {
+    // Ended, but a driver that hangs might not let it end: neither it nor its stderr is waited for. Its job object is
+    // closed with the stopper, which ends it again if it can.
+    running.release();
+    drop(stderr_thread);
+    drop(child);
+    if running.is_cancelled() {
+      return Err(SttError::new(SttErrorKind::Cancelled, "cancelled"));
+    }
+    return Ok(Finished::ListingHung);
+  }
   let status = child.wait();
   #[cfg(windows)]
   let peak = native::peak_working_set(&child);
@@ -160,31 +255,81 @@ pub fn run(job: &Job, running: &Running, mut on_event: impl FnMut(&Event)) -> Re
     return Err(SttError::new(SttErrorKind::Cancelled, "cancelled"));
   }
   match outcome {
-    Some(Ok(result)) => Ok(Outcome { result, peak_memory_bytes: peak }),
+    Some(Ok(Ending::Done(result))) => Ok(Finished::Done(Outcome { result, peak_memory_bytes: peak })),
+    Some(Ok(Ending::DeviceMissing(reason))) => Ok(Finished::DeviceMissing { reason }),
+    Some(Ok(Ending::ListingHung)) => Ok(Finished::ListingHung),
     Some(Err(error)) => Err(error),
     None => {
       let code = status.ok().and_then(|s| s.code());
       let tail = stderr_tail.lock().map(|t| t.join("\n")).unwrap_or_default();
-      Err(crashed(code, &tail, &job.recording))
+      let error = crashed(code, &tail, &job.recording);
+      Err(if job.device.is_some() { on_a_card(error) } else { error })
     }
   }
 }
 
+/// A worker that died during a run on a card, as the page is told it (Phase 37, decision 6): a driver reset ends it,
+/// so the engine's crash and out of memory are the card's, with the engine's detail (D41). The rest stays as it is.
+/// Only for a crash: the worker says itself which of its failures are the card's (`run.rs`), and the app's own, such as
+/// starting the worker, never are (audit GPU-1).
+pub fn on_a_card(error: SttError) -> SttError {
+  match error.kind {
+    SttErrorKind::Engine | SttErrorKind::OutOfMemory => SttError { kind: SttErrorKind::Gpu, ..error },
+    _ => error,
+  }
+}
+
+/// The worker's stdout, line by line, read on a thread of its own so that `read_events` can stop waiting for it.
+fn lines_of(stdout: impl std::io::Read + Send + 'static) -> Receiver<String> {
+  let (tx, lines) = std::sync::mpsc::channel();
+  std::thread::spawn(move || {
+    for line in BufReader::new(stdout).lines().map_while(Result::ok) {
+      if tx.send(line).is_err() {
+        break;
+      }
+    }
+  });
+  lines
+}
+
 /// Reads the worker's events until its stdout closes, calling `on_event` for each `Started` and `Progress` event.
 /// Returns how the run ended, if the worker said. On `Failed` it ends the worker at once: the worker would otherwise
-/// exit only once its other threads have worked through their queues (`run.rs`).
+/// exit only once its other threads have worked through their queues (`run.rs`). `DeviceMissing` ends it too.
+///
+/// With a `deadline`, the worker must say `DeviceFound` (or `DeviceMissing`) by then. If it hasn't, listing the cards
+/// has hung: the worker is ended, and the run ends with `ListingHung` without waiting for its stdout (audit GPU-2).
 fn read_events(
-  stdout: impl std::io::Read,
+  lines: &Receiver<String>,
   running: &Running,
+  mut deadline: Option<Instant>,
   mut on_event: impl FnMut(&Event),
-) -> Option<Result<WorkerResult, SttError>> {
+) -> Option<Result<Ending, SttError>> {
   let mut outcome = None;
-  for line in BufReader::new(stdout).lines().map_while(Result::ok) {
+  loop {
+    let line = match deadline {
+      None => match lines.recv() {
+        Ok(line) => line,
+        Err(_) => break,
+      },
+      Some(at) => match lines.recv_timeout(at.saturating_duration_since(Instant::now())) {
+        Ok(line) => line,
+        Err(RecvTimeoutError::Timeout) => {
+          running.end();
+          return Some(Ok(Ending::ListingHung));
+        }
+        Err(RecvTimeoutError::Disconnected) => break,
+      },
+    };
     match Event::from_line(&line) {
-      Some(Event::Done(result)) => outcome = Some(Ok(result)),
+      Some(Event::DeviceFound) => deadline = None,
+      Some(Event::Done(result)) => outcome = Some(Ok(Ending::Done(result))),
       Some(Event::Failed { kind, detail }) => {
         running.end();
         return Some(Err(SttError::new(kind, detail)));
+      }
+      Some(Event::DeviceMissing { reason }) => {
+        running.end();
+        return Some(Ok(Ending::DeviceMissing(reason)));
       }
       Some(event) => on_event(&event),
       None => {}
@@ -297,9 +442,108 @@ mod tests {
     assert_eq!(crashed(None, "", recording).kind, SttErrorKind::Engine);
   }
 
+  #[test]
+  fn a_crash_on_a_card_is_the_cards() {
+    let recording = std::path::Path::new("a.m4a");
+    let crash = crashed(Some(0xC000_0409_u32 as i32), "vkCreateFence: Invalid device", recording);
+    let error = on_a_card(crash.clone());
+    assert_eq!((error.kind, error.detail), (SttErrorKind::Gpu, crash.detail), "a worker that dies on a card");
+    assert_eq!(on_a_card(crashed(Some(0xC000_0017_u32 as i32), "", recording)).kind, SttErrorKind::Gpu);
+    assert_eq!(on_a_card(crashed(Some(0xC000_001D_u32 as i32), "", recording)).kind, SttErrorKind::Cpu);
+    for kind in [SttErrorKind::Unreadable, SttErrorKind::Cancelled, SttErrorKind::Gpu] {
+      assert_eq!(on_a_card(SttError::new(kind, "x")).kind, kind);
+    }
+  }
+
+  /// The worker's stdout carrying `events`, one per line, through the same reader as a run's.
+  fn stdout_of(events: &[Event]) -> Receiver<String> {
+    lines_of(std::io::Cursor::new(events.iter().map(|e| e.to_line() + "\n").collect::<String>().into_bytes()))
+  }
+
+  fn result() -> WorkerResult {
+    use super::super::protocol::Timings;
+    let timings =
+      Timings { decode_sec: 0.0, words_sec: 0.0, speakers_sec: 0.0, total_sec: 0.0, threads: None, device: None };
+    WorkerResult { language: None, duration_sec: 1.0, words: vec![], speaker_segments: vec![], timings }
+  }
+
+  /// A worker that says `events` after `pause`, then exits.
+  fn says_after(pause: Duration, events: Vec<Event>) -> Receiver<String> {
+    let (tx, lines) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+      std::thread::sleep(pause);
+      for event in events {
+        let _ = tx.send(event.to_line());
+      }
+    });
+    lines
+  }
+
+  /// Audit GPU-2: a driver that hangs while listing the cards ends the run on a card at the deadline, without waiting
+  /// for the worker's stdout to close.
+  #[test]
+  fn a_card_that_takes_too_long_to_list_ends_the_run() {
+    let (_still_open, lines) = std::sync::mpsc::channel::<String>();
+    let running = Running::default();
+    let started = Instant::now();
+    let mut seen = 0;
+    let outcome = read_events(&lines, &running, Some(Instant::now() + Duration::from_millis(50)), |_| seen += 1);
+    assert!(matches!(outcome, Some(Ok(Ending::ListingHung))), "{outcome:?}");
+    assert!(started.elapsed() < Duration::from_secs(5));
+    assert_eq!(seen, 0);
+    assert!(!running.is_cancelled());
+  }
+
+  #[test]
+  fn once_the_card_is_found_the_run_has_no_deadline() {
+    let running = Running::default();
+    let events = vec![Event::DeviceFound, Event::Started { duration_sec: None }];
+    let (tx, lines) = std::sync::mpsc::channel();
+    for event in events {
+      tx.send(event.to_line()).unwrap();
+    }
+    std::thread::spawn(move || {
+      std::thread::sleep(Duration::from_millis(300));
+      let _ = tx.send(Event::Done(result()).to_line());
+    });
+    let mut seen = Vec::new();
+    let outcome =
+      read_events(&lines, &running, Some(Instant::now() + Duration::from_millis(50)), |e| seen.push(e.clone()));
+    assert!(matches!(outcome, Some(Ok(Ending::Done(_)))), "{outcome:?}");
+    assert_eq!(seen, vec![Event::Started { duration_sec: None }], "device-found isn't passed on");
+  }
+
+  #[test]
+  fn a_card_found_missing_before_the_deadline_is_missing() {
+    let lines = says_after(Duration::from_millis(20), vec![Event::DeviceMissing { reason: "x".into() }]);
+    let outcome = read_events(&lines, &Running::default(), Some(Instant::now() + Duration::from_secs(5)), |_| {});
+    assert!(matches!(outcome, Some(Ok(Ending::DeviceMissing(_)))), "{outcome:?}");
+  }
+
+  #[test]
+  fn a_run_on_the_processor_has_no_deadline() {
+    let events = vec![Event::Started { duration_sec: None }, Event::Done(result())];
+    let lines = says_after(Duration::from_millis(200), events);
+    assert!(matches!(read_events(&lines, &Running::default(), None, |_| {}), Some(Ok(Ending::Done(_)))));
+    // A worker that dies before its card is listed is a crash, not a hang.
+    let lines = says_after(Duration::from_millis(20), vec![]);
+    assert!(read_events(&lines, &Running::default(), Some(Instant::now() + Duration::from_secs(5)), |_| {}).is_none());
+  }
+
+  #[test]
+  fn the_probe_reads_its_one_line_among_the_engines_logging() {
+    use super::super::protocol::GpuKind;
+    let card = GpuDevice { name: "AMD Radeon 740M Graphics".into(), kind: GpuKind::IntegratedGpu, memory_bytes: 1 };
+    let out = format!("ggml_vulkan: Found 1 Vulkan devices\n{}\n", Event::Devices { devices: vec![card.clone()] }.to_line());
+    assert_eq!(devices_in(out.as_bytes()), vec![card]);
+    assert_eq!(devices_in("ggml_vulkan: no devices\n".as_bytes()), vec![]);
+    assert_eq!(devices_in(&b""[..]), vec![]);
+  }
+
   #[cfg(windows)]
   mod stopping {
     use super::super::*;
+    use super::stdout_of;
     use std::os::windows::io::AsHandle;
     use std::process::{Child, ExitStatus};
     use std::time::{Duration, Instant};
@@ -363,11 +607,6 @@ mod tests {
       running.release();
     }
 
-    /// The worker's stdout carrying `events`, one per line.
-    fn stdout_of(events: &[Event]) -> Vec<u8> {
-      events.iter().map(|e| e.to_line() + "\n").collect::<String>().into_bytes()
-    }
-
     /// Audit DES-4: the worker's other threads would keep it running after a failure, so reading one ends it.
     #[test]
     fn a_failure_ends_the_worker_at_once() {
@@ -380,9 +619,41 @@ mod tests {
         Event::Failed { kind: SttErrorKind::Unreadable, detail: "x".into() },
       ]);
       let mut seen = 0;
-      let outcome = read_events(stdout.as_slice(), &running, |_| seen += 1);
+      let outcome = read_events(&stdout, &running, None, |_| seen += 1);
       assert!(matches!(outcome, Some(Err(SttError { kind: SttErrorKind::Unreadable, .. }))));
       assert_eq!(seen, 2);
+      assert!(ended_within(&mut child, Duration::from_secs(5)).is_some());
+      assert!(!running.is_cancelled());
+      running.release();
+    }
+
+    /// Phase 37, decision 5: the card isn't there, so the worker has nothing to do; the app runs the job again on the
+    /// processor.
+    #[test]
+    fn a_missing_card_ends_the_worker_at_once() {
+      let mut child = long_child();
+      let running = Running::default();
+      running.hold(its_process(&child));
+      let reason = "the Vulkan engine found no graphics card";
+      let stdout = stdout_of(&[Event::DeviceMissing { reason: reason.into() }, Event::Started { duration_sec: None }]);
+      let mut seen = 0;
+      let outcome = read_events(&stdout, &running, None, |_| seen += 1);
+      assert!(matches!(&outcome, Some(Ok(Ending::DeviceMissing(r))) if r == reason), "audit GPU-3: {outcome:?}");
+      assert_eq!(seen, 0);
+      assert!(ended_within(&mut child, Duration::from_secs(5)).is_some());
+      assert!(!running.is_cancelled());
+      running.release();
+    }
+
+    /// Audit GPU-2: the worker that hangs while listing is ended, though the run doesn't wait for it.
+    #[test]
+    fn a_hang_while_listing_ends_the_worker() {
+      let mut child = long_child();
+      let running = Running::default();
+      running.hold(its_process(&child));
+      let (_still_open, lines) = std::sync::mpsc::channel::<String>();
+      let outcome = read_events(&lines, &running, Some(Instant::now() + Duration::from_millis(50)), |_| {});
+      assert!(matches!(outcome, Some(Ok(Ending::ListingHung))), "{outcome:?}");
       assert!(ended_within(&mut child, Duration::from_secs(5)).is_some());
       assert!(!running.is_cancelled());
       running.release();
@@ -394,7 +665,7 @@ mod tests {
       let running = Running::default();
       running.hold(its_process(&child));
       let stdout = stdout_of(&[Event::Started { duration_sec: None }, Event::Progress { done_sec: 1.0 }]);
-      assert!(read_events(stdout.as_slice(), &running, |_| {}).is_none());
+      assert!(read_events(&stdout, &running, None, |_| {}).is_none());
       assert!(ended_within(&mut child, Duration::from_millis(300)).is_none());
       running.release();
       let _ = child.kill();

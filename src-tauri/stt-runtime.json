@@ -1,5 +1,5 @@
 {
-  "note": "The speech engine the desktop app ships (DECISIONS.md D51, D53): NVIDIA's NeMo-Speech.cpp, built CPU-only for the work laptop's instruction sets, as Phase 33 benchmarked it. scripts/build-stt-runtime.ps1 builds it into src-tauri/stt-runtime/ (gitignored); pack-desktop.mjs stages those files beside describe.exe; make-notices.mjs lists them.",
+  "note": "The speech engine the desktop app ships (DECISIONS.md D51, D53): NVIDIA's NeMo-Speech.cpp, built CPU-only for the work laptop's instruction sets, as Phase 33 benchmarked it. scripts/build-stt-runtime.ps1 builds it into src-tauri/stt-runtime/ (gitignored); pack-desktop.mjs stages those files beside describe.exe; make-notices.mjs lists them. The top-level fields are the processor engine; `vulkan` is the second engine (Phase 37), built into stt-runtime/vulkan/, which pack-desktop.mjs stages in vulkan\\ beside describe.exe and make-notices.mjs also lists.",
   "name": "NeMo-Speech.cpp",
   "version": "0.3.0",
   "repository": "https://github.com/NVIDIA/NeMo-Speech.cpp",
@@ -30,5 +30,33 @@
   "msvcRuntime": {
     "minimumVersion": "14.44",
     "files": ["msvcp140.dll", "vcruntime140.dll", "vcruntime140_1.dll", "vcomp140.dll"]
+  },
+  "vulkan": {
+    "note": "The second engine (DECISIONS.md D58, Phase 37): the same source, commit and MSVC runtime, built for Vulkan, in stt-runtime/vulkan/. Stock ggml, as NVIDIA builds Vulkan. vulkan-1.dll is the graphics driver's and is never shipped.",
+    "folder": "vulkan",
+    "build": "scripts/windows/build.ps1 -Backend vulkan -Profile asr -Compiler msvc -Config Release",
+    "vulkanSdk": "1.4.363.0",
+    "cmakeArgs": [
+      "-DGGML_NATIVE=OFF",
+      "-DGGML_SSE42=ON",
+      "-DGGML_AVX=ON",
+      "-DGGML_AVX2=ON",
+      "-DGGML_FMA=ON",
+      "-DGGML_F16C=ON",
+      "-DGGML_BMI2=ON",
+      "-DGGML_AVX_VNNI=OFF",
+      "-DGGML_AVX512=OFF",
+      "-DGGML_CUDA=OFF",
+      "-DGGML_VULKAN=ON",
+      "-DNEMO_SPEECH_GGML_PATCHED=OFF"
+    ],
+    "engineFiles": [
+      "nemo_speech_asr_c.dll",
+      "nemo_speech_asr.dll",
+      "ggml.dll",
+      "ggml-base.dll",
+      "ggml-cpu.dll",
+      "ggml-vulkan.dll"
+    ]
   }
 }

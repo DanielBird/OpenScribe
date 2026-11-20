@@ -115,6 +115,7 @@ describe('job store', () => {
         zeroRetention: true,
         keyterms: ['Oticon'],
         cleanUp: true,
+        device: null,
       });
     });
 
@@ -438,7 +439,9 @@ describe('job store', () => {
       speakersSec: 8,
       totalSec: 10.2,
       threads: 8,
+      device: null,
       peakMemoryBytes: 950_000_000,
+      fellBack: null,
     };
     let local: ReturnType<typeof fakeProvider>;
 
@@ -478,6 +481,131 @@ describe('job store', () => {
         numSpeakers: null,
         languageHint: 'de',
         cleanUp: true,
+        device: null,
+      });
+    });
+
+    describe('on a graphics card (Phase 37)', () => {
+      const CARD = { name: 'AMD Radeon 740M Graphics', nth: 0 };
+      const gpuFailure = () =>
+        new ProviderError('server', 'The graphics card stopped while transcribing.', {
+          retryOn: 'processor',
+        });
+
+      it('sends the saved card, even one Settings doesn’t list', () => {
+        const settings = makeLocalReady();
+        settings.setLocalDevice(CARD);
+        expect(settings.gpuDevices).toEqual([]);
+        void useJobStore().start();
+        expect(local.calls[0]!.input.device).toEqual(CARD);
+      });
+
+      it('sends none to ElevenLabs', () => {
+        const settings = makeReady();
+        settings.setLocalDevice(CARD);
+        void useJobStore().start();
+        expect(fake.calls[0]!.input.device).toBeNull();
+      });
+
+      it('runs the same job once on the processor, and keeps the card chosen', async () => {
+        const settings = makeLocalReady();
+        settings.setLocalDevice(CARD);
+        const job = useJobStore();
+        const done = job.start();
+        local.calls[0]!.reject(gpuFailure());
+        await done;
+        expect(job.status).toBe('error');
+        const second = job.retryOnProcessor();
+        expect(local.calls).toHaveLength(2);
+        expect(local.calls[1]!.input).toEqual({ ...local.calls[0]!.input, device: null });
+        expect(settings.localDevice).toEqual(CARD);
+        // Try again repeats that run; a new start uses Settings again.
+        local.calls[1]!.reject(new ProviderError('server', 'stopped'));
+        await second;
+        void job.retry();
+        expect(local.calls[2]!.input.device).toBeNull();
+        job.cancel();
+        void job.start();
+        expect(local.calls[3]!.input.device).toEqual(CARD);
+      });
+
+      it('does nothing on the processor while a run is active', () => {
+        makeLocalReady();
+        const job = useJobStore();
+        void job.start();
+        void job.retryOnProcessor();
+        expect(local.calls).toHaveLength(1);
+      });
+
+      it('does nothing on the processor after an ElevenLabs run', async () => {
+        makeReady();
+        const job = useJobStore();
+        const done = job.start();
+        fake.calls[0]!.reject(new ProviderError('server', 'busy'));
+        await done;
+        void job.retryOnProcessor();
+        expect(fake.calls).toHaveLength(1);
+        expect(local.calls).toHaveLength(0);
+      });
+
+      it('remembers where the last run ran, and reads an older record as the processor', async () => {
+        makeLocalReady();
+        const job = useJobStore();
+        const done = job.start();
+        // The second of two identical cards stays the second (audit GPU-6).
+        const onCard = { ...TIMINGS, threads: null, device: { ...CARD, nth: 1 } };
+        local.calls[0]!.resolve({ ...RESULT, timings: onCard } as NormalizedTranscription);
+        await done;
+        setActivePinia(createPinia());
+        expect(useJobStore().lastLocalRun?.timings).toEqual(onCard);
+        const { device: _device, fellBack: _fellBack, ...before } = TIMINGS;
+        localStorage.setItem(
+          'describe.v1.lastLocalRun',
+          JSON.stringify({ at: '2026-11-17T10:00:00.000Z', audioSec: 60, timings: before }),
+        );
+        setActivePinia(createPinia());
+        expect(useJobStore().lastLocalRun?.timings).toEqual({
+          ...before,
+          device: null,
+          fellBack: null,
+        });
+      });
+
+      it('remembers a run that fell back to the processor, and why (audit GPU-3)', async () => {
+        makeLocalReady();
+        const job = useJobStore();
+        const done = job.start();
+        const fellBack = {
+          ...TIMINGS,
+          fellBack: { device: CARD, reason: 'the Vulkan engine found no graphics card' },
+        };
+        local.calls[0]!.resolve({ ...RESULT, timings: fellBack } as NormalizedTranscription);
+        await done;
+        setActivePinia(createPinia());
+        expect(useJobStore().lastLocalRun?.timings).toEqual(fellBack);
+      });
+
+      it('reads a card saved by name alone as the first with that name (before audit GPU-6)', () => {
+        const reason = 'the Vulkan engine found no graphics card';
+        localStorage.setItem(
+          'describe.v1.lastLocalRun',
+          JSON.stringify({
+            at: '2026-11-19T10:00:00.000Z',
+            audioSec: 60,
+            timings: { ...TIMINGS, threads: null, device: CARD.name },
+          }),
+        );
+        expect(useJobStore().lastLocalRun?.timings.device).toEqual(CARD);
+        localStorage.setItem(
+          'describe.v1.lastLocalRun',
+          JSON.stringify({
+            at: '2026-11-19T10:00:00.000Z',
+            audioSec: 60,
+            timings: { ...TIMINGS, fellBack: { device: CARD.name, reason } },
+          }),
+        );
+        setActivePinia(createPinia());
+        expect(useJobStore().lastLocalRun?.timings.fellBack).toEqual({ device: CARD, reason });
       });
     });
 

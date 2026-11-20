@@ -3,6 +3,7 @@ import { computed, nextTick, ref, useTemplateRef, watch } from 'vue';
 import { normalizeLanguage, type LlmProviderId } from '../../domain/transcript';
 import { useTranscriptStore } from '../../stores/transcript';
 import { useTranslationStore } from '../../stores/translation';
+import IconTranslate from '../icons/IconTranslate.vue';
 import ErrorDetails from './ErrorDetails.vue';
 import TranslateDialog from './TranslateDialog.vue';
 
@@ -94,10 +95,12 @@ async function onTranslate(provider: LlmProviderId, model: string): Promise<void
       v-if="!translation.isRunning"
       ref="mainButton"
       type="button"
-      class="button"
+      class="button button-icon"
+      :aria-label="LABELS[mode]"
       @click="choosing = true"
     >
-      {{ LABELS[mode] }}
+      <IconTranslate />
+      <span class="icon-tip" aria-hidden="true">{{ LABELS[mode] }}</span>
     </button>
 
     <div v-if="translation.isRunning" class="running">

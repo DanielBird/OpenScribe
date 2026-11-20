@@ -13,6 +13,14 @@ export interface TranscriptionInput {
   keyterms: string[];
   /** Drop fillers and doubled words where the provider writes them (on this computer, DECISIONS.md D53). */
   cleanUp: boolean;
+  /** On this computer: the graphics card to run on; none is the processor (Phase 37). */
+  device?: GpuChoice | null;
+}
+
+/** A graphics card as saved and sent to Rust: its name, and which of the cards with that name it is (from 0). */
+export interface GpuChoice {
+  name: string;
+  nth: number;
 }
 
 export type TranscriptionProgress =
@@ -34,8 +42,13 @@ export interface TranscriptionTimings {
   wordsSec: number;
   speakersSec: number;
   totalSec: number;
-  threads: number;
+  /** The words model's threads on the processor; null on a graphics card. */
+  threads: number | null;
+  /** The graphics card the run used; null is the processor (Phase 37, decision 7). */
+  device: GpuChoice | null;
   peakMemoryBytes: number | null;
+  /** Set when the run asked for a card and ran on the processor instead: the card, and why (audit GPU-3). */
+  fellBack: { device: GpuChoice; reason: string } | null;
 }
 
 /** What a run returns. `timings` only from a provider that measures itself; it never goes into the doc. */

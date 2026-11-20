@@ -44,6 +44,9 @@ On the maintainer's PC, 2026-11-14/15, beyond Phase 24's ([desktop.md](desktop.m
 | Node | 22.19.0 | `fetch-models.mjs`, `compare.mjs`, `make-test-set.mjs`, `summarize.mjs` |
 | ffmpeg | 8.0 (gyan.dev full build) | making the test set, and as the decoding reference. Never shipped. |
 | Cinebench | 2024.1.0 and R23.2.0, on the Desktop | calibrating the emulation |
+| Vulkan loader and `vulkaninfo` | instance 1.4.341, in System32 (installed by the graphics drivers: NVIDIA 617.14, Intel 101.6129) | Phase 37, Task 1: listing the cards. Nothing else is needed to *run* a Vulkan engine. |
+| LunarG Vulkan SDK | 1.4.363.0, at `C:\VulkanSDK\1.4.363.0` (`winget install --id KhronosGroup.VulkanSDK -e --version 1.4.363.0`, installed by the maintainer). `stt-runtime.json` pins it (`vulkan.vulkanSdk`). | Phase 37: building the Vulkan engine. `VULKAN_SDK` is set only in new shells; `build-stt-runtime.ps1` reads it from the machine's environment if the shell lacks it. |
+| `dumpbin` | MSVC 14.44.35207's, at `VC\Tools\MSVC\14.44.35207\bin\Hostx64\x64\` (not on PATH) | Phase 37, Task 1: the engine's imports and exports |
 
 Everything the spike builds or fetches is in `scripts/spikes/local-stt/`. The gitignored parts are `models/`,
 `vendor/`, `out/` and `*/target/`.
@@ -472,6 +475,181 @@ Recordings: `scripts/spikes/local-stt/out/test-set/test_audio.1h.m4a` and `test_
 - **In every case:** correct the emulation's caps from the real numbers (`calibrate.ps1`), and record the new caps
   here.
 
+## On the graphics card (Phase 37, Task 1)
+
+*2026-11-20, the agent, on the maintainer's PC.* NVIDIA's prebuilt v0.3.0 Vulkan release, run through its CLI on the
+RTX 2070 SUPER, the UHD 770 and the processor. **Not pinned and not capped:** these numbers describe the cards, not the
+work laptop (G9 measures the laptop). Scripts: `scripts/spikes/local-stt/run-gpu.ps1` (the runs) and
+`summarize-gpu.mjs` (the table, `out/gpu/summary.md`). The harness gained `pinrun --profile unpinned` (no affinity;
+GPU engine use and `GPU Process Memory(*)` per adapter; the job's CPU time) and `stt-bench --device`/`--concurrency`.
+
+### The release
+
+| | |
+|---|---|
+| Zip | `nemo-speech-0.3.0-windows-x86_64-vulkan.zip`, 22,417,032 bytes, SHA-256 `72b3b8b41bfe2be0320eff4e9d310594e4f99deefcde4a157799a039656963ce`: matches its `.sha256` and GitHub's digest. In `vendor/nemo-speech-0.3.0-windows-x86_64-vulkan/` (gitignored); file list in `out/vulkan-zip.json`. |
+| Beside it | The CPU zip again (`4ed9740e…5b05`, matches), for NVIDIA's patched-ggml baseline and its exports. |
+| Files | The CPU zip's, plus **`ggml-vulkan.dll` 44,272,128 bytes**. `ggml-base.dll` 673,280 and `ggml-cpu.dll` 976,896 (stock ggml) against the CPU zip's 692,736 and 947,200 (patched). The full release also carries `llama*.dll`, `nemo_speech_speechlm/nmt/tts.dll`, `concrt140.dll` and the `msvcp140_*` extras, which DeScribe's own `-Profile asr` build doesn't need. |
+| **Imports** (`dumpbin /dependents`, `out/vulkan-dumpbin.txt`) | `ggml.dll` → `ggml-cpu.dll`, **`ggml-vulkan.dll`**, `ggml-base.dll`. `ggml-vulkan.dll` → `ggml-base.dll`, **`vulkan-1.dll`**. `nemo_speech_asr.dll` → `ggml.dll`, `ggml-base.dll`, `dbghelp.dll`. **Decision 1's chain holds:** without `vulkan-1.dll` the whole engine fails to load. The CPU zip's `ggml.dll` imports no Vulkan. |
+| **Exports** (`dumpbin /exports`) | **Split across two DLLs.** `ggml.dll` exports the registry: `ggml_backend_dev_count`, `ggml_backend_dev_get`, `_by_name`, `_by_type`, `ggml_backend_reg_count` and the like. **`ggml-base.dll`** exports the device's accessors: `ggml_backend_dev_type`, `_description`, `_memory`, `_name`, `_get_props`. The CPU build's `ggml.dll` exports the same registry functions. So decision 2's probe takes the count and devices from `ggml.dll` and their details from `ggml-base.dll`. |
+
+### The devices
+
+`vulkaninfo` (instance 1.4.341) and `nemo-speech --json doctor` (`out/vulkan-doctor.json`) agree:
+
+| ggml / CLI index | `doctor` name, type | Description (decision 5's name) | Driver | Vulkan `deviceLUID` | PDH LUID | Memory (`doctor`) |
+|---|---|---|---|---|---|---|
+| 0 | `Vulkan0`, `gpu` | NVIDIA GeForce RTX 2070 SUPER | 617.14, Vulkan 1.4.351 | `12790100-00000000` | `0x00000000_0x00017912` | 7.8 GB free of 8.6 |
+| 1 | `Vulkan1`, `integrated-gpu` | Intel(R) UHD Graphics 770 | 101.6129, Vulkan 1.3.295 | `ce8b0100-00000000` | `0x00000000_0x00018BCE` | 50.5 GB "free" of 34.2: the driver reports shared memory oddly |
+| 2 | `CPU`, `cpu` | 13th Gen Intel(R) Core(TM) i7-13700K | – | – | – | – |
+
+- Both cards offer `VK_KHR_shader_integer_dot_product`, and the RTX also offers `VK_KHR_cooperative_matrix`.
+- The UHD 770 has one heap (31.9 GB, the system's RAM) and a 4 GB `maxMemoryAllocationSize`.
+- **The device is chosen with `--device vulkan:N`** (alias `--backend`; also `auto`, `cpu`, `cuda[:N]`, `metal`), on
+  `transcribe` and on `diarize` alike. There is no `--gpu N`. `N` counts GPU and integrated-GPU devices in ggml's order,
+  as `backend.cpp` does, which is also `doctor`'s order.
+- The words log names its backend (`[asr] … backend=Vulkan0`). `diarize` names none, but its run on the card shows
+  159 MB of the card's memory and is 5× faster, so **the speakers model runs on the card too.**
+
+### Results
+
+The 5-minute cut and the 37-minute recording, as in Phase 33. Parakeet and Nemotron 3 Diarization from `.speech-pack/`,
+`v3-offline`, 8 threads.
+- **pipeline:** words in 30 s chunks with 2 s overlap, beside the speakers in their own process (the app's shape).
+- **c1:** the same, with `--concurrency 1`. One chunk at a time, as the app's worker sends them.
+- **combined:** `transcribe --diar-model` on the whole file, which is full-context.
+
+WS = peak working set; commit = peak private bytes. "Differs" is against the processor's run of the same recording and
+mode (`compare.mjs`).
+
+| Run | Total | × real time | Words: s / WS / commit | Encoder / decoder (summed over chunks) | Speakers: s / WS | CPU (logical processors busy) | Card: engine max / mean, memory | Differs from the processor |
+|---|---|---|---|---|---|---|---|---|
+| Processor, NVIDIA's CPU zip (patched ggml), 5 min pipeline | 19.4 s | 15.5 | 18.8 s / 921 MB / 3.4 GB | 17.7 / 18.2 s | 11.3 s / 204 MB | 10.0 | – | 0 % against the Vulkan zip's processor run |
+| Processor, Vulkan zip (stock ggml), 5 min pipeline | 22.0 s | 13.6 | 21.4 s / 955 MB / 3.4 GB | 20.1 / 20.5 s | 11.0 s / 237 MB | 9.5 | – | (reference) |
+| Processor, Vulkan zip, 37 min pipeline | 156.4 s | 14.3 | 150.8 s / 958 MB / 3.4 GB | 145.7 / 149.3 s | 78.4 s / 738 MB | 9.5 | – | (reference) |
+| Processor, Vulkan zip, 5 min / 37 min combined | 41.1 / 288.2 s | 7.3 / 7.8 | – / 3.5 / 5.6 GB | – | – | 7.5 | – | (reference) |
+| **RTX 2070 SUPER, 5 min c1** | 3.5 s | **85.7** | 2.9 s / 198 MB / 7.1 GB | 1.1 / 2.0 s | 1.0 s / 181 MB | 1.1 | 28 % / 14 %, 967 MB dedicated | 0.26 % (1 substitution, 1 insertion) |
+| **RTX 2070 SUPER, 37 min c1** | 21.9 s | **102.5** | 17.6 s / 447 MB / 7.8 GB | 8.1 / 16.1 s | 4.6 s / 762 MB | 1.7 | 68 % / 28 %, 1.44 GB dedicated, 117 MB shared | 0.09 % (2 sub., 3 ins.) |
+| RTX 2070 SUPER, 5 min combined | 4.6 s | 65.7 | – / 430 MB / 12.2 GB | 2.1 / 2.8 s | – | 0.9 | 45 % / 20 %, 4.39 GB dedicated | 0.13 %; speakers 100 % |
+| RTX 2070 SUPER, 37 min combined | **failed** after 4.8 s | – | – | – | – | – | 7.49 GB dedicated | `ErrorOutOfDeviceMemory`: full context on 37 min doesn't fit in 8 GB |
+| **UHD 770, 5 min c1** | 29.4 s | **10.2** | 28.8 s / 1.13 GB / 7.1 GB | 23.4 / 26.2 s | 9.2 s / 277 MB | 0.4 | 102 % / 87 %, 1.15 GB shared | 0.26 % (1 sub., 1 ins.) |
+| **UHD 770, 37 min c1** | 217.0 s | **10.3** | 212.7 s / 1.13 GB / 7.1 GB | 156.6 / 211.1 s | 57.1 s / 856 MB | 0.4 | 120 % / 94 %, 1.13 GB shared | 0.12 % (5 sub., 2 ins.) |
+| UHD 770, 5 min / 37 min combined | 43.8 / 417.9 s | 6.8 / 5.4 | – / 5.9 / 7.8 GB | 345 / 361 s (37 min) | – | 0.4 / 2.0 | 100 %, 4.2 / 4.0 GB shared | 0 % / 0.09 %; speakers 100 % / 99.9 % |
+| RTX 2070 SUPER, pipeline (batched) | 5 min 7.7 s (cold), 4.2 s (warm); 37 min **crashed** | – | – | – | – | – | – | 37 min: `GGML_ASSERT(ne3 == ne13)`, exit `0xC0000409`, 12 of 81 chunks unwritten and **38 empty** |
+| UHD 770, pipeline (batched) | 5 min 32.3 / 28.5 s; 37 min **crashed** | – | – | – | – | – | – | 5 min: **2 of 11 chunks empty with exit 0**, cold and warm alike. 37 min: the same assert, 55 unwritten, 4 empty |
+
+**Load time** (from the start to `[asr] mode=`, words model):
+- the processor: 0.5–0.6 s;
+- **the RTX: 8.0 s the very first time** (the pipelines are built), 3.7 s the next cold run, then 0.7 s;
+- **the UHD 770: 6.1 s the first time**, then 0.8–2.4 s.
+
+The first run after an install or a driver update pays this once.
+
+**What it says:**
+- **Both cards transcribe both models, one chunk at a time, correctly.** The words differ from the processor's by
+  0.1–0.3 %. Speaker labels agree on 99.9–100 % of words. The transcripts read the same (checked by eye in
+  `out/transcripts/`).
+- **Batching several chunks on a card is broken in v0.3.0, on both vendors.** The CLI batches a folder's files ("batches
+  compatible GPU steps"). On a card the batch either hits the assert of upstream issues #48 and #89 and kills the
+  process, or **silently returns empty words for both chunks of a pair, with exit 0.** One at a time it never happened
+  (81 chunks on each card). The app's worker sends one chunk at a time through the C API, so it should be safe. **Task 3
+  must keep it so,** and check it on the real worker (see the Handoff).
+- **Whole-file full context runs out of memory on the RTX at 37 minutes** (8 GB). The app never sends a whole file to the
+  words model (M4's 30 s chunks), so this affects only the CLI.
+- **Speed:**
+  - the **RTX 2070 SUPER is 7× the processor** (102× real time against 14.3×);
+  - the **UHD 770 is 0.7×** (10.3×). It's slower than this PC's twelve processors, but leaves the processor almost
+    idle: 0.4 logical processors busy against 9.5.
+  - On the UHD 770 the **decoder outweighs the encoder** (211 s against 157 s): the token-by-token TDT decoder is the
+    integrated card's weak point, as the research feared for the 740M. G9 says what the laptop does.
+- **Stock ggml on the processor is 13 % slower** than NVIDIA's patched CPU build (22.0 s against 19.4 s for 5 minutes).
+  That confirms decision 1's reason for keeping the processor engine as it is.
+- **Memory:**
+  - Working set on the cards is at or below the processor's for words (0.2–1.1 GB). On the UHD 770 add its
+    1.1–1.2 GB of shared memory, which is the same RAM.
+  - **Committed memory roughly doubles** for the words process: 7.1–7.8 GB against 3.4 GB, from the Vulkan backend's
+    host-visible buffers. D51 reads the 4 GB threshold as RAM in use, which this meets, but a worker with a commit limit
+    (M8) would need it raised.
+- **`GGML_VK_PREFER_HOST_MEMORY` wasn't needed:** both models loaded on the UHD 770 without it (decision 9).
+
+## As built (Phase 37)
+
+DECISIONS.md D58; the commands, debug switches and G checks in
+[desktop.md](desktop.md#on-the-graphics-card-phase-37).
+
+- **Two engines** from the same source and commit, both in `src-tauri/stt-runtime.json` and built by
+  `npm run desktop:stt-runtime`:
+
+  | | Processor | Vulkan |
+  |---|---|---|
+  | Folder | `stt-runtime/`, beside `describe.exe` | `stt-runtime/vulkan/`, `vulkan\` beside the exe |
+  | ggml | NVIDIA's patched (`NEMO_SPEECH_GGML_PATCHED=ON`) | stock, as NVIDIA builds Vulkan |
+  | Files | five engine DLLs plus the MSVC and OpenMP runtimes, 6.7 MB | the same plus `ggml-vulkan.dll` (44.3 MB), 48.9 MB |
+  | Imports | nothing of Vulkan's | `ggml.dll` → `ggml-vulkan.dll` → `vulkan-1.dll` (the driver's, never shipped) |
+  | Needs to build | MSVC 14.44, vcpkg | also the LunarG Vulkan SDK 1.4.363.0 |
+
+  The processor files are still Phase 33's, byte for byte. The MSIX is 21.1 MB with both, 5.5 MB without the Vulkan
+  one (desktop.md).
+- **Finding the cards:** `describe.exe --stt-worker --devices <dir>` loads the Vulkan engine, lists ggml's devices of
+  type GPU and integrated GPU (`ggml_backend_dev_count`/`_get` from `ggml.dll`, `_type`/`_description`/`_memory` from
+  `ggml-base.dll`) and prints one JSON line. A card is named by its description, or "Graphics card N" (its place among
+  the cards) when the driver gives none (audit GPU-5). It took 0.23–0.44 s here. Rust ends it after 15 s, and anything going wrong
+  gives an empty list.
+- **A run on a card:** the job names it as `{ name, nth }`. The worker finds its index among the GPU and
+  integrated-GPU devices, in ggml's order, and passes it to both models' `gpu` field.
+  - A card that isn't there, or a Vulkan engine that won't load, sends `device-missing` before any work, and Rust runs
+    the same job on the processor engine. Its `reason` says which, with no path: "the Vulkan engine found only …" (or
+    "found no graphics card"), or "the Vulkan engine didn't load: …". It goes into the run's timings as `fellBack`
+    (audit GPU-3).
+  - A card that is there sends `device-found` first. Rust waits 15 s for one or the other, as for the probe. After
+    that it ends the worker without waiting for it, runs the job on the processor, and skips the cards until the app
+    restarts (audit GPU-2).
+  - **The two models load one at a time on a card.** Loading both at once aborted with `vkCreateFence: Invalid
+    device` (`0xC0000409`): `ggml_vk_get_device` creates a card's device on first use, with no lock. After loading
+    they share the device and run on their two threads.
+  - **One words call at a time, never batched:** batching chunks on a card crashes or silently returns empty words in
+    v0.3.0 ([Task 1](#on-the-graphics-card-phase-37-task-1)).
+- **The app's worker on the PC** (Task 3; debug exe, unpinned, uncapped; `run-worker-gpu.ps1`,
+  `check-worker-gpu.mjs`, `out/worker-gpu/summary.md`). "Differ" and "agree" are against the processor's run of the
+  same file.
+
+  | File | Processor (8 threads) | RTX 2070 SUPER | UHD 770 |
+  |---|---|---|---|
+  | 5 min | 17.4 s (17.3×) | 8.0 s (37.5×) | 29.5 s (10.2×) |
+  | 37 min (three runs on each card) | 125.9 s (17.8×) | 16.2–16.4 s (137–139×) | 209.1–210.0 s (10.7×) |
+  | 1 h | 201.9 s (17.8×) | 25.8 s (139.8×) | 335.2 s (10.7×) |
+  | Words differ / speakers agree | (reference) | 0.15–0.26 % / 99.97–100 % | 0.19–0.26 % / 99.95–100 % |
+  | Logical processors busy | 10.7–11.0 | 1.9–2.6 | 1.1 |
+  | Peak commit | 4.9 GB | 9.0–9.4 GB | 8.7 GB |
+  | The card's memory, engine use | – | 1.1–1.6 GB dedicated, about 0.1 GB shared; 42–54 % max | 1.1 GB shared; 100 % |
+
+  - **No empty 30 s window** in any run on a card, the silent failure Task 1 found when batching.
+  - **Cancel** during a 37-minute run on each card: the worker ended in 80–133 ms, the card's memory was back by the
+    next sample, and the next run finished (`cancel-worker-gpu.ps1`).
+  - **The first load on a card** takes 6–8 s while its pipelines are built, then under 1 s. Each install or driver
+    update pays it once.
+  - **Committed memory roughly doubles on a card,** from the Vulkan backend's host-visible buffers. RAM in use doesn't,
+    so D51's 4 GB, read as RAM in use, still holds. The worker has no commit limit, and mustn't be given one.
+  - On the UHD 770 the processor is almost idle, but the card is slower than this PC's processor. Whether the work
+    laptop's Radeon 740M is faster than its processor is G9's to measure. D58 ships it either way.
+
+## The work laptop on its graphics card (Phase 37, G9)
+
+On the work laptop, with the Store build that has Phase 37 and the models downloaded. In Settings, choose **Run on:
+AMD Radeon 740M Graphics** (the name as the driver gives it), then copy each run's *Last recording* line and
+**Timings**, as for [L9](#the-work-laptops-numbers-phase-36-l9). Task Manager's *Performance* tab shows whether the card
+is busy and the processor mostly free.
+
+| Run | L9 on the processor | Last recording | Speed | Reading the audio | Words | Speakers | Total | Ran on | Peak memory | The card busy? Fans, heat, other apps |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 37 min (`test_audio.m4a`), plugged in, Balanced | 301 s (7.4×) | | | | | | | | | |
+| 1 h, plugged in | | | | | | | | | | |
+| 3 h, plugged in | | | | | | | | | | |
+| 1 h, on battery | | | | | | | | | | |
+| 1 h, during a Teams call with Edge open | | | | | | | | | | |
+
+*Not run yet:* it needs the Store build with Phase 37 on the laptop. It's measured, not a gate (D58).
+
 ## Verification log
 
 | Date | Where | What | Result |
@@ -501,3 +679,7 @@ Recordings: `scripts/spikes/local-stt/out/test-set/test_audio.1h.m4a` and `test_
 | 2026-11-16 | Maintainer's PC, debug exe over CDP, `speech-pack-test-server.mjs` (the agent) | Phase 35's S1, S2, S4, S5, S6, S9 | As in [the S table](#the-download-as-built-phase-35). No console errors. |
 | 2026-11-17 | Work laptop, 1.3.0 from the Store, company network, the maintainer | Download speech models in Settings; then `test_audio.m4a` (37 min 22 s) twice, plugged in, Balanced | The download worked (S1). 314 s (7.1×), then 301 s (7.4×) with every other app closed. As in [the laptop's numbers](#the-work-laptops-numbers-phase-36-l9). |
 | 2026-11-19 | Maintainer's PC, ANSI code page 1252 (the agent) | `model_paths_with_non_ascii_letters_load`: both models and the recording in `describe-Søren-Müller-æøå-<pid>\`; then with `c_path` mangling non-ASCII letters | Passes (0.7 s); the mangled path fails with "Failed to load GGML file". As in [non-ASCII paths](#non-ascii-paths-audit-des-1). |
+| 2026-11-20 | Maintainer's PC (the agent) | `winget install KhronosGroup.VulkanSDK` | Not run: the agent's permission check refused it. The maintainer installs it before Task 2. |
+| 2026-11-20 | Maintainer's PC (the agent) | `vulkaninfo`; the v0.3.0 Vulkan and CPU zips downloaded and hashed; `dumpbin /dependents` and `/exports`; `nemo-speech --json doctor`, `help transcribe`, `help diarize` | As in [on the graphics card](#on-the-graphics-card-phase-37-task-1). |
+| 2026-11-20 | Maintainer's PC, unpinned, uncapped (the agent) | `run-gpu.ps1`: 5 min and 37 min on the processor, the RTX 2070 SUPER and the UHD 770, pipeline (batched and `--concurrency 1`) and combined; `compare.mjs` against the processor | As in [on the graphics card](#on-the-graphics-card-phase-37-task-1). Batched chunks on a card crash or come back empty; one at a time, both cards match the processor. Each card's use showed on its own LUID only; processor runs showed none. |
+| 2026-11-20 | Maintainer's PC, unpinned, uncapped, debug `describe.exe` (the agent) | Phase 37, Task 3: `cargo test -- --ignored on_a_card` (`DESCRIBE_STT_TEST_GPU` 0 and 1) and `on_the_processor`; `run-worker-gpu.ps1` (the app's worker: 5 min, 37 min ×3 and 1 h on each card, and the processor), `check-worker-gpu.mjs`; `cancel-worker-gpu.ps1` | The first card run aborted (`vkCreateFence: Invalid device`, `0xC0000409`): the two models created the card's device at once. With the loads one at a time, every run finished. 37 min in 16.2–16.4 s on the RTX (137×) and 209–210 s on the UHD 770 (10.7×), against 125.9 s on the processor (17.8×). 1 h in 25.8 s, 335.2 s and 201.9 s. 0.15–0.26 % of words differ, speakers agree on 99.95–100 %, no empty 30 s windows. Peak commit 8.7–9.4 GB on a card (4.9 GB on the processor); the RTX used 1.1–1.6 GB of its own memory, the UHD 770 1.1 GB shared. Cancel: the worker ended in 80–133 ms, its card memory was back by the next sample, and the next run finished. |

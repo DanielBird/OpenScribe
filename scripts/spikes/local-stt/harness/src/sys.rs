@@ -7,8 +7,9 @@ use windows::Win32::Foundation::{CloseHandle, HANDLE};
 use windows::Win32::System::JobObjects::{
     AssignProcessToJobObject, CreateJobObjectW, JOB_OBJECT_CPU_RATE_CONTROL_ENABLE, JOB_OBJECT_CPU_RATE_CONTROL_HARD_CAP,
     JOB_OBJECT_LIMIT_AFFINITY, JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE, JOB_OBJECT_LIMIT_PROCESS_MEMORY,
-    JOBOBJECT_BASIC_PROCESS_ID_LIST, JOBOBJECT_CPU_RATE_CONTROL_INFORMATION, JOBOBJECT_EXTENDED_LIMIT_INFORMATION,
-    JobObjectBasicProcessIdList, JobObjectCpuRateControlInformation, JobObjectExtendedLimitInformation,
+    JOBOBJECT_BASIC_ACCOUNTING_INFORMATION, JOBOBJECT_BASIC_PROCESS_ID_LIST, JOBOBJECT_CPU_RATE_CONTROL_INFORMATION,
+    JOBOBJECT_EXTENDED_LIMIT_INFORMATION, JobObjectBasicAccountingInformation, JobObjectBasicProcessIdList,
+    JobObjectCpuRateControlInformation, JobObjectExtendedLimitInformation,
     QueryInformationJobObject, SetInformationJobObject,
 };
 use windows::Win32::System::ProcessStatus::{GetProcessMemoryInfo, PROCESS_MEMORY_COUNTERS, PROCESS_MEMORY_COUNTERS_EX};
@@ -195,13 +196,17 @@ pub struct JobPeaks {
 }
 
 impl Job {
-    /// A job that pins every process in it to `affinity`, optionally limits each process's committed memory, and
-    /// kills everything in it when the last handle closes (so nothing outlives pinrun).
-    pub fn new(affinity: usize, memory_limit_bytes: Option<u64>) -> windows::core::Result<Job> {
+    /// A job that pins every process in it to `affinity` (or leaves them unpinned with `None`), optionally limits
+    /// each process's committed memory, and kills everything in it when the last handle closes (so nothing outlives
+    /// pinrun).
+    pub fn new(affinity: Option<usize>, memory_limit_bytes: Option<u64>) -> windows::core::Result<Job> {
         let handle = unsafe { CreateJobObjectW(None, windows::core::PCWSTR::null())? };
         let mut info = JOBOBJECT_EXTENDED_LIMIT_INFORMATION::default();
-        info.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_AFFINITY | JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
-        info.BasicLimitInformation.Affinity = affinity;
+        info.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+        if let Some(affinity) = affinity {
+            info.BasicLimitInformation.LimitFlags |= JOB_OBJECT_LIMIT_AFFINITY;
+            info.BasicLimitInformation.Affinity = affinity;
+        }
         if let Some(limit) = memory_limit_bytes {
             info.BasicLimitInformation.LimitFlags |= JOB_OBJECT_LIMIT_PROCESS_MEMORY;
             info.ProcessMemoryLimit = limit as usize;
@@ -258,6 +263,24 @@ impl Job {
             peak_process_commit_bytes: info.PeakProcessMemoryUsed as u64,
             peak_job_commit_bytes: info.PeakJobMemoryUsed as u64,
         }
+    }
+
+    /// The CPU time every process in the job has used, ended ones included: (user, kernel) in seconds.
+    pub fn cpu_seconds(&self) -> (f64, f64) {
+        let mut info = JOBOBJECT_BASIC_ACCOUNTING_INFORMATION::default();
+        let ok = unsafe {
+            QueryInformationJobObject(
+                Some(self.handle),
+                JobObjectBasicAccountingInformation,
+                &mut info as *mut _ as *mut core::ffi::c_void,
+                std::mem::size_of::<JOBOBJECT_BASIC_ACCOUNTING_INFORMATION>() as u32,
+                None,
+            )
+        };
+        if ok.is_err() {
+            return (0.0, 0.0);
+        }
+        (info.TotalUserTime as f64 / 1e7, info.TotalKernelTime as f64 / 1e7)
     }
 
     pub fn pids(&self) -> Vec<u32> {

@@ -8,6 +8,13 @@ import {
   type TranscriptDoc,
   type TranscriptVersion,
 } from '../domain/transcript';
+import {
+  findMatches,
+  hiddenInWords,
+  replaceInText,
+  replaceInWords,
+  type TextMatch,
+} from '../domain/replace';
 import { staleTurnIds as staleTurnIdsOf, turnSourceHashes } from '../domain/translation';
 import { FOLDER_MESSAGES, FolderError, type FileStat } from '../storage/folder';
 import {
@@ -279,6 +286,96 @@ export const useTranscriptStore = defineStore('transcript', () => {
   }
 
   /**
+   * Replaces the matches of `find` in the Original (text and words) or the English (Phase 38, DECISIONS.md D59).
+   * The replacement goes in as typed, cleaned (D19); an empty one, or no matches, does nothing. A match that no
+   * longer points at `find` in the doc is skipped. `'one'` (Replace) changes, in the turn's words, the occurrence
+   * with the match's index. `'all'` (Replace all) changes every occurrence in the words of the matches' turns, and
+   * in the words of any turn that has more occurrences than its text shows (`hiddenInWords`, e.g. after Edit text),
+   * even with no matches at all. Only turns that change get new objects. The English keeps its `sourceHashes`, so a
+   * replacement there doesn't make a stale turn current; one in the Original makes those turns' English out of date
+   * (D39), as an edit does. The save is debounced. Returns how many of `matches` were replaced (one that already
+   * read as the replacement counts), so the caller can tell a skipped one.
+   */
+  function replaceMatches(
+    version: TranscriptVersion,
+    matches: readonly TextMatch[],
+    replacement: string,
+    find: string,
+    scope: 'one' | 'all',
+  ): number {
+    const current = doc.value;
+    const text = cleanTurnText(replacement);
+    if (!current || text === '') return 0;
+    if (matches.length === 0 && (scope === 'one' || version === 'en')) return 0;
+    let replaced = 0;
+
+    const byTurn = new Map<string, TextMatch[]>();
+    for (const m of matches) byTurn.set(m.turnId, [...(byTurn.get(m.turnId) ?? []), m]);
+    /** Every match of `find` in `source` now, and those of them that were asked for. */
+    const check = (turnId: string, source: string) => {
+      const now = findMatches([{ turnId, text: source }], find);
+      const wanted = byTurn.get(turnId) ?? [];
+      const keep = now.filter((n) => wanted.some((w) => w.start === n.start && w.end === n.end));
+      return { now, keep };
+    };
+
+    const en = current.translations.en;
+    if (version === 'en') {
+      if (!en) return 0;
+      let texts: Record<string, string> | null = null;
+      for (const turnId of byTurn.keys()) {
+        if (!Object.hasOwn(en.texts, turnId)) continue;
+        const source = en.texts[turnId]!;
+        const { keep } = check(turnId, source);
+        replaced += keep.length;
+        const next = keep.length > 0 ? replaceInText(source, keep, text) : source;
+        if (next === source) continue;
+        texts ??= { ...en.texts };
+        texts[turnId] = next;
+      }
+      if (!texts) return replaced;
+      doc.value = { ...current, translations: { ...current.translations, en: { ...en, texts } } };
+      scheduleSave();
+      return replaced;
+    }
+
+    let changed = false;
+    const turns = current.turns.map((turn) => {
+      let nextText = turn.text;
+      let which: 'all' | { index: number; of: number } | null = null;
+      if (byTurn.has(turn.id)) {
+        const { now, keep } = check(turn.id, turn.text);
+        replaced += keep.length;
+        if (keep.length > 0) {
+          nextText = replaceInText(turn.text, keep, text);
+          which =
+            scope === 'one' && keep.length === 1
+              ? { index: now.indexOf(keep[0]!), of: now.length }
+              : 'all';
+        }
+      }
+      // Replace all also takes the name out of words that the text no longer shows.
+      if (!which && scope === 'all' && hiddenInWords(turn.text, turn.words, find) > 0) {
+        which = 'all';
+      }
+      const words = which ? replaceInWords(turn.words, find, text, which) : turn.words;
+      if (nextText === turn.text && words === turn.words) return turn;
+      changed = true;
+      return { ...turn, text: nextText, words };
+    });
+    if (!changed) return replaced;
+
+    // As in editTurnText: a translation from before D39 was made from the text before this change.
+    const translations =
+      en && !en.sourceHashes
+        ? { ...current.translations, en: { ...en, sourceHashes: turnSourceHashes(current.turns) } }
+        : current.translations;
+    doc.value = { ...current, turns, translations };
+    scheduleSave();
+    return replaced;
+  }
+
+  /**
    * Asks Output to show a turn: in English when `english` and there is a translation (a quote's words are the
    * English text), otherwise the original.
    */
@@ -497,6 +594,7 @@ export const useTranscriptStore = defineStore('transcript', () => {
     setTranslation,
     renameSpeaker,
     editTurnText,
+    replaceMatches,
     showTurn,
     clear,
     loadAutosave,

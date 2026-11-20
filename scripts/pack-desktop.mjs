@@ -1,6 +1,6 @@
 // Packs the desktop app as an x64 MSIX for the Microsoft Store (DECISIONS.md D35, docs/reference/desktop.md).
-// Builds the release exe, stages it with the speech engine's DLLs (src-tauri/stt-runtime/, from npm run
-// desktop:stt-runtime; DECISIONS.md D53) and src-tauri/msix/ (the manifest, with package.json's version written in, and
+// Builds the release exe, stages it with the speech engines' DLLs (src-tauri/stt-runtime/, from npm run
+// desktop:stt-runtime; DECISIONS.md D53, D58: the processor's beside the exe, the Vulkan one in vulkan\) and src-tauri/msix/ (the manifest, with package.json's version written in, and
 // its assets), then packs the stage with Microsoft's winapp CLI. Unsigned by default: the Store signs MSIX itself.
 // Usage: npm run desktop:pack [-- --sign]
 //   --sign  signs with a development certificate, devcert.pfx (made on first use, never committed), so the MSIX
@@ -12,12 +12,13 @@ import {
   cpSync,
   existsSync,
   mkdirSync,
+  readdirSync,
   readFileSync,
   rmSync,
   statSync,
   writeFileSync,
 } from 'node:fs';
-import { dirname } from 'node:path';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
@@ -83,33 +84,74 @@ if (sign && existsSync(cert)) {
   }
 }
 
-// 2b. The speech engine's DLLs, exactly as npm run desktop:stt-runtime built and listed them (stt-runtime.json names
-// the files; built.json their sizes and hashes).
-const runtimeDir = path('src-tauri/stt-runtime');
+// 2b. The speech engines' DLLs, exactly as npm run desktop:stt-runtime built and listed them (stt-runtime.json names
+// the files; each built.json their sizes and hashes). Both always ship (DECISIONS.md D58): the processor's beside the
+// exe, and the Vulkan one in its folder.
 const runtimeDefinition = JSON.parse(readFileSync(path('src-tauri/stt-runtime.json'), 'utf8'));
-const runtimeFiles = [...runtimeDefinition.engineFiles, ...runtimeDefinition.msvcRuntime.files];
-if (!existsSync(`${runtimeDir}/built.json`)) {
-  stop(
-    'src-tauri/stt-runtime/ has no engine. Run npm run desktop:stt-runtime first. Nothing was packed.',
-  );
-}
-const built = JSON.parse(readFileSync(`${runtimeDir}/built.json`, 'utf8').replace(/^\uFEFF/, ''));
-if (built.version !== runtimeDefinition.version) {
-  stop(
-    `src-tauri/stt-runtime/ holds ${built.name} ${built.version}, but stt-runtime.json names ` +
-      `${runtimeDefinition.version}. Run npm run desktop:stt-runtime again. Nothing was packed.`,
-  );
-}
-for (const name of runtimeFiles) {
-  const file = `${runtimeDir}/${name}`;
-  const listed = built.files.find((f) => f.name === name);
-  if (!existsSync(file) || !listed)
-    stop(`src-tauri/stt-runtime/${name} is missing. Nothing was packed.`);
-  const sha256 = createHash('sha256').update(readFileSync(file)).digest('hex');
-  if (sha256 !== listed.sha256 || statSync(file).size !== listed.bytes) {
-    stop(`src-tauri/stt-runtime/${name} has changed since it was built. Nothing was packed.`);
+const { vulkan } = runtimeDefinition;
+const msvcFiles = runtimeDefinition.msvcRuntime.files;
+
+/** Stops unless `folder` (under src-tauri/stt-runtime/) holds the engine stt-runtime.json describes, unchanged. */
+function checkEngine({ folder, files, backend, vulkanSdk, rebuild }) {
+  const label = `src-tauri/stt-runtime/${folder ? `${folder}/` : ''}`;
+  const dir = path(label);
+  if (!existsSync(`${dir}/built.json`)) {
+    stop(`${label} has no engine. Run ${rebuild} first. Nothing was packed.`);
   }
+  const built = JSON.parse(readFileSync(`${dir}/built.json`, 'utf8').replace(/^\uFEFF/, ''));
+  if (built.version !== runtimeDefinition.version) {
+    stop(
+      `${label} holds ${built.name} ${built.version}, but stt-runtime.json names ` +
+        `${runtimeDefinition.version}. Run ${rebuild} again. Nothing was packed.`,
+    );
+  }
+  // The processor engine's built.json from Phase 33 predates `backend`.
+  if ((built.backend ?? 'cpu') !== backend) {
+    stop(
+      `${label} holds a ${built.backend} engine, not ${backend}. Run ${rebuild}. Nothing was packed.`,
+    );
+  }
+  if (vulkanSdk && built.vulkanSdk !== vulkanSdk) {
+    stop(
+      `${label} was built with Vulkan SDK ${built.vulkanSdk}, but stt-runtime.json names ${vulkanSdk}. ` +
+        `Run ${rebuild} again. Nothing was packed.`,
+    );
+  }
+  for (const name of files) {
+    const file = `${dir}/${name}`;
+    const listed = built.files.find((f) => f.name === name);
+    if (!existsSync(file) || !listed) stop(`${label}${name} is missing. Nothing was packed.`);
+    const sha256 = createHash('sha256').update(readFileSync(file)).digest('hex');
+    if (sha256 !== listed.sha256 || statSync(file).size !== listed.bytes) {
+      stop(`${label}${name} has changed since it was built. Nothing was packed.`);
+    }
+  }
+  return { dir, files };
 }
+
+const engines = [
+  {
+    // Beside the exe, which loads it from its own folder (src-tauri/src/stt/nemo.rs).
+    to: '',
+    ...checkEngine({
+      folder: '',
+      files: [...runtimeDefinition.engineFiles, ...msvcFiles],
+      backend: 'cpu',
+      rebuild: 'npm run desktop:stt-runtime -- -Only cpu',
+    }),
+  },
+  {
+    // The folder name is VULKAN_FOLDER in src-tauri/src/stt/commands.rs.
+    to: `${vulkan.folder}/`,
+    ...checkEngine({
+      folder: vulkan.folder,
+      files: [...vulkan.engineFiles, ...msvcFiles],
+      backend: 'vulkan',
+      vulkanSdk: vulkan.vulkanSdk,
+      rebuild: 'npm run desktop:stt-runtime -- -Only vulkan',
+    }),
+  },
+];
 
 // 3. The licences Settings shows must list what this build includes.
 try {
@@ -134,8 +176,10 @@ for (const dir of [stage, dirname(stagedManifest)]) {
   mkdirSync(dir, { recursive: true });
 }
 cpSync(exe, `${stage}/describe.exe`);
-// Beside the exe, which loads them from its own folder (src-tauri/src/stt/nemo.rs).
-for (const name of runtimeFiles) cpSync(`${runtimeDir}/${name}`, `${stage}/${name}`);
+for (const engine of engines) {
+  mkdirSync(`${stage}/${engine.to}`, { recursive: true });
+  for (const name of engine.files) cpSync(`${engine.dir}/${name}`, `${stage}/${engine.to}${name}`);
+}
 cpSync(path('src-tauri/msix/Assets'), `${stage}/Assets`, { recursive: true });
 writeFileSync(stagedManifest, manifest.replace(identityVersion, `$1${msixVersion}$2`));
 
@@ -158,10 +202,17 @@ try {
   stop('winapp failed (see above). Nothing was packed.');
 }
 
-const megabytes = (statSync(output).size / 1024 / 1024).toFixed(1);
+/** The bytes of every file under `dir`. */
+function treeBytes(dir) {
+  return readdirSync(dir, { recursive: true, withFileTypes: true })
+    .filter((entry) => entry.isFile())
+    .reduce((sum, entry) => sum + statSync(join(entry.parentPath, entry.name)).size, 0);
+}
+
+const mb = (bytes) => (bytes / 1024 / 1024).toFixed(1);
 console.log(`
 pack-desktop: done.
-  File:     release/${name} (${megabytes} MB)
+  File:     release/${name} (${mb(statSync(output).size)} MB; installed ${mb(treeBytes(stage))} MB)
   Version:  ${msixVersion}
   Signed:   ${sign ? 'with devcert.pfx, for this PC only' : 'no: for the Store, which signs it'}`);
 if (sign) {

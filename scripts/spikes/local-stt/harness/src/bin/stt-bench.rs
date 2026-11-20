@@ -1,8 +1,8 @@
 //! stt-bench: one local transcription of one recording, measured (Phase 33, Task 2; M2–M10).
 //!
-//!   stt-bench RECORDING --asr MODEL [--diar MODEL] [--threads N] [--mode combined|words|speakers|all]
+//!   stt-bench RECORDING --asr MODEL [--diar MODEL] [--threads N] [--device cpu|vulkan:N] [--mode combined|words|speakers|all]
 //!             [--label NAME] [--out PATH] [--bin DIR] [--diar-preset NAME] [--language CODE]
-//!             [--cancel-after SECONDS] [--reuse-wav]
+//!             [--cancel-after SECONDS] [--reuse-wav] [--concurrency N]
 //!
 //! MODEL is a GGUF path or an id from models.json. The driver is NeMo-Speech.cpp's own CLI (`nemo-speech`), run as a
 //! child process with local model paths only (it then makes no network requests) and NEMO_SPEECH_MODEL_DIR pointed
@@ -36,6 +36,8 @@ struct Options {
     asr: Option<PathBuf>,
     diar: Option<PathBuf>,
     threads: u32,
+    device: String,
+    concurrency: Option<u32>,
     mode: String,
     label: Option<String>,
     out: Option<PathBuf>,
@@ -66,6 +68,8 @@ fn parse() -> Result<Options, String> {
         asr: None,
         diar: None,
         threads: 8,
+        device: "cpu".into(),
+        concurrency: None,
         mode: "combined".into(),
         label: None,
         out: None,
@@ -90,6 +94,8 @@ fn parse() -> Result<Options, String> {
             "--asr" => o.asr = Some(model_path(&value()?)?),
             "--diar" => o.diar = Some(model_path(&value()?)?),
             "--threads" => o.threads = value()?.parse().map_err(|_| "bad --threads")?,
+            "--device" => o.device = value()?,
+            "--concurrency" => o.concurrency = Some(value()?.parse().map_err(|_| "bad --concurrency")?),
             "--mode" => o.mode = value()?,
             "--label" => o.label = Some(value()?),
             "--out" => o.out = Some(value()?.into()),
@@ -323,7 +329,8 @@ fn run() -> Result<(), String> {
     let label = o.label.clone().unwrap_or_else(|| {
         let asr = o.asr.as_deref().map(stem).unwrap_or_else(|| "none".into());
         let diar = o.diar.as_deref().map(stem).unwrap_or_else(|| "none".into());
-        format!("{}.{}.{}.{}.t{}", stem(&o.recording), o.mode, asr, diar, o.threads)
+        let device = if o.device == "cpu" { String::new() } else { format!(".{}", o.device.replace(':', "")) };
+        format!("{}.{}.{}.{}.t{}{device}", stem(&o.recording), o.mode, asr, diar, o.threads)
     });
     let runs_dir = out_dir().join("runs");
     std::fs::create_dir_all(&runs_dir).map_err(|e| e.to_string())?;
@@ -372,7 +379,7 @@ fn run() -> Result<(), String> {
             "--model".into(),
             o.asr.as_ref().map(|p| p.display().to_string()).unwrap_or_default(),
             "--device".into(),
-            "cpu".into(),
+            o.device.clone(),
             "--format".into(),
             "json".into(),
             "--asr.backend.threads".into(),
@@ -381,6 +388,10 @@ fn run() -> Result<(), String> {
             out_flag.to_string(),
             out.display().to_string(),
         ];
+        // Phase 37: the CLI batches a folder's files on a GPU; --concurrency 1 sends them one at a time, as the app does.
+        if let Some(n) = o.concurrency {
+            a.extend(["--concurrency".into(), n.to_string()]);
+        }
         if let Some(lang) = &o.language {
             a.extend(["--language".into(), lang.clone()]);
         }
@@ -399,7 +410,7 @@ fn run() -> Result<(), String> {
             "--model".into(),
             o.diar.as_ref().map(|p| p.display().to_string()).unwrap_or_default(),
             "--device".into(),
-            "cpu".into(),
+            o.device.clone(),
             "--format".into(),
             "json".into(),
             "--force".into(),
@@ -524,6 +535,8 @@ fn run() -> Result<(), String> {
         "decode": decode_report,
         "models": { "asr": o.asr.as_ref().map(|p| p.display().to_string()), "diar": o.diar.as_ref().map(|p| p.display().to_string()), "diarPreset": o.diar_preset },
         "threads": o.threads,
+        "device": o.device,
+        "concurrency": o.concurrency,
         "mode": o.mode,
         "parallel": o.parallel,
         "chunking": chunks.as_ref().map(|(dir, list, sec)| json!({

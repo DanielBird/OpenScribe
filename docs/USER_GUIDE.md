@@ -102,6 +102,14 @@ What's different on this computer:
 - **Up to 8 speakers.** Number of speakers and Zero retention aren't offered.
 - **Ogg Opus files can't be read.** Convert them to MP3, or transcribe them with ElevenLabs.
 
+**On the graphics card:** if your computer has a graphics card, Settings → **Transcribe on this computer** shows
+**Run on**, with **Processor** and each card by name. **Processor** is the default. A card may be faster or slower than
+the processor, depending on the computer: try one recording on each and compare **Last recording**. Under
+**Timings**, **Ran on** says which one the last recording used. The first run on a card takes a few seconds longer
+to start. If a card you chose isn't there (a laptop undocked from it, say), DeScribe uses the processor: **Ran on**
+names the card it didn't use, and **Why** says what went wrong. It goes back to the card when the card returns, unless
+you choose **Processor** meanwhile.
+
 To free the space, click **Remove** on Settings. Setup then goes back to ElevenLabs. Uninstalling DeScribe removes the
 models too.
 
@@ -118,6 +126,23 @@ timestamp to listen.
 The Word file uses the corrected text. If there is an English translation, each turn you change is marked
 **Changed since translation** in the English view, and **Translate** becomes **Update English…**, which translates
 only those turns.
+
+### Replace a name
+
+To take a person's name out of the transcript, for example to replace *Anna* with *Participant 1*, click **Find and
+replace…** above the transcript. If you select the name in a turn first, it's filled in for you.
+1. Type the name in **Find**. The list shows each place it's said, with the speaker, the time and the words around
+   it. Case and accents don't matter (*Muller* finds *Müller*), but only whole words are found: *Anna* finds
+   *Anna's* and *Anna-Lena*, not *Annabel*.
+2. Type what goes in its place in **Replace with**.
+3. **Replace** changes the highlighted match and moves to the next. **Next** leaves it as it is. **Replace all**
+   changes every match left, after asking. There is no undo. Replace all, and replacing the last match, also take
+   the name out of the word timings saved with the transcript, where it stays after **Edit text** takes it out of
+   the text.
+
+It changes the version on screen. If there is an English translation, switch to **English** and replace the name
+there too. The Word file and the project get the new text, but the speaker names, the recording's file name and the
+audio keep the name: rename speakers in the speaker panel.
 
 ## 5. Glossary tips
 
@@ -294,6 +319,10 @@ what it finds, and uses the summaries for an overview. Then it answers in Englis
   Chats are saved in the project folder, where everyone who can open it can read them. Nothing is sent anywhere
   else. The About section on Settings says the same and links to each
   provider's privacy and terms pages.
+- **Names:** to keep people's names from Anthropic and Google, [replace them](#replace-a-name) **before** you
+  translate or add the session to a project, since both send the text. The speaker names and the glossary are sent
+  too, so rename the speakers and leave names out of the glossary. The audio and the recording's file name still
+  have the names.
 - **Zero retention** asks ElevenLabs not to store your audio or transcript. Only ElevenLabs Enterprise plans can use
   it. With another plan, the run stops with a message that tells you to switch it off.
 - Your glossary, settings and last transcript are saved in this browser. **Settings → Clear saved data** deletes them.
@@ -323,6 +352,7 @@ what it finds, and uses the summaries for an overview. Then it answers in Englis
 | The speech models don't download: "Your network didn't allow the download from huggingface.co" | A company network may block Hugging Face. Try another network (at home, or a phone's hotspot), or ask IT to allow `huggingface.co` and `us.aws.cdn.hf.co`. |
 | "The speech models aren't on this computer any more" | Click **Open Settings** and download them again, or choose **ElevenLabs** on Setup. |
 | "This computer ran out of memory while transcribing" | Close other apps and click **Try again**, or transcribe with ElevenLabs. |
+| "The graphics card (…) stopped while transcribing" | Click **Try on the processor** to run this recording on the processor. If it keeps happening, choose **Processor** under **Run on** in Settings, or update the card's driver. |
 | "This browser can't open project folders" | Open DeScribe in Edge or Chrome. |
 | "This folder isn't a DeScribe project" | Choose the folder that has `describe-project.json` in it, or use **New project…**. |
 | "This file is only in OneDrive and the computer is offline" | Connect to the internet, or set the project folder to **Always keep on this device**. |

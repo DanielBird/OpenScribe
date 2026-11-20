@@ -1,0 +1,119 @@
+{
+  "durationSec": 5.0,
+  "steps": [
+    {
+      "afterMs": 150,
+      "doneSec": 1.5
+    },
+    {
+      "afterMs": 150,
+      "doneSec": 3.0
+    },
+    {
+      "afterMs": 150,
+      "doneSec": 5.0
+    }
+  ],
+  "language": null,
+  "words": [
+    {
+      "text": "Thanks",
+      "start": 0.2,
+      "end": 0.5,
+      "confidence": 1.0
+    },
+    {
+      "text": "for",
+      "start": 0.5,
+      "end": 0.65,
+      "confidence": 1.0
+    },
+    {
+      "text": "coming",
+      "start": 0.65,
+      "end": 1.0,
+      "confidence": 1.0
+    },
+    {
+      "text": "in",
+      "start": 1.0,
+      "end": 1.15,
+      "confidence": 1.0
+    },
+    {
+      "text": "today.",
+      "start": 1.15,
+      "end": 1.6,
+      "confidence": 1.0
+    },
+    {
+      "text": "Um,",
+      "start": 2.0,
+      "end": 2.2,
+      "confidence": 1.0
+    },
+    {
+      "text": "happy",
+      "start": 2.3,
+      "end": 2.6,
+      "confidence": 1.0
+    },
+    {
+      "text": "to",
+      "start": 2.6,
+      "end": 2.7,
+      "confidence": 1.0
+    },
+    {
+      "text": "to",
+      "start": 2.7,
+      "end": 2.8,
+      "confidence": 1.0
+    },
+    {
+      "text": "help.",
+      "start": 2.8,
+      "end": 3.2,
+      "confidence": 1.0
+    },
+    {
+      "text": "Shall",
+      "start": 3.6,
+      "end": 3.8,
+      "confidence": 1.0
+    },
+    {
+      "text": "we",
+      "start": 3.8,
+      "end": 3.9,
+      "confidence": 1.0
+    },
+    {
+      "text": "start?",
+      "start": 3.9,
+      "end": 4.4,
+      "confidence": 1.0
+    }
+  ],
+  "speakerSegments": [
+    {
+      "speaker": 0,
+      "start": 0.1,
+      "end": 1.7
+    },
+    {
+      "speaker": 1,
+      "start": 1.9,
+      "end": 3.3
+    },
+    {
+      "speaker": 0,
+      "start": 3.5,
+      "end": 4.5
+    }
+  ],
+  "cardFailure": {
+    "kind": "gpu",
+    "detail": "ggml_vulkan: vk::Queue::submit: ErrorDeviceLost"
+  }
+}

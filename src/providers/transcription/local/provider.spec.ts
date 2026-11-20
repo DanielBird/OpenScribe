@@ -28,7 +28,9 @@ const RESULT: LocalSttResult = {
     speakersSec: 0.5,
     totalSec: 1.1,
     threads: 8,
+    device: null,
     peakMemoryBytes: 900_000_000,
+    fellBack: null,
   },
 };
 
@@ -47,8 +49,8 @@ const input = (overrides: Partial<TranscriptionInput> = {}): TranscriptionInput 
 function fakeBridge(
   outcome: LocalSttResult | unknown = RESULT,
   progress: TranscriptionProgress[] = [],
-): LocalSttBridge & { calls: { file: File; languageHint: string }[] } {
-  const calls: { file: File; languageHint: string }[] = [];
+): LocalSttBridge & { calls: { file: File; languageHint: string; device: unknown }[] } {
+  const calls: { file: File; languageHint: string; device: unknown }[] = [];
   return {
     calls,
     status: async () => ({
@@ -56,7 +58,7 @@ function fakeBridge(
       pack: { id: 'p', version: '1', languages: ['en'], maxSpeakers: 8, downloadBytes: 1 },
     }),
     async transcribe(file, options, { onProgress, signal }) {
-      calls.push({ file, languageHint: options.languageHint });
+      calls.push({ file, languageHint: options.languageHint, device: options.device });
       for (const p of progress) onProgress(p);
       if (signal.aborted) throw new LocalSttError('cancelled', 'cancelled');
       if (outcome === RESULT) return RESULT;
@@ -64,6 +66,7 @@ function fakeBridge(
     },
     download: () => Promise.reject(new Error('unused')),
     removeModels: () => Promise.reject(new Error('unused')),
+    devices: () => Promise.resolve([]),
   };
 }
 
@@ -149,6 +152,7 @@ describe('createLocalProvider', () => {
       const shouldTryAgain = [
         'out-of-memory',
         'engine',
+        'gpu',
         'busy',
         'downloading',
         'cancelled',
@@ -166,6 +170,35 @@ describe('createLocalProvider', () => {
       messages.add(error.userMessage);
     }
     expect(messages.size).toBe(LOCAL_ERROR_KINDS.length);
+  });
+
+  it('runs on the processor unless the input names a card, and passes the card on (Phase 37)', async () => {
+    const bridge = fakeBridge();
+    const provider = createLocalProvider(bridge);
+    await provider.transcribe(input(), opts());
+    const card = { name: 'AMD Radeon 740M Graphics', nth: 0 };
+    await provider.transcribe(input({ device: card }), opts());
+    expect(bridge.calls.map((c) => c.device)).toEqual([null, card]);
+  });
+
+  it('names the card when a run on it fails, and offers the processor', async () => {
+    const error = (await createLocalProvider(fakeBridge(new LocalSttError('gpu', 'vk lost')))
+      .transcribe(input({ device: { name: 'AMD Radeon 740M Graphics', nth: 0 } }), opts())
+      .catch((e: unknown) => e)) as ProviderError;
+    expect(error.userMessage).toBe(
+      'The graphics card (AMD Radeon 740M Graphics) stopped while transcribing.',
+    );
+    expect(error.opts.retryOn).toBe('processor');
+    expect(error.retryable).toBe(true);
+  });
+
+  it('names the second of two identical cards as Run on does (audit GPU-6)', async () => {
+    const error = (await createLocalProvider(fakeBridge(new LocalSttError('gpu', 'vk lost')))
+      .transcribe(input({ device: { name: 'NVIDIA RTX A2000', nth: 1 } }), opts())
+      .catch((e: unknown) => e)) as ProviderError;
+    expect(error.userMessage).toBe(
+      'The graphics card (NVIDIA RTX A2000 (2)) stopped while transcribing.',
+    );
   });
 
   it('names Ogg Opus when it can’t read one', async () => {

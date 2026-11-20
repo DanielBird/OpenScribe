@@ -2,6 +2,7 @@ import { defineStore } from 'pinia';
 import { computed, ref, shallowRef, watch, type Ref } from 'vue';
 import { randomAuthorName, type ChatAuthor } from '../domain/chat';
 import { checkFile, type FileCheck } from '../domain/filecheck';
+import { cardLabel } from '../domain/gpuCard';
 import { languageName, type LanguageHint, type LlmProviderId } from '../domain/transcript';
 import {
   agentBudgetLimits,
@@ -11,8 +12,9 @@ import {
 } from '../features/agent/limits';
 import { z } from '../lib/zod';
 import { probeDuration } from '../media/probeDuration';
-import { getTranscriptionProvider, verifyLlmKey } from '../providers/index';
-import type { TranscriptionProviderId } from '../providers/transcription/types';
+import { getLocalSttBridge, getTranscriptionProvider, verifyLlmKey } from '../providers/index';
+import type { GpuDevice } from '../providers/transcription/local/bridge';
+import type { GpuChoice, TranscriptionProviderId } from '../providers/transcription/types';
 import {
   AGENT_EFFORTS,
   DEFAULT_AGENT_EFFORT,
@@ -69,6 +71,16 @@ const PrefsSchema = z.object({
   transcriptionEngine: z.enum(['elevenlabs', 'local']).catch('elevenlabs'),
   /** Drop fillers and doubled words from a local transcript (the maintainer, 2026-11-15). No UI yet. */
   localTextCleanUp: z.boolean().catch(true),
+  /**
+   * Where the speech models run in the desktop app (Phase 37, decision 3): the processor, or a graphics card by its
+   * name and which of the cards with that name it is. Kept while the card is gone, so it comes back with it.
+   */
+  localDevice: z
+    .union([
+      z.literal('cpu'),
+      z.object({ name: z.string().min(1), nth: z.number().int().nonnegative() }),
+    ])
+    .catch('cpu'),
 });
 type Prefs = z.infer<typeof PrefsSchema>;
 
@@ -82,6 +94,33 @@ function loadPrefs(): Prefs {
 /** Merges into the stored object, so prefs saved elsewhere survive. */
 function savePrefs(prefs: Partial<Prefs>): void {
   writeJson('local', PREFS_KEY, { ...readJson('local', PREFS_KEY, {}, isRecord), ...prefs });
+}
+
+/** One choice in Settings' **Run on** group: the processor, or a graphics card. */
+export interface DeviceOption {
+  id: string;
+  label: string;
+  choice: 'cpu' | GpuChoice;
+}
+
+const PROCESSOR_OPTION: DeviceOption = { id: 'cpu', label: 'Processor', choice: 'cpu' };
+
+/**
+ * The processor, then each card in ggml's order. `nth` counts the earlier cards with the same name, and only a repeated
+ * name gets a number in its label (`cardLabel`), so two identical cards can be told apart.
+ */
+function deviceOptionsFor(devices: readonly GpuDevice[]): DeviceOption[] {
+  const seen = new Map<string, number>();
+  const cards = devices.map((device, index): DeviceOption => {
+    const nth = seen.get(device.name) ?? 0;
+    seen.set(device.name, nth + 1);
+    return {
+      id: `gpu-${index}`,
+      label: cardLabel({ name: device.name, nth }),
+      choice: { name: device.name, nth },
+    };
+  });
+  return [PROCESSOR_OPTION, ...cards];
 }
 
 const CHAT_AUTHOR_KEY = 'chatAuthor';
@@ -135,6 +174,60 @@ export const useSettingsStore = defineStore('settings', () => {
     () => __DESKTOP__ && !speechPack.checked && transcriptionEngine.value === 'local',
   );
   const localTextCleanUp = ref(prefs.localTextCleanUp);
+
+  // --- Where the models run (Phase 37) ------------------------------------------------------------
+
+  /** The saved choice, sent with every run on this computer: Rust uses the processor when the card is gone. */
+  const localDevice = ref<'cpu' | GpuChoice>(prefs.localDevice);
+  watch(localDevice, (device) => savePrefs({ localDevice: device }), { flush: 'sync' });
+  /**
+   * Saves a choice in **Run on**. Settings calls it on `click` as well as `change`, since a click on the radio already
+   * checked (**Processor**, while the saved card is gone) fires no `change` (audit GPU-4). The same choice again is a
+   * no-op, so the second event writes nothing.
+   */
+  function setLocalDevice(choice: 'cpu' | GpuChoice): void {
+    const saved = localDevice.value;
+    if (
+      choice === 'cpu'
+        ? saved === 'cpu'
+        : saved !== 'cpu' && saved.name === choice.name && saved.nth === choice.nth
+    )
+      return;
+    localDevice.value = choice === 'cpu' ? 'cpu' : { name: choice.name, nth: choice.nth };
+  }
+  /** The graphics cards Rust last listed. Empty until Settings asks, and without a card or Vulkan. */
+  const gpuDevices = shallowRef<GpuDevice[]>([]);
+  let listing: Promise<void> | null = null;
+  /** Asks Rust for the cards (Settings, when the models are ready). Nothing asks at launch (decision 2). */
+  function refreshDevices(): Promise<void> {
+    if (!__DESKTOP__) return Promise.resolve();
+    const bridge = getLocalSttBridge();
+    if (!bridge) return Promise.resolve();
+    listing ??= bridge
+      .devices()
+      .then((devices) => {
+        gpuDevices.value = devices;
+      })
+      .catch((cause: unknown) => {
+        gpuDevices.value = [];
+        console.warn('DeScribe: the graphics cards could not be listed', cause);
+      })
+      .finally(() => {
+        listing = null;
+      });
+    return listing;
+  }
+  const deviceOptions = computed(() => deviceOptionsFor(gpuDevices.value));
+  /** The option checked in Settings: the saved card if it's listed, else the processor (decision 4). */
+  const checkedDevice = computed<DeviceOption>(() => {
+    const saved = localDevice.value;
+    if (saved === 'cpu') return PROCESSOR_OPTION;
+    return (
+      deviceOptions.value.find(
+        (o) => o.choice !== 'cpu' && o.choice.name === saved.name && o.choice.nth === saved.nth,
+      ) ?? PROCESSOR_OPTION
+    );
+  });
   const transcription = computed(() => getTranscriptionProvider(transcriptionEngine.value));
   const limits = computed(() => transcription.value.limits);
   /** Whether transcribing needs the ElevenLabs key. */
@@ -375,6 +468,7 @@ export const useSettingsStore = defineStore('settings', () => {
     userName.value = defaults.userName;
     preferredEngine.value = defaults.transcriptionEngine;
     localTextCleanUp.value = defaults.localTextCleanUp;
+    localDevice.value = defaults.localDevice;
     // The watchers above have just saved the defaults (flush: 'sync'); remove them instead.
     removeKey('local', PREFS_KEY);
     // A new chat identity: chats saved before read as someone else's (D29).
@@ -477,6 +571,12 @@ export const useSettingsStore = defineStore('settings', () => {
     transcription,
     limits,
     localTextCleanUp,
+    localDevice,
+    setLocalDevice,
+    gpuDevices,
+    refreshDevices,
+    deviceOptions,
+    checkedDevice,
     keyRequired,
     languageHint,
     numSpeakers,

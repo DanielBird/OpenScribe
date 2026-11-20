@@ -1206,3 +1206,75 @@ summarise them.
   - **The search is kept** for the way back (`useProjectUi`), since leaving Analyse unmounts it.
 - **Why:** a quote is checked by reading it in context; Copy alone left the reader to find the turn by hand.
 - **Consequences:** one confirmation for every Open, rendered by ProjectView (`useOpenTranscript`).
+
+### D58 — Transcribing on the graphics card, by the user's choice (2026-11-20; Phase 37)
+- **Decision** (maintainer, answering Phase 37's planning questions): the desktop app can run both speech models on a
+  graphics card, through **Vulkan**, as well as on the processor.
+  - **Any card:** AMD, Intel or NVIDIA. The work laptop's Radeon 740M is the one it's measured on.
+  - **The user chooses, in Settings, once:** **Run on** in *Transcribe on this computer*, with **Processor** and each
+    card by its driver's name. **Processor is the default.** Setup doesn't change.
+  - **It ships whatever the laptop's speed,** as D55 did for the processor. The app doesn't measure or recommend
+    either; which is faster on a given computer is the user's to find out.
+  - **Both models run on the chosen card.**
+  - **A failure on the card says so** and offers **Try on the processor**, for that run; the setting stays.
+  - **Accuracy isn't measured:** a few words differing from the processor's transcript is fine.
+  - **Size matters little:** D50's limit of 40 MB more in the MSIX doesn't apply to the Vulkan engine.
+  - **NeMo-Speech.cpp stays at v0.3.0** for both engines.
+  - The agent may install the LunarG Vulkan SDK on the maintainer's PC and run NVIDIA's prebuilt v0.3.0 Vulkan release
+    there, for Phase 37's first check.
+- **How, as planned** (Phase 37's *Decided in this file*): a second engine, built from the same source with
+  `-Backend vulkan`, in a `vulkan\` folder beside the processor engine, which stays byte for byte as it is. The cards
+  are found by a worker process (`--stt-worker --devices`), never at launch. A saved card that's gone falls back to
+  the processor without a message, as D56 does for the models.
+- **Why:**
+  - **Vulkan** is the only way to reach the work laptop's Radeon that keeps the engine, its C API and the models.
+    CUDA reaches only NVIDIA cards and adds 110–640 MB; ONNX Runtime with DirectML or Windows ML would replace the
+    engine and need third-party conversions of the models (Phase 33).
+  - **Two engines:** a Vulkan build imports `vulkan-1.dll`, so on a computer without it one combined engine would
+    fail entirely, and its processor path uses stock ggml rather than the patched build Phases 33–36 measured.
+  - **The user's choice:** the gain on the laptop is uncertain (an estimate of up to 2×, from the 740M's 4 compute
+    units and the shared 15–30 W), while a dedicated card may gain far more.
+- **Consequences:**
+  - A new prerequisite for building the desktop app: the LunarG Vulkan SDK, pinned in `stt-runtime.json` (1.4.363.0).
+  - The MSIX grows from 5.5 MB to **21.1 MB**, and the installed app from 16.6 MB to 65.5 MB (measured, Phase 37's
+    Task 6).
+  - The worker gains a device in its job, two events (`device-missing`, and `device-found` after audit GPU-2) and an
+    error kind (`gpu`); the page gains the pref `localDevice` (optional, so D18 doesn't apply) and the command
+    `stt_devices`. A run that falls back keeps why in its timings, `fellBack`, which Settings shows under Timings
+    (audit GPU-3).
+  - Phase 36's *Out of scope* "any setting for … the GPU" is superseded; desktop.md's E7 holds with Processor chosen.
+  - The transcript doesn't record the device (it would be a shape change, D38).
+- **What the build found** (Phase 37, 2026-11-20; the numbers in local-stt.md's *As built (Phase 37)*):
+  - **Both of the PC's cards transcribe both models.** The app's worker did an hour in 25.8 s on the RTX 2070 SUPER
+    and 335.2 s on the UHD 770, against 201.9 s on the processor. 0.15–0.26 % of words differ from the processor's,
+    and speakers agree on 99.95–100 %. So an integrated card can be slower than the processor, as feared, while
+    leaving the processor almost free. The work laptop's numbers are G9's.
+  - **Batching chunks on a card is broken in v0.3.0** (it crashes, or silently returns empty words). The worker sends
+    one chunk at a time, and must keep doing so.
+  - **The two models load one at a time on a card** (decision 8 changed): loading both at once let ggml-vulkan
+    create the card's device twice, and the process aborted. After loading they run on their two threads as planned.
+  - **Stock ggml on the processor is 13 % slower** than NVIDIA's patched build, which confirms the two engines.
+  - **Finding the cards needs two DLLs:** ggml's device list is in `ggml.dll`, each device's name, type and memory in
+    `ggml-base.dll`.
+  - **Committed memory roughly doubles on a card** (8.7–9.4 GB against 4.9 GB), RAM in use doesn't: the worker has no
+    commit limit. The first run on a card loads for 6–8 s while its pipelines are built.
+  - `GGML_VK_PREFER_HOST_MEMORY` wasn't needed (decision 9).
+  - Two cards with the same name are told apart by " (2)", " (3)": in Settings' **Run on**, a failure's message and
+    **Ran on** alike (`cardLabel`, audit GPU-6).
+
+### D59 — Find and replace names, by hand (2026-11-20; Phase 38)
+- **Decision** (maintainer, answering Phase 38's planning questions): a **Find and replace** dialog on the Output
+  page replaces one name at a time in the version on screen (the Original or the English). Matching is by whole
+  words, ignoring case and accents. The user steps through the matches (Next, Replace) or replaces them all after
+  a confirmation; there is no undo. A replacement in the Original also changes the machine's word list. Speaker
+  labels, the file name and summaries are not changed.
+- **Why:** colleagues need to take participants' names out of a transcript before it is sent to Claude or Gemini.
+  Reading through and editing each turn is slow and misses some. Finding names automatically (future.md F5) is
+  later work; this is the manual step it will feed.
+- **Consequences:**
+  - `Turn.text`, `Turn.words` and `translations.en.texts` change; the stored shape doesn't, so D18 doesn't apply.
+  - `Turn.words` no longer always hold the machine transcription: a replaced word has the replacement and
+    `logprob: null`. Anything that reads words (F1, word highlighting) must allow for that, as for D19.
+  - A replacement in the Original makes those turns' English out of date (D39), and a summary out of date, as any
+    edit does.
+  - Names stay in the audio, the speaker labels, the file name and the glossary terms saved with the request.
