@@ -31,6 +31,18 @@ function named(): TranscriptDoc {
   return { ...doc, turns: doc.turns.map((t) => ({ ...t, text: texts[t.id] ?? t.text })) };
 }
 
+/** `doc` with Anna at the end of t5's words but not in its text, as after Edit text took it out. */
+function withHiddenAnna(doc: TranscriptDoc): TranscriptDoc {
+  return {
+    ...doc,
+    turns: doc.turns.map((t) =>
+      t.id === 't5'
+        ? { ...t, words: [...t.words, { text: 'Anna', start: t.end, end: t.end, logprob: -0.1 }] }
+        : t,
+    ),
+  };
+}
+
 /** English for `named()`: Anna only in t2's English, and t5 has no English of its own. */
 const ENGLISH = {
   t1: 'Good afternoon.',
@@ -234,6 +246,82 @@ describe('ReplaceDialog', () => {
     expect(live()).toBe('3 replaced');
   });
 
+  it('goes back to Find after replacing the last match, as Replace is disabled then', async () => {
+    await open({ initialFind: 'ANNA' });
+    await typeReplace('P1');
+    await rows()[2]!.trigger('click');
+    for (let i = 0; i < 3; i++) {
+      (button('Replace').element as HTMLButtonElement).focus(); // as a click does
+      await button('Replace').trigger('click');
+    }
+    await nextTick();
+    expect(button('Replace').attributes('disabled')).toBeDefined();
+    expect(document.activeElement).toBe(input('Find').element);
+  });
+
+  it('replacing the last match also takes the name out of words the text no longer shows', async () => {
+    const transcript = await open({ doc: withHiddenAnna(named()), initialFind: 'Anna' });
+    await typeReplace('P1');
+    for (let i = 0; i < 3; i++) await button('Replace').trigger('click');
+    expect(transcript.doc!.turns[4]!.words.at(-1)!.text).toBe('P1');
+    expect(count().text()).toBe('3 replaced');
+  });
+
+  it('offers Replace all for a name only the words still have', async () => {
+    const doc = withHiddenAnna(makeDoc());
+    const transcript = await open({ doc, initialFind: 'Anna' });
+    expect(rows()).toHaveLength(0);
+    expect(count().text()).toBe('1 left in the saved word timings');
+    expect(button('Next').attributes('disabled')).toBeDefined();
+    expect(button('Replace all').attributes('disabled')).toBeDefined();
+
+    await typeReplace('P1');
+    expect(button('Replace').attributes('disabled')).toBeDefined();
+    await button('Replace all').trigger('click');
+    await nextTick();
+    expect(wrapper!.get('.question').text()).toBe('Replace all 1?');
+    await button('Replace all').trigger('click');
+    await nextTick();
+
+    expect(transcript.doc!.turns[4]!.words.at(-1)!.text).toBe('P1');
+    expect(transcript.doc!.turns[4]!.text).toBe(doc.turns[4]!.text);
+    expect(count().text()).toBe('1 replaced');
+    expect(document.activeElement).toBe(input('Find').element);
+  });
+
+  it('lists the turn again when a Replace no longer points at the name, and counts nothing', async () => {
+    const transcript = await open({ initialFind: 'Anna' });
+    await typeReplace('P1');
+    // The text moved under the list (Edit text is hidden while the dialog is open; this stands in for any change).
+    transcript.editTurnText('t1', 'Liebe Anna fragte anna nach dem Weg.');
+    await button('Replace').trigger('click');
+
+    expect(transcript.doc!.turns[0]!.text).toBe('Liebe Anna fragte anna nach dem Weg.');
+    expect(rows()).toHaveLength(3);
+    expect(currentRow()[0]!.get('.snippet').text()).toBe('Liebe Anna fragte anna nach dem Weg.');
+    expect(count().text()).toBe('1 of 3');
+
+    await button('Replace').trigger('click');
+    expect(transcript.doc!.turns[0]!.text).toBe('Liebe P1 fragte anna nach dem Weg.');
+    await button('Replace all').trigger('click');
+    await nextTick();
+    await button('Replace all').trigger('click');
+    expect(count().text()).toBe('3 replaced');
+  });
+
+  it('Replace all pressed while a Find waits asks about what that Find finds', async () => {
+    await open({ initialFind: 'Weg' });
+    await typeReplace('P1');
+    await input('Find').setValue('Anna');
+    await button('Replace all').trigger('click');
+    await nextTick();
+    expect(wrapper!.get('.question').text()).toBe('Replace all 3?');
+    vi.advanceTimersByTime(DELAY);
+    await nextTick();
+    expect(wrapper!.find('.question').exists()).toBe(true);
+    expect(document.activeElement).toBe(button('Cancel').element);
+  });
+
   it('Replace all asks first, with focus on Cancel, and Cancel changes nothing', async () => {
     const transcript = await open({ initialFind: 'Anna' });
     const before = transcript.doc;
@@ -317,7 +405,8 @@ describe('ReplaceDialog', () => {
 
   it('closes on Close and on Escape', async () => {
     await open();
-    await button('Close').trigger('click');
+    // The × in the corner, named by its aria-label.
+    await wrapper!.get('button[aria-label="Close"]').trigger('click');
     expect(wrapper!.emitted('close')).toHaveLength(1);
 
     const cancel = new Event('cancel', { cancelable: true });

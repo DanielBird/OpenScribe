@@ -98,11 +98,43 @@ export function replaceInText(
 }
 
 /**
+ * The ranges that aren't inside an occurrence of `replacement` in `text` (exactly as typed). A replacement that
+ * contains Find ("Anna" → "Anna B.") has a match of Find in it, and that one must not be replaced again.
+ */
+export function withoutReplacements<T extends { start: number; end: number }>(
+  text: string,
+  ranges: readonly T[],
+  replacement: string,
+): T[] {
+  if (replacement === '' || ranges.length === 0) return ranges.slice();
+  const spans: { start: number; end: number }[] = [];
+  for (let at = text.indexOf(replacement); at !== -1; at = text.indexOf(replacement, at + 1)) {
+    spans.push({ start: at, end: at + replacement.length });
+  }
+  if (spans.length === 0) return ranges.slice();
+  return ranges.filter((r) => !spans.some((s) => s.start <= r.start && r.end <= s.end));
+}
+
+/** The words joined by single spaces, with where each one starts in the joined text. */
+function joinWords(words: readonly Word[]): { joined: string; from: number[] } {
+  const from: number[] = [];
+  let joined = '';
+  for (const [i, word] of words.entries()) {
+    if (i > 0) joined += ' ';
+    from.push(joined.length);
+    joined += word.text;
+  }
+  return { joined, from };
+}
+
+/**
  * The words with `find` replaced (Phase 38, decision 7). A match may start and end inside a word ("Anna's"): the
  * first word of the run becomes the text before the match, the replacement and the text after it, with the first
- * word's start, the last word's end and no logprob; the run's other words go. `which` is every occurrence, or the
- * one at `index` when the words have as many occurrences as the turn's text (`of`), otherwise every one.
- * Returns `words` itself when nothing changes.
+ * word's start, the last word's end and no logprob; the run's other words go. Matches that share a word are
+ * replaced together, in one new word. `which` is every occurrence, or the one at `index` when the words have as
+ * many occurrences as the turn's text (`of`), otherwise every one. Every occurrence leaves out those inside the
+ * replacement itself, so a replacement that contains Find isn't replaced again. Returns `words` itself when nothing
+ * changes.
  */
 export function replaceInWords(
   words: readonly Word[],
@@ -112,35 +144,57 @@ export function replaceInWords(
 ): Word[] {
   const pattern = compile(find);
   if (!pattern || words.length === 0) return words as Word[];
-
-  // The words joined by single spaces, with where each one starts.
-  const from: number[] = [];
-  let joined = '';
-  for (const [i, word] of words.entries()) {
-    if (i > 0) joined += ' ';
-    from.push(joined.length);
-    joined += word.text;
-  }
+  const { joined, from } = joinWords(words);
 
   const ranges = matchRanges(joined, pattern);
   if (ranges.length === 0) return words as Word[];
   const one = which !== 'all' && ranges.length === which.of ? ranges[which.index] : undefined;
-  const chosen = one ? [one] : ranges;
+  const chosen = one ? [one] : withoutReplacements(joined, ranges, replacement);
+  if (chosen.length === 0) return words as Word[];
+
+  // The runs of words the chosen ranges touch, ranges that share a word in one run. In order, never overlapping.
+  const runs: { a: number; b: number; ranges: { start: number; end: number }[] }[] = [];
+  for (const range of chosen) {
+    const a = wordAt(from, range.start);
+    const b = wordAt(from, range.end - 1);
+    const run = runs.at(-1);
+    if (run && a <= run.b) {
+      run.b = Math.max(run.b, b);
+      run.ranges.push(range);
+    } else {
+      runs.push({ a, b, ranges: [range] });
+    }
+  }
 
   const out = words.slice();
   let changed = false;
-  for (const { start, end } of [...chosen].reverse()) {
-    const a = wordAt(from, start);
-    const b = wordAt(from, end - 1);
+  for (const { a, b, ranges: inRun } of runs.reverse()) {
     const first = words[a]!;
     const last = words[b]!;
-    const text =
-      first.text.slice(0, start - from[a]!) + replacement + last.text.slice(end - from[b]!);
+    const base = from[a]!;
+    const segment = joined.slice(base, from[b]! + last.text.length);
+    const text = replaceInText(
+      segment,
+      inRun.map((r) => ({ turnId: '', start: r.start - base, end: r.end - base })),
+      replacement,
+    );
     if (a === b && text === first.text) continue; // "Anna" for "Anna"
     out.splice(a, b - a + 1, { ...first, text, end: last.end, logprob: null });
     changed = true;
   }
   return changed ? out : (words as Word[]);
+}
+
+/**
+ * How many more times `find` is in `words` than in `text`: occurrences that only the words still have, e.g. after
+ * Edit text took the name out of the text (Phase 9). Replace all changes them too.
+ */
+export function hiddenInWords(text: string, words: readonly Word[], find: string): number {
+  const pattern = compile(find);
+  if (!pattern || words.length === 0) return 0;
+  const inWords = matchRanges(joinWords(words).joined, pattern).length;
+  if (inWords === 0) return 0;
+  return Math.max(0, inWords - matchRanges(text, pattern).length);
 }
 
 /** The index of the word that `offset` (in the joined words) falls in. */

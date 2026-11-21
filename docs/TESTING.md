@@ -18,24 +18,27 @@ The e2e specs in `tests/e2e/`:
 | `transcribe` | Run, progress, errors (401, 429), Cancel, rename, reload and autosave. A run carries on while Home is shown. |
 | `export` | `.docx` downloads (Original, English, renamed speakers). |
 | `edit` | Edit text: nothing moves when it turns on or off (1280 and 375 px), saved across a reload, Enter then Tab, Escape, a multi-line paste and Ctrl+Z, the `.docx`, and an English translation left unchanged. |
+| `replace` | Phase 38, Find and replace on Output (a fixture with *Anna* in three turns and *Annabel* in a fourth): a selection filling **Find**, the list, **Next** and **Replace** (a skipped match stays), **Replace all** and its Cancel, the text and words saved and still there after a reload, and the `.docx`; the keyboard (Enter is Next, the list one Tab stop, Escape back to the button); the English view changing only the English, and the Original marking those turns *Changed since translation*; in a project, the session file's text and words without the name, and the summary out of date. |
 | `translate` | Claude and Gemini translation (Gemini streamed, Phase 19), batches, Resume, Cancel, reload. A Spanish transcript named in the header, the prompt, the version toggle and the file name (Phase 26). |
 | `playback` | Click to play, highlight, Follow, re-attach after reload, unplayable formats. |
 | `project` | Project mode on the fake folder: New project (the Brief opens), Open project and a folder that isn't one, Change, Reconnect after the browser session ends, a colleague's session on focus and after two minutes with the window in front (`page.clock`), the text cache, unreadable files and conflict copies, a colleague's brief (Reload), the model across a reload, search (the chat pane's **Search**) in English and the original, Copy, a bad query, and back to **Chat** and Search with the search kept. A rescan keeps the results, and **Update results** searches again; a search with no matches runs again at once. |
 | `project-add` | Phase 15: **Add to project** on a new transcript (New project, the Brief, the key; saved, translated, summarised; the list shows the summary; Copy a quote); **Summarise** a German session that is only in the folder; an edit on Output reaching the file, the summary going out of date and **Regenerate**; a file changed behind DeScribe's back and **Keep mine**; **Summarise all** past a failure; the link kept across a reload, with **Reconnect** and no false conflict; a session whose files are deleted offered **Add to project…** again on focus, and added again. Phase 19: a German session summarised with Gemini 4 Argon (the Gemini key, the data line naming Google, both requests streamed to Gemini and none to Claude, `provider: 'gemini'` in both files, the model in the details, Copy a quote); from Output, a switch to Gemini 3.8 Flash in the Add to project dialog (the Gemini key, no Claude request, the same setting in the Analyse header).; after it, **Open summary** (focused when the work ends) showing the summary in Analyse mode, and Escape back to the chat. |
 | `chat` | Phase 17: a question streamed through a tool call to an answer, its details (activity and cost) and a checked quote with **Copy**; an invented quote marked, and a quote whose omission could change it (D44), HTML-like text shown as text; a follow-up carrying the earlier turns, and **New chat**; **Stop** mid-answer and the next question; a session added during the chat (the notice and its **New chat**); a 429 and **Try again**; a missing key and the key dialog. Phase 20: the same question with Gemini 3.8 Flash (the Gemini key, a function call whose thought signature goes back with the next request, the details and cost, a checked quote and **Copy**, nothing sent to Claude). |
 | `settings` | Settings from the footer and Back to Home, a Transcribe step and Analyse; Setup's **Open Settings** while the key is missing; keys kept across a reload or a new tab (remembered or not); Verify key; Forget all keys; Clear saved data (including the project and its text cache, never the folder's files). |
-| `a11y` | axe-core (WCAG 2.2 A/AA rules) on Home (idle, transcribing, with a project), every step, every dialog, Output with Edit text on, every Analyse state (unsupported, none, loading, ready, Search empty and with results, a bad query, Change, error, reconnect), the Brief dialog, and Phase 15's: the Add to project dialog (no project; open, key missing), the actions row adding and failed, the folder notice, a summary with its details open, and the Summarise all confirmation; and the chat: empty, the key dialog, answering, an answer with quotes, an error, and the notices; with a Gemini model (Phases 19 and 20), the grouped select, the chat's key dialog and the Summarise dialog asking for the Gemini key. Serious or critical violations fail. |
+| `a11y` | axe-core (WCAG 2.2 A/AA rules) on Home (idle, transcribing, with a project), every step, every dialog, Output with Edit text on, the Find and replace dialog and its Replace all confirmation (Phase 38), every Analyse state (unsupported, none, loading, ready, Search empty and with results, a bad query, Change, error, reconnect), the Brief dialog, and Phase 15's: the Add to project dialog (no project; open, key missing), the actions row adding and failed, the folder notice, a summary with its details open, and the Summarise all confirmation; and the chat: empty, the key dialog, answering, an answer with quotes, an error, and the notices; with a Gemini model (Phases 19 and 20), the grouped select, the chat's key dialog and the Summarise dialog asking for the Gemini key. Serious or critical violations fail. |
 | `keyboard` | The whole flow with the keyboard only, with a visible focus indicator at every Tab stop, and focus returning to dialog triggers and moving to the view heading on a step or mode change. Home's two buttons and **Home**. Analyse: open, the Brief, the model (the arrow keys across its Claude and Gemini groups), **Search** under the chat's box (focus moves into its box), Copy and Change; the sessions list (one Tab stop, arrow keys, Enter), a summary, Summarise all and Open transcript. Add to project: the dialog (Escape returns focus), and focus kept in the actions row while it works and after. The chat: Enter and Shift+Enter, **Stop** (focus stays on it as it turns back into **Send**), the details, **Copy**, and Escape from a summary back to the question box. |
 | `robustness` | A 50 ms recording, silence, one speaker, 32 speakers, a long unicode file name, blocked `localStorage`/`sessionStorage`, IndexedDB full, offline (ElevenLabs and Claude). |
 
 **A known intermittent failure (recorded 19 November 2026).** A full `npm run test:e2e` sometimes fails one test:
 `a11y` › *Project: every state, search results and the Brief dialog*.
 
-- **What happens:** it goes over Playwright's 30-second test timeout. The other 157 tests pass.
+- **What happens:** it goes over Playwright's 30-second test timeout. The other tests pass.
 - **On 19 November:** it took 10.5 s run alone, but failed in all three full runs that day.
   - Two runs were with the BUG-2 fix (AUDIT-2026-11-19). They timed out in `expectAccessible`'s wait for animations
     to stop, with the Brief dialog open.
   - One run was at `7466a65`, without the fix. It timed out later in the test, at Reconnect.
+- **On 21 November (Phase 38):** it failed in some full runs, and in 12 of 12 when run as 12 copies at once, with
+  and without Phase 38's change to Output, at the Analyse click after a reload.
 - **Likely cause:** it is the longest test (an 8-hour corpus and a dozen axe checks), so it probably runs out of
   time while the other workers load the machine, rather than hanging on one step. This hasn't been diagnosed.
 - **What to do:** run it alone to check it passes:
@@ -138,6 +141,16 @@ Phase 17's specs run the chat store against a fake `AgentProvider` (`setAgentPro
 | `providers/llm/agentLoop` | The loop both agent providers share (audit CQ-2), with a scripted adapter: a blank line before each reply's text but the first, an empty piece of text ignored, a re-sent request's text taken back with its break and the break streamed again, `bad_output` after the re-sends, the usage of every request, `again` without running its calls, parallel calls answered in one turn in their order, an unknown tool, an invalid input and a tool that throws, an abort while tools run, `maxIterations`, every error through `toError`; conversations continued unchanged, and refused from another provider module or model before any request. |
 | Components | `AnswerBlocks` (every block kind, HTML-like text, both quote variants), `ChatActivity` (the summary line, costs, nothing to show), `ChatInput` (Enter, Shift+Enter, IME, Send and Stop), `ChatPane` (the status for screen readers, Stop, Try again, the key dialog, the notices, following the answer), `QuoteCard` (the Copy button's name, an unknown turn), `ProjectView` (summary and chat, Escape). |
 
+### Find and replace
+
+Phase 38 (DECISIONS.md D59).
+
+| Spec | Covers |
+|---|---|
+| `domain/replace` | `findMatches`: case, accents and `ß`, whole words (*Annabel* not, *Anna's* and *Anna-Lena* yes), names of two words and not across a comma, punctuation only, several matches in a turn, order, a Japanese name. `replaceInText`, `replaceInWords` (one word, two merged, punctuation kept, one occurrence or all, the fallback when the counts differ), `snippet` and `shiftMatches`. |
+| `stores/transcript` | `replaceMatches`: only the changed turns are new objects; the Original's text and words, the English's texts with its `sourceHashes` kept; those turns stale for the English; nothing for an empty replacement or no matches; the save debounced. |
+| Components | `ReplaceDialog` (the debounced list and count, Next wrapping, Replace and a skipped match, a row clicked, Enter, the inline confirmation and Cancel, the disabled buttons, the English line, the live region, nothing left once closed), `OutputView` (when **Find and replace…** is offered, the version passed on, a selection filling **Find**). |
+
 ## Performance
 
 `npm run test:perf` on a synthetic 3-hour meeting: 4 speakers, 25,001 words, 2,209 turns. It asserts the targets at
@@ -166,6 +179,19 @@ Edit text, added in Phase 9 (2026-10-14, same PC):
 
 The PC was slower that day: the Phase 8 measures came out higher on the branch and on `main` alike (render 335 ms,
 Open 233 ms, rename mean 49 / max 67 ms on `main` at 1×), so the table above is not comparable line by line.
+
+Find and replace, added in Phase 38 (2026-11-21, same PC). The fixture now has the name *Anna,* in place of the first
+word of 7 utterances in 10, so it's in 1,545 places in most turns; the word count, the timings and the other words are
+as before.
+
+| Measure | Target | 1× CPU | 4× CPU |
+|---|---|---|---|
+| **Find**: typing *Anna* → the list of 1,545 matches painted, less the 150 ms wait for the typing to stop | < 100 ms | 67–80 ms | 302 ms |
+| **Replace all** of those 1,545 → the transcript painted | < 1 s | 177–187 ms | 218 ms |
+
+Searching is a small part of it: `findMatches` takes about 3 ms for the 1,545 matches and their snippets 1.5 ms (in
+Node). The rest is the list: 139 ms at 1× until its rows got `content-visibility: auto`, so rows out of view aren't
+laid out until they're scrolled to.
 
 ### Corpus search
 
@@ -246,6 +272,7 @@ below the table.
 | 20 | Row 18 with **Gemini 3.8 Flash**, then **Gemini 4 Argon**: the same questions, the activity and cost, the quotes checked, a follow-up, **Stop**, **New chat** (records **A1**–**A4** for Gemini) | ☐ | ☐ |
 | 21 | A short Spanish recording with language = Spanish, and a Japanese one with Auto-detect → each header names the language → **Translate to English** → export both versions → add both to a project → search a word of each original (records **V7**) | ☐ | ☐ |
 | 22 | Two real project folders, each opened once, then restart the browser → **Add to project…** on a new transcript → choose the project that isn't first → **Add** → the browser's own prompt appears → allow it → the project loads and the transcript goes there, and only there → **Change** in Analyse → click the other project → it opens (D49; the e2e harness fakes the prompt) | ☐ | ☐ |
+| 23 | A real German transcript with a translation: select a name in a turn → **Find and replace…** → step through with **Next** and **Replace**, then **Replace all** the rest → **English** → replace it there too → reload → **Open** → both changes are there → export both `.docx` → each has the replacement → **Add to project** → open the session's `.transcript.json` in a text editor: the name is in neither the text nor the words (D59) | ☐ | ☐ |
 
 Where results go:
 - **Scenario 5:** processing time ÷ audio length (shown on Output) goes into the V4 row of

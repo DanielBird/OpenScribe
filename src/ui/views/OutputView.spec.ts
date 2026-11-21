@@ -249,7 +249,9 @@ describe('OutputView', () => {
 
   describe('Find and replace', () => {
     const replaceButton = () =>
-      wrapper!.findAll('.actions button').find((b) => b.text() === 'Find and replace…');
+      wrapper!
+        .findAll('.actions button')
+        .find((b) => b.attributes('aria-label') === 'Find and replace…');
     const editButton = () =>
       wrapper!.findAll('.actions button').find((b) => ['Edit text', 'Done'].includes(b.text()));
     const dialog = () => wrapper!.getComponent(ReplaceDialog);
@@ -259,7 +261,7 @@ describe('OutputView', () => {
       await transcript.setDoc(withTranslation(makeDoc()));
       transcript.view = 'en';
       wrapper = mount(OutputView, { attachTo: document.body });
-      const names = wrapper.findAll('.actions > button').map((b) => b.text());
+      const names = wrapper.findAll('.actions > button').map((b) => b.attributes('aria-label'));
       expect(names.indexOf('Find and replace…')).toBe(names.indexOf('Edit text') + 1);
       expect(dialog().props('open')).toBe(false);
 

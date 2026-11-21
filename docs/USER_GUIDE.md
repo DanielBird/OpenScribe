@@ -127,6 +127,23 @@ The Word file uses the corrected text. If there is an English translation, each 
 **Changed since translation** in the English view, and **Translate** becomes **Update English…**, which translates
 only those turns.
 
+### Replace a name
+
+To take a person's name out of the transcript, for example to replace *Anna* with *Participant 1*, click **Find and
+replace…** above the transcript. If you select the name in a turn first, it's filled in for you.
+1. Type the name in **Find**. The list shows each place it's said, with the speaker, the time and the words around
+   it. Case and accents don't matter (*Muller* finds *Müller*), but only whole words are found: *Anna* finds
+   *Anna's* and *Anna-Lena*, not *Annabel*.
+2. Type what goes in its place in **Replace with**.
+3. **Replace** changes the highlighted match and moves to the next. **Next** leaves it as it is. **Replace all**
+   changes every match left, after asking. There is no undo. Replace all, and replacing the last match, also take
+   the name out of the word timings saved with the transcript, where it stays after **Edit text** takes it out of
+   the text.
+
+It changes the version on screen. If there is an English translation, switch to **English** and replace the name
+there too. The Word file and the project get the new text, but the speaker names, the recording's file name and the
+audio keep the name: rename speakers in the speaker panel.
+
 ## 5. Glossary tips
 
 The glossary helps ElevenLabs spell names and terms correctly. Add words that are spoken in the recording and are
@@ -302,6 +319,10 @@ what it finds, and uses the summaries for an overview. Then it answers in Englis
   Chats are saved in the project folder, where everyone who can open it can read them. Nothing is sent anywhere
   else. The About section on Settings says the same and links to each
   provider's privacy and terms pages.
+- **Names:** to keep people's names from Anthropic and Google, [replace them](#replace-a-name) **before** you
+  translate or add the session to a project, since both send the text. The speaker names and the glossary are sent
+  too, so rename the speakers and leave names out of the glossary. The audio and the recording's file name still
+  have the names.
 - **Zero retention** asks ElevenLabs not to store your audio or transcript. Only ElevenLabs Enterprise plans can use
   it. With another plan, the run stops with a message that tells you to switch it off.
 - Your glossary, settings and last transcript are saved in this browser. **Settings → Clear saved data** deletes them.

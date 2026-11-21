@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
   findMatches,
+  hiddenInWords,
   replaceInText,
   replaceInWords,
   shiftMatches,
   snippet,
+  withoutReplacements,
   type TextMatch,
 } from './replace';
 import type { Word } from './transcript';
@@ -151,6 +153,52 @@ describe('replaceInWords', () => {
     const words = [word('Annabel', 0), word('came', 1)];
     expect(replaceInWords(words, 'Anna', 'P1', 'all')).toBe(words);
     expect(replaceInWords(words, '...', 'P1', 'all')).toBe(words);
+  });
+
+  it('replaces every match inside one word', () => {
+    expect(replaceInWords([word('Anna-Anna', 0)], 'Anna', 'P1', 'all')[0]?.text).toBe('P1-P1');
+    expect(replaceInWords([word('田中さんと田中', 0)], '田中', 'P1', 'all')[0]?.text).toBe(
+      'P1さんとP1',
+    );
+  });
+
+  it('merges matches that share a word into one word, from the first start to the last end', () => {
+    const words = [word('Anna', 0), word('Lena-Anna', 1), word('Lena', 2), word('kam', 3)];
+    const out = replaceInWords(words, 'Anna Lena', 'P1', 'all');
+    expect(out.map((w) => w.text)).toEqual(['P1-P1', 'kam']);
+    expect(out[0]).toMatchObject({ start: 0, end: words[2]!.end, logprob: null });
+  });
+
+  it("leaves the name inside an earlier replacement's words, for every occurrence", () => {
+    const words = [word('Anna B.', 0, null), word('und', 1), word('Anna', 2)];
+    expect(replaceInWords(words, 'Anna', 'Anna B.', 'all').map((w) => w.text)).toEqual([
+      'Anna B.',
+      'und',
+      'Anna B.',
+    ]);
+    // By index, the counts are the text's, which has the earlier replacement's Anna too.
+    expect(
+      replaceInWords(words, 'Anna', 'Anna B.', { index: 1, of: 2 }).map((w) => w.text),
+    ).toEqual(['Anna B.', 'und', 'Anna B.']);
+  });
+});
+
+describe('hiddenInWords', () => {
+  it('counts the occurrences the words have beyond the text', () => {
+    const words = [word('Anna', 0), word('und', 1), word('Anna', 2)];
+    expect(hiddenInWords('Anna und sie', words, 'Anna')).toBe(1);
+    expect(hiddenInWords('Anna und Anna', words, 'anna')).toBe(0);
+    expect(hiddenInWords('sie', [], 'Anna')).toBe(0);
+    expect(hiddenInWords('sie', words, '...')).toBe(0);
+  });
+});
+
+describe('withoutReplacements', () => {
+  it('leaves out the ranges inside an occurrence of the replacement, as typed', () => {
+    const text = 'Anna B. and Anna and ANNA B.';
+    const ranges = findMatches([{ turnId: 't1', text }], 'Anna');
+    expect(withoutReplacements(text, ranges, 'Anna B.').map((r) => r.start)).toEqual([12, 21]);
+    expect(withoutReplacements(text, ranges, '')).toEqual(ranges);
   });
 });
 

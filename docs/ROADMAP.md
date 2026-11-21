@@ -374,7 +374,7 @@ MVP = Phases 0–5. Each phase is sized for one agent session (or a few) and end
 | 35 | [The speech pack: downloading the models](phases/35-speech-pack.md) | 33, 34 | – | ◐ Built; the maintainer's checks open (S1–S10 on the PC, S2, S5, S6 and S8 on the work laptop from the Store, the licence reading). S1 passes on the work laptop (1.3.0, 2026-11-17) |
 | 36 | [Transcribe on this computer: the choice, progress and About](phases/36-local-stt-ui.md) | 34, 35 | – | ◐ Built; the maintainer's checks open (the rest of L9 on the work laptop, L3's network off, L4, L5's screen reader, L7 and L10 with the real models). L9's first runs: 7.4× plugged in, at the target (2026-11-17) |
 | 37 | [Transcribing on the graphics card](phases/37-local-stt-gpu.md) | 34, 35, 36 | – | ◐ Built (2026-11-20); the maintainer's checks open (G1, G2, G4 and G9 on the work laptop from the Store; G2 and G4 in the app and G5's screen reader on the PC). G10 passes: the certification kit passed with both engines. An hour in 25.8 s on the RTX 2070 SUPER, 335.2 s on the UHD 770 and 201.9 s on the processor; the MSIX is 21.1 MB with both engines |
-| 38 | [Find and replace names](phases/38-replace-names.md) | 9 | – | ◐ Building (planned 2026-11-20, D59; Task 1 done) |
+| 38 | [Find and replace names](phases/38-replace-names.md) | 9 | – | ☑ Done (2026-11-21; manual row 23 open, and not yet committed on its own branch) |
 
 Status values: ☐ Not started · ◐ In progress · ☑ Done.
 

@@ -454,15 +454,71 @@ describe('transcript store', () => {
       save.mockClear();
       const matches = matchesIn(before, 'Anna');
 
-      store.replaceMatches('original', matches, ' \n ', 'Anna', 'all');
-      store.replaceMatches('original', [], 'P1', 'Anna', 'all');
-      store.replaceMatches('original', [{ turnId: 't99', start: 0, end: 4 }], 'P1', 'Anna', 'one');
-      store.replaceMatches('original', [{ turnId: 't1', start: 1, end: 5 }], 'P1', 'Anna', 'one');
-      store.replaceMatches('original', matches, 'Anna', 'Anna', 'all');
-      store.replaceMatches('en', [{ turnId: 't1', start: 0, end: 5 }], 'P1', 'Guten', 'all');
+      const counts = [
+        store.replaceMatches('original', matches, ' \n ', 'Anna', 'all'),
+        store.replaceMatches('original', [], 'P1', 'Anna', 'one'),
+        store.replaceMatches('en', [], 'P1', 'Anna', 'all'),
+        store.replaceMatches(
+          'original',
+          [{ turnId: 't99', start: 0, end: 4 }],
+          'P1',
+          'Anna',
+          'one',
+        ),
+        store.replaceMatches('original', [{ turnId: 't1', start: 1, end: 5 }], 'P1', 'Anna', 'one'),
+        store.replaceMatches('en', [{ turnId: 't1', start: 0, end: 5 }], 'P1', 'Guten', 'all'),
+      ];
+      expect(counts).toEqual([0, 0, 0, 0, 0, 0]);
+      // Already the replacement: counted as replaced, and nothing changes.
+      expect(store.replaceMatches('original', matches, 'Anna', 'Anna', 'all')).toBe(2);
       expect(store.doc).toBe(before);
       await vi.advanceTimersByTimeAsync(SAVE_DELAY_MS * 2);
       expect(save).not.toHaveBeenCalled();
+    });
+
+    it('returns how many of the matches it replaced, leaving out a stale one', async () => {
+      const store = useTranscriptStore();
+      const before = named();
+      await store.setDoc(before);
+      const [first, second] = matchesIn(before, 'Anna');
+      const stale = { ...second!, start: second!.start + 1, end: second!.end + 1 };
+      expect(store.replaceMatches('original', [first!, stale], 'P1', 'Anna', 'all')).toBe(1);
+      expect(store.doc?.turns[0]?.text).toBe('P1 fragte Anna.');
+    });
+
+    it('Replace all with no matches takes out a name only the words have', async () => {
+      const store = useTranscriptStore();
+      const before = named();
+      await store.setDoc(before);
+
+      expect(store.replaceMatches('original', [], 'P1', 'Anna', 'all')).toBe(0);
+
+      const after = store.doc!;
+      expect(after.turns[2]?.text).toBe(before.turns[2]?.text);
+      expect(after.turns[2]?.words.at(-1)?.text).toBe('P1');
+      // t1's words have the name as often as its text: they are left for its matches.
+      expect(after.turns[0]).toBe(before.turns[0]);
+    });
+
+    it("Replace all doesn't replace a name inside an earlier replacement's words again", async () => {
+      const store = useTranscriptStore();
+      await store.setDoc(named());
+      const [first, second] = matchesIn(store.doc!, 'Anna');
+      store.replaceMatches('original', [first!], 'Anna B.', 'Anna', 'one');
+      store.replaceMatches(
+        'original',
+        shiftMatches([second!], first!, 'Anna B.'),
+        'Anna B.',
+        'Anna',
+        'all',
+      );
+
+      expect(store.doc?.turns[0]?.text).toBe('Anna B. fragte Anna B..');
+      expect(store.doc?.turns[0]?.words.map((w) => w.text)).toEqual([
+        'Anna B.',
+        'fragte',
+        'Anna B..',
+      ]);
     });
 
     it('fixes the case of a name', async () => {

@@ -11,6 +11,8 @@ import AddToProjectButton from '../components/AddToProjectButton.vue';
 import AudioBar from '../components/AudioBar.vue';
 import ExportButton from '../components/ExportButton.vue';
 import FolderNotice from '../components/FolderNotice.vue';
+import IconEdit from '../icons/IconEdit.vue';
+import IconSearch from '../icons/IconSearch.vue';
 import JobStatus from '../components/JobStatus.vue';
 import ReplaceDialog from '../components/ReplaceDialog.vue';
 import SpeakerPanel from '../components/SpeakerPanel.vue';
@@ -62,6 +64,7 @@ const editing = ref(false);
 watch(pipelineWorking, (working) => {
   if (working) editing.value = false;
 });
+const editLabel = computed(() => (editing.value ? 'Done' : 'Edit text'));
 const editAnnouncement = ref('');
 
 function toggleEditing(): void {
@@ -123,18 +126,23 @@ watch(
           <button
             v-if="!translation.isRunning && !pipelineWorking"
             type="button"
-            class="button"
+            class="button button-icon"
+            :class="{ editing }"
+            :aria-label="editLabel"
             @click="toggleEditing"
           >
-            {{ editing ? 'Done' : 'Edit text' }}
+            <IconEdit />
+            <span class="icon-tip" aria-hidden="true">{{ editLabel }}</span>
           </button>
           <button
             v-if="!editing && !translation.isRunning && !pipelineWorking"
             type="button"
-            class="button"
+            class="button button-icon"
+            aria-label="Find and replace…"
             @click="openReplace"
           >
-            Find and replace…
+            <IconSearch />
+            <span class="icon-tip" aria-hidden="true">Find and replace</span>
           </button>
           <template v-if="!editing">
             <TranslateButton v-if="!pipelineWorking" />
@@ -212,22 +220,56 @@ watch(
   gap: var(--space-5);
 }
 
-/* The name and its details on the left; the actions beside them, or below on a narrow window. */
+/* The name on its own line; its details and the actions share the row beneath it, or stack on a narrow window.
+   The header's grid is dissolved so its name and details take this grid's rows. */
 .title-block {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: var(--space-4) var(--space-6);
-  padding-bottom: var(--space-5);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-3) var(--space-6);
+  padding-bottom: var(--space-4);
   border-bottom: 1px solid var(--color-border);
+}
+
+.title-block :deep(.transcript-header) {
+  display: contents;
+}
+
+.title-block :deep(.file-name) {
+  grid-column: 1 / -1;
+  font-weight: 600;
+  line-height: 1.1;
+  letter-spacing: -0.025em;
+}
+
+.title-block :deep(.meta) {
+  grid-column: 1;
 }
 
 .actions {
   display: flex;
   flex-wrap: wrap;
+  grid-column: 2;
   align-items: center;
+  justify-content: flex-end;
   gap: var(--space-2);
+}
+
+@media (max-width: 40rem) {
+  .title-block {
+    grid-template-columns: 1fr;
+  }
+
+  .actions {
+    grid-column: 1;
+    justify-content: flex-start;
+  }
+}
+
+/* While editing, Edit text (named Done) shows it is on. */
+.editing {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
 }
 
 .notice {

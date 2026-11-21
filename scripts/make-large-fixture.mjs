@@ -42,6 +42,8 @@ const VOCABULARY = (
   'noise speech background program settings update software firmware release schedule budget'
 ).split(' ');
 const ENDINGS = ['.', '.', '.', '.', '?', '!'];
+/** Addressed at the start of most utterances; large-transcript.perf.ts replaces it. */
+const NAME = 'Anna,';
 
 const r = (x) => Math.round(x * 1000) / 1000;
 
@@ -63,6 +65,9 @@ while (wordCount < TARGET_WORDS) {
   const long = utterances > 0 && utterances % MONOLOGUE_EVERY === 0;
   const sentences = long ? int(20, 28) : int(1, 2);
   const words = Array.from({ length: sentences }, () => sentence(int(4, long ? 14 : 9))).flat();
+  // A name in most turns, for Find and replace (Phase 38): it takes the first word's place in 7 utterances in 10,
+  // so the word count, the timings and the random sequence stay as they were.
+  if (utterances % 10 < 7) words[0] = NAME;
   const id = `speaker_${speaker}`;
   words.forEach((text, i) => {
     tokens.push({

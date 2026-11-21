@@ -8,6 +8,11 @@ All notable changes to DeScribe are recorded here. The format follows
 
 ### Added
 
+- **Find and replace names:** **Find and replace…** on Output replaces a name in the transcript, for example *Anna*
+  with *Participant 1*, before it is translated or added to a project. It finds whole words in any case and with or
+  without accents, lists each match with its speaker, time and the words around it, and steps through them with
+  **Next** and **Replace**, or changes them all with **Replace all**. It changes the version on screen, the Original
+  or the English.
 - **Choose the project in Add to project:** DeScribe remembers the last ten project folders on each computer. The
   dialog offers them in a **Project** list, with **Open another project…** and **New project…** beside it, and
   **Change** in Analyse lists them too.

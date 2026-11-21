@@ -316,9 +316,80 @@ English has no match for **Find** left.
 - **A closed dialog holds nothing:** closing clears Find, the rows and the English line. Left in the page, they were
   found by `getByText` (which counts hidden elements) and broke `project-add.e2e.ts`; they would also leave the
   names in the DOM.
-- **A flaky e2e test, not fixed:** `a11y.e2e.ts` *Project: every state…* timed out (30 s) on the Analyse click after
-  `page.reload()` in 3 of 8 full runs with these changes, and in 0 of 2 without them; it passes alone and in the 4
-  latest full runs. It runs close to its timeout under 12 workers (35 s when it failed). If it keeps failing, give it
-  `test.slow()` or split it.
+- **A flaky e2e test, not fixed, and not from this phase:** `a11y.e2e.ts` *Project: every state…* sometimes times out
+  (30 s) on the Analyse click after `page.reload()` in a full run. Run as 12 copies at once it failed 12 of 12 both
+  with the Output change and with `OutputView.vue` from before it (`a8a88a3`) (2026-11-21), so it is load, not
+  Phase 38. It passes alone. Give it `test.slow()`
+  or split it.
 - **Not done here:** `tests/e2e/replace.e2e.ts`, the a11y spec's dialog state, the performance measurements (Task
   6), and the user docs (Task 7).
+
+**2026-11-21, Task 6 (performance):**
+- **The targets are met at 1× on the 3-hour fixture** (2,209 turns): Find's list of 1,545 matches painted 67–80 ms
+  after the 150 ms wait (target < 100 ms), and Replace all of them 177–187 ms (target < 1 s). At 4× CPU (reported
+  only): 302 ms and 218 ms. The full table is in `docs/TESTING.md` (Performance).
+- **The first run missed Find's target: 139–155 ms.** The search wasn't the cost (`findMatches` about 3 ms in Node,
+  the snippets 1.5 ms, and the ASCII prefilter as planned); laying out 1,545 rows was. `content-visibility: auto` on the
+  rows (with `contain-intrinsic-size: auto 4.25rem`) brought it under the target, so the design's fallback (only the
+  first 200 rows) wasn't needed and the maintainer wasn't asked to change it. Rows out of view keep an estimated
+  height until scrolled to, so a row's `offsetTop` far down the list is approximate until it has been shown once;
+  keeping the current row in view still works, since the row itself is laid out when it's measured.
+- **The fixture has a name now:** `scripts/make-large-fixture.mjs` puts *Anna,* in place of the first word of 7
+  utterances in 10. The word count, timings and the random sequence are unchanged, so the earlier measures stay
+  comparable.
+- **`tests/e2e/project.perf.ts` fails in this working tree, before and after Phase 38:** after the reload it waits
+  for **Reconnect**, which doesn't come. It fails the same with `OutputView.vue` from before this phase (`a8a88a3`),
+  so it isn't from Phase 38; not looked into further (rule 10).
+
+**2026-11-21, Task 7 (user docs):**
+- `USER_GUIDE.md`: *Replace a name* under *4. Correct the text* (a selection fills Find; whole words, case and
+  accents; Next, Replace, Replace all and no undo; the version on screen, so the English needs its own pass; what keeps
+  the name), and a **Names** bullet in *9. Privacy*. Beyond the phase's draft, it says that the speaker names and the
+  glossary go to Claude or Gemini with a translation too, so rename the speakers and leave names out of the glossary.
+- `TESTING.md`: manual checklist row 23. `CHANGELOG.md`: an *Added* entry under *Unreleased*.
+- `ROADMAP.md`: Phase 38 stays ◐. **Left for the phase to be done:** `tests/e2e/replace.e2e.ts` (the *Required tests*
+  list) and the dialog's state in `tests/e2e/a11y.e2e.ts`, then the Definition of Done run and the spec tables in
+  `TESTING.md` (`replace`, and `ReplaceDialog` among the components).
+
+**2026-11-21, the e2e tests and the Definition of Done:**
+- `tests/e2e/replace.e2e.ts` (4 tests). ElevenLabs answers the German fixture with *Anna* in three turns, in three
+  cases, and *Annabel* in a fourth (`namedFixture()`, changed in the spec, not in `fixtures/`). Step through and Replace
+  all, with the saved words and the `.docx`; the keyboard; the English view and the Original's out-of-date turns; and a
+  project, through **Add to project**, whose session file loses the name from text and words and whose summary goes
+  out of date. `a11y.e2e.ts` checks the open dialog and its Replace all confirmation on Output.
+- **Definition of Done (2026-11-21):** typecheck, lint, 2,146 unit tests, build and `verify:single-file`, and
+  `cargo test` (114 passed, 4 opt-in ignored) pass. `test:e2e`: 161 of 162 passed; the one failure was
+  *Project: every state…* in `a11y`, the intermittent one `TESTING.md` records, which fails the same without this
+  phase. `test:perf`: both of this phase's targets met (above); `project.perf.ts` fails without this phase too.
+- **Every acceptance criterion is met by the tests above,** except what only a person can check: manual row 23
+  (a real transcript, OneDrive). D13 review: the UI text is the plan's, trimmed as recorded under Tasks 4–5.
+- **Not committed on `phase-38-replace-names`:** Tasks 1–5 went into the maintainer's commit `151dde1` on
+  `phase-37-local-stt-gpu` with Phase 37; Tasks 6 and 7 and the e2e tests are uncommitted on that branch.
+
+**2026-11-21, fixes from an audit of this phase:**
+- **`replaceInWords` with several matches in one run of words:** it rebuilt each match from the original word, so
+  with two matches in one word (`Anna-Anna`, or `田中さんと田中` from a speech engine that gives longer words) the
+  second one stayed, and matches sharing a word (*Anna Lena* in `Anna` · `Lena-Anna` · `Lena`) brought the name back
+  and lost the last end time. Matches that share a word are now replaced together, in one new word.
+- **A name only the words still have** (after Edit text took it out of the text) could not be removed: Find said
+  "No matches" and Replace all was disabled, so the name stayed in the autosave and the session file (decision 10).
+  Now, once the list is empty, the count reads "N left in the saved word timings" and Replace all ("Replace all N?")
+  takes them out. Replacing the last match with **Replace** does the same without asking, since every match the text
+  showed has then been replaced. UI text new here (D13): "N left in the saved word timings".
+- **Changes decision 7's last point:** Replace all changes the words of a turn without a listed match only when its
+  words have more occurrences than its text (`hiddenInWords`), and every occurrence in the words leaves out those
+  inside an exact occurrence of the replacement (`withoutReplacements`). Before, Replace all after a Replace whose
+  replacement contained Find (*Anna* → *Anna B.*) turned those words into *Anna B. B.*. Still not covered: a match
+  kept with **Next** keeps the list from emptying, so a name only the words have elsewhere stays until Replace all.
+- **Focus:** after the last **Replace** (Replace is disabled then) focus goes to **Find**, as after Replace all.
+  **Replace all** pressed while a Find waits for its debounce searches first, and asks about what that Find finds,
+  so the search can't take the confirmation (and the focused **Cancel**) away a moment later.
+- **`replaceMatches` returns how many matches it replaced** (one that already reads as the replacement counts). When a
+  Replace or Replace all skips a match whose text no longer reads as Find, the dialog no longer counts it or shifts
+  the turn's other rows; it lists that turn's matches again from its text (`relist`), leaving out those inside the
+  replacement.
+- **The dialog's look (2026-11-21), picked from three design variants:** Find and Replace with are one bordered block
+  with a hairline between them and their labels beside the fields; Close is an × in the corner (aria-label "Close");
+  the count shares the bottom row with the actions; **Replace** is the one filled button and comes last, after **Next**
+  and **Replace all**; the list is a grey tray whose current match sits on white, with no coloured edge. Tab order is
+  now Close, Find, Replace with, the list, Next, Replace all, Replace. `useSmoothHeight` is unchanged.
