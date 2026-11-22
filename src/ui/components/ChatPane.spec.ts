@@ -256,7 +256,9 @@ describe('ChatPane', () => {
     const four = makeSessionText(4);
     project.sessions = [...project.sessions, makeProjectSession(three), makeProjectSession(four)];
     await flushPromises();
-    expect(wrapper!.get('.notice').text()).toContain('2 new sessions since this chat started.');
+    expect(wrapper!.get('.notice').text()).toContain(
+      '2 sessions added or changed since this chat started.',
+    );
 
     useSettingsStore().projectModel = 'claude-opus-5-5';
     await flushPromises();
@@ -288,7 +290,7 @@ describe('ChatPane', () => {
     const project = useProjectStore();
     project.sessions = [...project.sessions, makeProjectSession(makeSessionText(3))];
     await flushPromises();
-    expect(wrapper!.text()).toContain('1 new session since this chat started.');
+    expect(wrapper!.text()).toContain('1 session added or changed since this chat started.');
   });
 
   describe('/compact', () => {

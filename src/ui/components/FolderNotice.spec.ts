@@ -2,6 +2,7 @@ import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { FOLDER_MESSAGES, FolderError } from '../../storage/folder';
+import { useSummaryEditStore } from '../../stores/summaryEdit';
 import { useTranscriptStore } from '../../stores/transcript';
 import FolderNotice from './FolderNotice.vue';
 
@@ -94,5 +95,26 @@ describe('FolderNotice', () => {
     wrapper = mount(FolderNotice);
     expect(wrapper.text()).toContain('Open “Hearing at home 2026” in Analyse mode');
     expect(wrapper.find('button').exists()).toBe(false);
+  });
+
+  it('a summary being edited (Phase 39): the same notice, from the edit store', async () => {
+    const edit = useSummaryEditStore();
+    edit.sessionId = 'session';
+    edit.conflict = true;
+    const resolve = vi.spyOn(edit, 'resolveConflict').mockResolvedValue(undefined);
+    wrapper = mount(FolderNotice, { props: { source: 'summary' } });
+    expect(wrapper.get('[role="alert"]').text()).toContain(
+      "The project's copy of this summary has changed.",
+    );
+    await button('Keep mine').trigger('click');
+    await flushPromises();
+    expect(resolve).toHaveBeenLastCalledWith('keep');
+
+    edit.conflict = false;
+    edit.saveError = new FolderError('io', "DeScribe couldn't save this file. Try again.");
+    const retry = vi.spyOn(edit, 'retryFolderSave').mockResolvedValue(undefined);
+    await flushPromises();
+    await button('Try again').trigger('click');
+    expect(retry).toHaveBeenCalled();
   });
 });

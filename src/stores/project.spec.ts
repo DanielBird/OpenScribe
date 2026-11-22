@@ -965,6 +965,94 @@ describe('summaries', () => {
     ]);
     expect(project.themesExcept(a.id)).toEqual([{ name: 'Charging routines', count: 1 }]);
   });
+
+  describe('a hand edit (Phase 39)', () => {
+    it('saves into the summary file and updates the session without a rescan', async () => {
+      const doc = english(1);
+      const folder = memoryFolder('P', {
+        ...projectFiles([doc]),
+        [summaryPath(doc)]: summaryFileText(doc),
+      });
+      const project = await readyStore(folder);
+      const before = project.sessions[0]!;
+      const file = before.summary!;
+      folder.reads.length = 0;
+      const edited = { ...file, summary: { ...file.summary, title: 'Edited title' } };
+      const stat = await project.saveEditedSummary(doc.id, edited, before.summaryFile!.stat);
+      expect(folder.reads).toEqual([]);
+      expect(project.sessions[0]).toMatchObject({ title: 'Edited title', status: 'ok' });
+      expect(project.sessions[0]!.summary).toBe(edited);
+      expect(project.sessions[0]!.summaryFile!.stat).toEqual(stat);
+      expect(JSON.parse(folder.text(summaryPath(doc))!)).toEqual(edited);
+    });
+
+    it('refuses when the file changed, and overwrites it without expected', async () => {
+      const doc = english(1);
+      const folder = memoryFolder('P', {
+        ...projectFiles([doc]),
+        [summaryPath(doc)]: summaryFileText(doc),
+      });
+      const project = await readyStore(folder);
+      const { summary, summaryFile } = project.sessions[0]!;
+      folder.put(summaryPath(doc), summaryFileText(doc, { model: 'theirs' }));
+      await expect(
+        project.saveEditedSummary(doc.id, summary!, summaryFile!.stat),
+      ).rejects.toMatchObject({ kind: 'changed' });
+      await project.saveEditedSummary(doc.id, summary!);
+      expect(JSON.parse(folder.text(summaryPath(doc))!)).toEqual(summary);
+    });
+
+    it('writes into the conflict copy that won, not the canonical name', async () => {
+      const doc = english(1);
+      const copy = summaryPath(doc).replace('.summary.json', '.summary-LAPTOP-123.json');
+      const folder = memoryFolder('P', {
+        ...projectFiles([doc]),
+        [summaryPath(doc)]: summaryFileText(doc),
+        [copy]: summaryFileText(doc, { createdAt: '2026-10-20T10:00:00.000Z' }),
+      });
+      const project = await readyStore(folder);
+      const { summary, summaryFile } = project.sessions[0]!;
+      const edited = { ...summary!, summary: { ...summary!.summary, title: 'In the copy' } };
+      await project.saveEditedSummary(doc.id, edited, summaryFile!.stat);
+      expect(JSON.parse(folder.text(copy)!).summary.title).toBe('In the copy');
+      expect(JSON.parse(folder.text(summaryPath(doc))!).summary.title).not.toBe('In the copy');
+    });
+
+    it('reads the file again for Reload', async () => {
+      const doc = english(1);
+      const folder = memoryFolder('P', {
+        ...projectFiles([doc]),
+        [summaryPath(doc)]: summaryFileText(doc),
+      });
+      const project = await readyStore(folder);
+      const known = project.sessions[0]!.summary;
+      expect((await project.readSessionSummary(doc.id)).file).toBe(known);
+      const theirs = makeSummaryFile(doc, {
+        summary: { ...makeSummaryFile(doc).summary, title: 'Theirs' },
+      });
+      folder.put(summaryPath(doc), JSON.stringify(theirs));
+      const read = await project.readSessionSummary(doc.id);
+      expect(read.file).toEqual(theirs);
+      expect(project.sessions[0]!.title).toBe('Theirs');
+    });
+
+    it('of two copies with the same createdAt, keeps the one written last', async () => {
+      const doc = english(1);
+      const copy = summaryPath(doc).replace('.summary.json', '.summary-LAPTOP-123.json');
+      const edit = (title: string) =>
+        summaryFileText(doc, { summary: { ...makeSummaryFile(doc).summary, title } });
+      const folder = memoryFolder('P', {
+        ...projectFiles([doc]),
+        [copy]: edit('Written first'),
+        [summaryPath(doc)]: edit('Written last'),
+      });
+      const project = await readyStore(folder);
+      expect(project.sessions[0]!.title).toBe('Written last');
+      folder.put(copy, edit('Copy written last'));
+      await project.refresh();
+      expect(project.sessions[0]!.title).toBe('Copy written last');
+    });
+  });
 });
 
 describe('session files', () => {

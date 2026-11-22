@@ -409,6 +409,23 @@ describe('chat store', () => {
     expect(chat.newSessionCount).toBe(2);
   });
 
+  it('counts a summary edited by hand, but not one read again unchanged', async () => {
+    const { project, one } = seedProject();
+    fakeAgent([answers('First.')]);
+    const chat = useChatStore();
+    await chat.ask('One');
+    const [first, second] = project.sessions;
+    const file = first!.summary!;
+
+    // A reload of the folder makes new objects with the same content.
+    project.sessions = [{ ...first!, summary: structuredClone(file) }, second!];
+    expect(chat.newSessionCount).toBe(0);
+
+    const edited = { ...file, summary: { ...file.summary, title: 'Edited' } };
+    project.sessions = [makeProjectSession(one, [], { file: edited }), second!];
+    expect(chat.newSessionCount).toBe(1);
+  });
+
   it('notices a model change during the chat', async () => {
     seedProject();
     fakeAgent([answers('First.')]);

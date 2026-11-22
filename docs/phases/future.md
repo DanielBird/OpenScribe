@@ -86,3 +86,18 @@ name by reading.
 - Summaries, quotes and chats already in a project, and the project's other sessions.
 - Undo, a match-case or regex option, and highlighting the match in the transcript behind the dialog.
 - The audio, which still has the names.
+
+## F6 — More summary editing
+
+**Idea:** Phase 39 (D60) lets a researcher correct a summary by hand. Left out of it, for later:
+- **Editing a summary with AI:** a prompt box under the summary, or `@` a session in the project chat with an edit tool
+  that reaches only the summaries named. The maintainer's answers so far: one summary per request, written directly,
+  and the model's output checked as any summary is (`checkSummary`). The project agent's other tools stay read-only.
+- **Renaming or merging a theme in every summary,** without AI.
+- Undo and redo across blocks, and of a removed theme or quote.
+- Adding and removing respondents; changing a quote's words or its turn by hand; editing a research question's wording.
+- An edit history: who edited a summary and when, or earlier versions.
+- A warning before **Regenerate** replaces edits, and updating a chat already open with an edited summary.
+
+**Hooks:** `domain/summaryEdit.ts` (the edits as functions), `stores/summaryEdit.ts` (the draft, autosave and the
+change check), `project.saveEditedSummary`.

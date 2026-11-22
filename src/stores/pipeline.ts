@@ -18,6 +18,7 @@ import type { LlmProvider } from '../providers/llm/types';
 import { FOLDER_MESSAGES, FolderError } from '../storage/folder';
 import { useProjectStore, type FileSummaryStatus } from './project';
 import { useSettingsStore } from './settings';
+import { useSummaryEditStore } from './summaryEdit';
 import { useTranscriptStore } from './transcript';
 import { createUnloadGuard } from './unloadGuard';
 
@@ -139,15 +140,25 @@ export const usePipelineStore = defineStore('pipeline', () => {
       ),
   );
 
-  /** Sessions that **Summarise all** would summarise: no summary, out of date, or failed. */
+  /**
+   * Sessions that **Summarise all** would summarise: no summary, out of date, or failed. Not one whose summary is
+   * being edited by hand (Phase 39): **Done** comes first.
+   */
   const summariseAllIds = computed(() =>
     project.sessions
       .map((s) => s.sessionId)
       .filter((id) => {
         const status = statusOf(id);
-        return status === 'none' || status === 'stale' || status === 'failed';
+        return (
+          (status === 'none' || status === 'stale' || status === 'failed') && !isBeingEdited(id)
+        );
       }),
   );
+
+  /** The edit store is asked when needed, not at setup: it asks this store in turn. */
+  function isBeingEdited(sessionId: string): boolean {
+    return useSummaryEditStore().isEditing(sessionId);
+  }
 
   function view(job: JobRecord, p: PipelineJob['progress']): PipelineJob {
     const { partial: _partial, ...rest } = job;
@@ -465,10 +476,13 @@ export const usePipelineStore = defineStore('pipeline', () => {
     return whenIdle();
   }
 
-  /** **Summarise**, **Regenerate** and **Summarise all**: queued one after another. Resolves when idle. */
+  /**
+   * **Summarise**, **Regenerate** and **Summarise all**: queued one after another. Resolves when idle. A summary
+   * being edited by hand is left alone.
+   */
   function summarise(sessionIds: readonly string[]): Promise<void> {
     for (const id of sessionIds) {
-      if (jobs.value.some((j) => j.sessionId === id)) continue;
+      if (jobs.value.some((j) => j.sessionId === id) || isBeingEdited(id)) continue;
       const failure = failures.value.get(id);
       if (failure) {
         enqueue(fromFailure(failure), false);
@@ -497,7 +511,13 @@ export const usePipelineStore = defineStore('pipeline', () => {
   function resume(sessionId?: string): Promise<void> {
     const id = sessionId ?? lastFailed.value;
     const failure = id ? failures.value.get(id) : undefined;
-    if (!failure || jobs.value.some((j) => j.sessionId === failure.sessionId)) return whenIdle();
+    if (
+      !failure ||
+      jobs.value.some((j) => j.sessionId === failure.sessionId) ||
+      isBeingEdited(failure.sessionId)
+    ) {
+      return whenIdle();
+    }
     enqueue(fromFailure(failure), true);
     pump();
     return whenIdle();

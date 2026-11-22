@@ -110,8 +110,8 @@ function newChat(): void {
 const newSessions = computed(() => {
   const n = chat.newSessionCount;
   return n === 1
-    ? '1 new session since this chat started.'
-    : `${n} new sessions since this chat started.`;
+    ? '1 session added or changed since this chat started.'
+    : `${n} sessions added or changed since this chat started.`;
 });
 
 /** "Answering…" or "Compacting…", then how it ended. The streamed text itself isn't announced. */

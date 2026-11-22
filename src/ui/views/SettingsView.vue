@@ -178,10 +178,23 @@ async function clearSavedData(): Promise<void> {
       <section class="band" aria-labelledby="settings-about">
         <h2 id="settings-about">About</h2>
         <div class="band-content">
-          <p v-if="desktop">DeScribe runs on this computer and calls public APIs to use LLMs.</p>
-          <p v-else>
-            DeScribe primarily runs in your browser but makes calls to public APIs to make use of
-            LLMs.
+          <p>
+            <template v-if="desktop"
+              >DeScribe runs on this computer and calls public APIs to use LLMs.</template
+            >
+            <template v-else
+              >DeScribe primarily runs in your browser but makes calls to public APIs to make use of
+              LLMs.</template
+            >
+            DeScribe is
+            <a
+              href="https://github.com/DanielBird/OpenScribe"
+              target="_blank"
+              rel="noopener noreferrer"
+              >open source</a
+            >
+            and was developed by
+            <a href="https://dtype.app" target="_blank" rel="noopener noreferrer">dtype</a>.
           </p>
           <div class="part">
             <h3>Getting API keys</h3>

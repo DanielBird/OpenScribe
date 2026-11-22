@@ -48,8 +48,9 @@ export const SessionTranscriptFileSchema = z.object({
   doc: TranscriptDocSchema,
 }) satisfies z.ZodType<SessionTranscriptFile>;
 
-// A summary is replaced, never read and written back, so it needs to keep nothing (D38).
-export const SessionSummaryFileSchema = z.object({
+// A summary edited by hand is read and written back (Phase 39, D60), so it keeps the fields this build doesn't know
+// (D38). A regenerated one is made anew.
+export const SessionSummaryFileSchema = z.looseObject({
   kind: z.literal('describe.summary'),
   schemaVersion: z.literal(SUMMARY_SCHEMA_VERSION),
   sessionId: z.string().min(1),
@@ -223,15 +224,22 @@ export async function readSummaryFile(
 }
 
 /**
- * Writes a summary file under `name`. There is no change check: a summary is regenerated, never edited, so the
- * newest one wins (PROJECTS.md §5.2).
+ * Writes a summary file under `name`. A regenerated summary is written with no check: the newest one wins
+ * (PROJECTS.md §5.2). A hand edit (Phase 39) passes `expected`, the stat the file must still have (`changed`
+ * otherwise), so a colleague's edit or new summary isn't overwritten without a choice.
  */
 export async function writeSummaryFile(
   folder: ProjectFolder,
   file: SessionSummaryFile,
   name: string,
+  opts: { expected?: FileStat } = {},
 ): Promise<{ name: string; stat: FileStat }> {
+  const path = sessionPath(name);
+  if (opts.expected !== undefined) {
+    const current = await folder.stat(path);
+    if (current === null || !sameStat(current, opts.expected)) throw changed(path);
+  }
   // Indented: summaries are small.
-  const stat = await folder.writeText(sessionPath(name), `${JSON.stringify(file, null, 2)}\n`);
+  const stat = await folder.writeText(path, `${JSON.stringify(file, null, 2)}\n`);
   return { name, stat };
 }

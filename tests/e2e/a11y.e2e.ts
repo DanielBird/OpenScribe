@@ -409,6 +409,13 @@ test('Add to project, its progress and error, the folder notice, and a summary',
   await expect(page.locator('.themes .quote-card').first()).toBeVisible();
   await page.locator('details.details summary').click();
   await expectAccessible(page, testInfo, 'Analyse, a summary');
+  await page.getByRole('button', { name: 'Edit', exact: true }).click();
+  await page.getByRole('textbox', { name: 'Synopsis' }).click();
+  await page.getByRole('button', { name: 'Add quote' }).first().click();
+  await expect(page.getByRole('textbox', { name: 'New quote' })).toBeFocused();
+  await expectAccessible(page, testInfo, 'Analyse, a summary being edited');
+  await page.getByRole('button', { name: 'Done' }).click();
+  await expect(page.getByRole('button', { name: 'Edit', exact: true })).toBeVisible();
 
   await page.getByRole('button', { name: /^Summarise all/ }).click();
   await expect(page.getByRole('dialog', { name: 'Summarise all' })).toBeVisible();

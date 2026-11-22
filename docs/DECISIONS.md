@@ -277,6 +277,8 @@ summarise them.
   - The summary file's shape changed before release 2 shipped, so D18 needs no migration: `schemaVersion` stays 1.
     Summary files from before the change read as invalid; summarise those sessions again.
     *1.1.0 shipped after this change (D40), so a further change to the summary file needs D18.*
+- **Changed (maintainer, 2026-11-22; D60):** summaries can also be corrected by hand in Project mode. Regenerate
+  still replaces them.
 
 ### D22 — Project agent: Claude only, keyword search, quotes copied with their citation
 - **Decision:**
@@ -1278,3 +1280,23 @@ summarise them.
   - A replacement in the Original makes those turns' English out of date (D39), and a summary out of date, as any
     edit does.
   - Names stay in the audio, the speaker labels, the file name and the glossary terms saved with the request.
+
+### D60 — Summaries can be corrected by hand (2026-11-22; Phase 39)
+- **Decision** (maintainer, answering Phase 39's planning questions): in Project mode, **Edit** turns a session's
+  summary into a document the user types in, in place, as in Word: its text, and its themes and quotes added or
+  removed. Edits are autosaved to the summary file with the transcript's change check (**Reload** / **Keep mine**).
+  A researcher's text is trusted and not checked; quotes are still checked when shown, and a quote's words aren't
+  edited. **Regenerate** replaces the edits, without a warning. No AI edits yet. This changes D21's "regenerated,
+  never edited" and PROJECTS.md A11.
+- **Why:** researchers need to correct the model's mistakes and reshape its themes. Fixing the transcript or the
+  brief and regenerating can't do either, and the summaries are what the project chat reads first.
+- **Consequences:**
+  - The summary file is now read and written back, so it keeps unknown fields (D38). Its shape doesn't change:
+    nothing records who edited it or when, so D18 doesn't apply and `createdAt` stays the model's.
+  - An edited summary keeps its status; its hashes are the model's. OneDrive conflict copies of an edited summary
+    tie on `createdAt`, and the newest `lastModified` wins.
+  - A summary is no longer only the model's checked output: a hand-written finding or quote reaches the project
+    agent as if the model had written it. Quotes that aren't found are marked, as before.
+  - The editable text uses `contenteditable="plaintext-only"` with `role="textbox"` on the elements that show it,
+    not `<textarea>`, so headings stay headings (an exception to AGENTS.md rule 9's "real `<input>`").
+  - The project agent stays read-only.

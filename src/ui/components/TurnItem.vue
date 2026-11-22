@@ -251,7 +251,7 @@ function onBlur(): void {
 }
 
 /* The text has the same box in both modes, so turning Edit text on moves nothing (DECISIONS.md D19).
-   Its 1px border, transparent until then, sits on the line box: line-height 1.6 leaves room above and
+   Its 1px border, always transparent, sits on the line box: line-height 1.6 leaves room above and
    below the letters. The side padding is taken back on the left by a negative margin, so the text
    lines up with the timestamp, and the box ends at the column's right edge. pre-wrap is how a textarea
    wraps. */
@@ -267,15 +267,19 @@ function onBlur(): void {
   overflow-wrap: anywhere;
 }
 
-/* Editing only shows the border. The height follows the text (field-sizing: Chromium 123+); hiding
-   overflow keeps a rounding error from adding a scrollbar, which would narrow the text. */
+/* Editing draws no box, as a summary being edited doesn't (Phase 39): a light grey under the turn that is pointed
+   at, and a light blue under the one with the caret. The border stays transparent and there is no outline. The
+   height follows the text (field-sizing: Chromium 123+); hiding overflow keeps a rounding error from adding a
+   scrollbar, which would narrow the text. */
 .text-box {
   display: block;
-  border-color: var(--color-border);
-  background: var(--color-bg);
+  background: transparent;
   color: inherit;
   resize: none;
   field-sizing: content;
+  transition:
+    background-color 0.15s,
+    box-shadow 0.15s;
 }
 
 @supports (field-sizing: content) {
@@ -284,8 +288,24 @@ function onBlur(): void {
   }
 }
 
-.text-box:hover {
-  border-color: var(--color-border-strong);
+@media (hover: hover) {
+  .text-box:hover:not(:focus) {
+    background: var(--color-surface);
+  }
+}
+
+/* The tint is the focus indicator; the 1px shadow in the same colour keeps one for tools that look for it. */
+.text-box:focus,
+.text-box:focus-visible {
+  outline: none;
+  background: var(--color-button-hover);
+  box-shadow: 0 0 0 1px var(--color-button-hover);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .text-box {
+    transition: none;
+  }
 }
 
 /* Narrow windows: one column, so the text keeps a readable width. */

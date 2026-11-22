@@ -8,6 +8,11 @@ All notable changes to DeScribe are recorded here. The format follows
 
 ### Added
 
+- **Correct a summary:** **Edit** in Analyse mode lets you type in a session's summary where it stands, as in a Word
+  document: its title, synopsis, overview, respondents' details, findings and themes. Enter adds a paragraph, a theme
+  or a detail; themes and quotes can be added and removed, and a quote's words are found in the transcript. Changes
+  are saved to the project folder as you type, and a colleague's change to the same summary asks you to **Reload** or
+  **Keep mine**. **Regenerate** replaces your changes.
 - **Find and replace names:** **Find and replace…** on Output replaces a name in the transcript, for example *Anna*
   with *Participant 1*, before it is translated or added to a project. It finds whole words in any case and with or
   without accents, lists each match with its speaker, time and the words around it, and steps through them with

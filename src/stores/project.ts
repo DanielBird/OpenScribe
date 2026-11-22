@@ -189,16 +189,19 @@ function timeOf(iso: string): number {
 interface Candidate<T, I extends { name: string; conflictCopy: boolean } = SessionFileInfo> {
   info: I;
   time: number;
+  /** Breaks a tie on `time`, newest first: a summary file's `lastModified`, since a hand edit keeps `createdAt`. */
+  tie?: number;
   value: T;
 }
 
-/** Newest first; a file that isn't a conflict copy wins a tie. */
+/** Newest first, then by `tie`; a file that isn't a conflict copy wins a tie. */
 function newestFirst<T, I extends { name: string; conflictCopy: boolean }>(
   a: Candidate<T, I>,
   b: Candidate<T, I>,
 ): number {
   return (
     b.time - a.time ||
+    (b.tie ?? 0) - (a.tie ?? 0) ||
     Number(a.info.conflictCopy) - Number(b.info.conflictCopy) ||
     (a.info.name < b.info.name ? -1 : 1)
   );
@@ -212,7 +215,8 @@ function push<T>(map: Map<string, T[]>, key: string, value: T): void {
 
 /**
  * Groups the files by session id and sorts the sessions newest recording first. For duplicates, the newest
- * `savedAt` (transcripts) or `createdAt` (summaries) wins, and the others are listed as copies.
+ * `savedAt` (transcripts) or `createdAt` (summaries) wins, and the others are listed as copies. Copies of a summary
+ * edited by hand share a `createdAt` (D60): the one written last wins.
  */
 function groupSessions(
   listing: readonly SessionFileInfo[],
@@ -237,6 +241,7 @@ function groupSessions(
       push(summariesById, summary.file.sessionId, {
         info: { ...info, stat: summary.stat },
         time: timeOf(summary.file.createdAt),
+        tie: summary.stat.lastModified,
         value: summary,
       });
     }
@@ -1036,6 +1041,53 @@ export const useProjectStore = defineStore('project', () => {
     }
   }
 
+  /**
+   * Saves a summary edited by hand (Phase 39) into the file the session's summary was read from. With `expected`,
+   * refuses (`changed`) if the file isn't as it was; without, overwrites it (**Keep mine**). Resolves the new stat.
+   */
+  async function saveEditedSummary(
+    sessionId: string,
+    file: SessionSummaryFile,
+    expected?: FileStat,
+  ): Promise<FileStat> {
+    const { f } = readyFolder();
+    const name = sessionMap.value.get(sessionId)?.summaryFile?.name;
+    if (!name) throw new FolderError('not_found', FOLDER_MESSAGES.notFound);
+    try {
+      const { stat } = await writeSummaryFile(f, file, name, expected ? { expected } : {});
+      writes++;
+      listing = withFile(listing, fileInfo(name, stat));
+      knownSummaries = new Map(knownSummaries).set(name, { stat, file });
+      rebuild();
+      return stat;
+    } catch (err) {
+      noteError(err);
+    }
+  }
+
+  /** Reads a session's summary file again (**Reload**), and notes what it holds. */
+  async function readSessionSummary(
+    sessionId: string,
+  ): Promise<{ file: SessionSummaryFile; stat: FileStat }> {
+    const { f } = readyFolder();
+    const name = sessionMap.value.get(sessionId)?.summaryFile?.name;
+    if (!name) throw new FolderError('not_found', FOLDER_MESSAGES.notFound);
+    try {
+      const read = await readSummaryFile(f, name);
+      const prior = knownSummaries.get(name);
+      if (!prior || !sameStat(prior.stat, read.stat)) {
+        writes++;
+        listing = withFile(listing, fileInfo(name, read.stat));
+        knownSummaries = new Map(knownSummaries).set(name, read);
+        rebuild();
+        return read;
+      }
+      return prior;
+    } catch (err) {
+      noteError(err);
+    }
+  }
+
   // --- Chats ---------------------------------------------------------------------------------------
 
   /**
@@ -1183,6 +1235,8 @@ export const useProjectStore = defineStore('project', () => {
     readSessionFile,
     readSessionDoc,
     saveSessionSummary,
+    saveEditedSummary,
+    readSessionSummary,
     saveChat,
     search,
     searchSession,

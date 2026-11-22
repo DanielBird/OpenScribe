@@ -222,6 +222,14 @@ describe('ProjectView', () => {
     await flushPromises();
     expect(ui.selected).not.toBeNull();
 
+    // Nor from a summary's text being edited (Phase 39).
+    const block = document.createElement('p');
+    block.setAttribute('contenteditable', 'plaintext-only');
+    wrapper!.get('.session-summary').element.append(block);
+    block.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    await flushPromises();
+    expect(ui.selected).not.toBeNull();
+
     await wrapper!.get('.session-summary h2').trigger('keydown', { key: 'Escape' });
     await flushPromises();
     expect(ui.selected).toBeNull();

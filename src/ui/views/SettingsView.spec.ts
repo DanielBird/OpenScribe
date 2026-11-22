@@ -213,6 +213,13 @@ describe('SettingsView', () => {
       expect(text).toContain(
         'DeScribe primarily runs in your browser but makes calls to public APIs',
       );
+      expect(text.replace(/\s+/g, ' ')).toContain(
+        'make use of LLMs. DeScribe is open source and was developed by dtype.',
+      );
+      expect(wrapper!.find('a[href="https://dtype.app"]').text()).toBe('dtype');
+      expect(wrapper!.find('a[href="https://github.com/DanielBird/OpenScribe"]').text()).toBe(
+        'open source',
+      );
       expect(text).toContain(
         'Your recording and glossary are sent to ElevenLabs for transcription.',
       );
@@ -236,6 +243,8 @@ describe('SettingsView', () => {
 
       const links = wrapper!.findAll('a');
       expect(links.map((a) => a.attributes('href'))).toEqual([
+        'https://github.com/DanielBird/OpenScribe',
+        'https://dtype.app',
         'https://elevenlabs.io/app/settings/api-keys',
         'https://console.anthropic.com',
         'https://aistudio.google.com',
@@ -323,6 +332,13 @@ describe('SettingsView', () => {
       mountView();
       const text = wrapper!.text();
       expect(text).toContain('DeScribe runs on this computer and calls public APIs to use LLMs.');
+      expect(text.replace(/\s+/g, ' ')).toContain(
+        'to use LLMs. DeScribe is open source and was developed by dtype.',
+      );
+      expect(wrapper!.find('a[href="https://dtype.app"]').text()).toBe('dtype');
+      expect(wrapper!.find('a[href="https://github.com/DanielBird/OpenScribe"]').text()).toBe(
+        'open source',
+      );
       expect(text).toContain('On this computer');
       expect(text).toContain("transcript text are saved in DeScribe's own storage.");
       expect(text).not.toContain('browser');

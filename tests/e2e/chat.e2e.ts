@@ -379,7 +379,7 @@ test('a session added during the chat shows the notice, and its New chat starts 
   await page.evaluate(() => window.dispatchEvent(new Event('focus')));
 
   const notice = page.locator('.chat-pane .notice');
-  await expect(notice).toHaveText(/1 new session since this chat started\./);
+  await expect(notice).toHaveText(/1 session added or changed since this chat started\./);
   await notice.getByRole('button', { name: 'New chat' }).click();
   await expect(page.locator('.chat-message')).toHaveCount(0);
   await expect(notice).toHaveCount(0);

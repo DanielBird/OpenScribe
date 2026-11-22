@@ -4,6 +4,7 @@
 // `MIN_PART_WORDS` words, and the words it leaves out include no negation. A verified quote shows the transcript's
 // own words, never the model's.
 import { wordsWithOffsets, type MatchWord } from './normalize';
+import { englishText, type SessionText } from './sessionText';
 
 export type QuoteCheck =
   | { status: 'verified'; sourceText: string }
@@ -103,4 +104,22 @@ export function checkQuote(turnText: string, quote: string): QuoteCheck {
     from = at + words.length;
   }
   return unsafe ? UNSAFE_OMISSION : { status: 'verified', sourceText: runs.join(' … ') };
+}
+
+/**
+ * The first turn whose English text verifies `text` (a quote typed or pasted by hand, Phase 39), with the
+ * transcript's own words; `null` if no turn has them. Turns are tried in order, so a passage said twice goes to the
+ * first time it was said.
+ */
+export function findQuoteTurn(
+  session: SessionText,
+  text: string,
+): { turnId: string; text: string } | null {
+  for (const turn of session.turns) {
+    const english = englishText(session, turn);
+    if (english === null) continue;
+    const check = checkQuote(english, text);
+    if (check.status === 'verified') return { turnId: turn.id, text: check.sourceText };
+  }
+  return null;
 }

@@ -7,11 +7,13 @@ import { useOpenTranscript } from '../composables/useOpenTranscript';
 import IconCopied from '../icons/IconCopied.vue';
 import IconCopy from '../icons/IconCopy.vue';
 import IconOpen from '../icons/IconOpen.vue';
+import IconRemove from '../icons/IconRemove.vue';
 
 // One quote (PROJECTS.md §5.5, DECISIONS.md T13, D44). A verified quote shows the transcript's own words and copies
 // them with their citation. A quote that wasn't found in its turn, or that leaves out words that could change what
 // was said, is marked and can't be copied. **Open** shows the quote's turn in the transcript, flagged or not, so it can
-// be read in context. Used by session summaries and chat answers.
+// be read in context. Used by session summaries and chat answers. While a summary is edited (Phase 39), a card's words
+// can't be changed: **Remove quote** takes the place of **Copy** and **Open**.
 const props = defineProps<{
   /** The transcript's own words when verified; what was claimed otherwise. */
   text: string;
@@ -29,7 +31,10 @@ const props = defineProps<{
   citation: string | null;
   /** The quote's turn, for **Open**; `null` when it isn't known. */
   at?: { sessionId: string; turnId: string } | null;
+  /** Editing a summary: **Remove quote** instead of **Copy** and **Open**. */
+  removable?: boolean;
 }>();
+const emit = defineEmits<{ remove: [] }>();
 
 const id = useId();
 const { copied, fallback, status, copy } = useCopy();
@@ -65,6 +70,7 @@ const quoteStart = computed(() => {
 });
 const copyLabel = computed(() => `Copy quote: ${quoteStart.value}`);
 const openLabel = computed(() => `Open in transcript: ${quoteStart.value}`);
+const removeLabel = computed(() => `Remove quote: ${quoteStart.value}`);
 
 async function onOpen(): Promise<void> {
   const at = props.at;
@@ -92,7 +98,13 @@ async function onCopy(): Promise<void> {
     <figcaption class="caption">
       <span class="source">{{ source }}</span>
       <span v-if="flag !== null" class="flag">{{ flag }}</span>
-      <span v-if="(flag === null && citation !== null) || at" class="actions">
+      <span v-if="removable" class="actions">
+        <button type="button" class="icon-button" :aria-label="removeLabel" @click="emit('remove')">
+          <IconRemove class="icon" />
+          <span class="icon-tip" aria-hidden="true">Remove</span>
+        </button>
+      </span>
+      <span v-else-if="(flag === null && citation !== null) || at" class="actions">
         <button
           v-if="flag === null && citation !== null"
           type="button"

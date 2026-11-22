@@ -9,10 +9,12 @@ import { useNavStore } from '../../stores/nav';
 import { usePipelineStore, type PipelineFailure } from '../../stores/pipeline';
 import { useProjectStore, type FileSummaryStatus } from '../../stores/project';
 import { useSettingsStore } from '../../stores/settings';
+import { useSummaryEditStore } from '../../stores/summaryEdit';
 import { useTranscriptStore } from '../../stores/transcript';
 import { makeProjectSession, makeSessionText } from '../../testing/projectSessions';
 import { makeSummaryReply } from '../../testing/summary';
 import { makeDoc } from '../../testing/transcriptDoc';
+import { placeCaret } from '../composables/useBlockNavigation';
 import { useOpenTranscript } from '../composables/useOpenTranscript';
 import ConfirmDialog from './ConfirmDialog.vue';
 import QuoteCard from './QuoteCard.vue';
@@ -461,5 +463,219 @@ describe('SessionSummary', () => {
     show();
     await button('Sessions')!.trigger('click');
     expect(wrapper!.getComponent(SessionSummary).emitted('back')).toHaveLength(1);
+  });
+
+  describe('Edit (Phase 39)', () => {
+    /** Shows the summary and turns Edit on, with saves to the folder resolved. */
+    async function editing(options: Parameters<typeof show>[0] = {}) {
+      const shown = show(options);
+      vi.spyOn(shown.project, 'saveEditedSummary').mockResolvedValue({ size: 1, lastModified: 2 });
+      await button('Edit')!.trigger('click');
+      await flushPromises();
+      return { ...shown, edit: useSummaryEditStore() };
+    }
+
+    const block = (name: string) => {
+      const el = wrapper!.find(`[aria-label="${name}"]`);
+      if (!el.exists()) throw new Error(`no block named ${name}`);
+      return el;
+    };
+    const blockNames = () =>
+      wrapper!.findAll('[role="textbox"]').map((b) => b.attributes('aria-label'));
+    const focused = () => document.activeElement?.getAttribute('aria-label') ?? null;
+
+    /** Types into a block as the browser would: the text changes, then `input`. */
+    async function type(name: string, text: string) {
+      const el = block(name);
+      (el.element as HTMLElement).focus();
+      await el.trigger('focus');
+      el.element.textContent = text;
+      await el.trigger('input');
+    }
+
+    /** A key in a block, with the caret at `at`. */
+    async function key(name: string, key: string, at: number | 'start' | 'end' = 'end') {
+      const el = block(name).element as HTMLElement;
+      el.focus();
+      placeCaret(el, at);
+      el.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }));
+      await flushPromises();
+    }
+
+    it('makes each piece of text an editable block where it stands, and Done ends it', async () => {
+      await editing();
+      expect(wrapper!.get('h2').attributes()).toMatchObject({
+        contenteditable: 'plaintext-only',
+        role: 'textbox',
+        'aria-label': 'Title',
+      });
+      expect(blockNames()).toEqual([
+        'Title',
+        'Synopsis',
+        'Overview, paragraph 1',
+        'Overview, paragraph 2',
+        'Respondent',
+        'Detail of Anna',
+        'Age of Anna',
+        'Detail of Anna',
+        'Country of Anna',
+        'Finding: How do people charge?',
+        'Finding: Who helps?',
+        'Name of theme 1',
+        'Description of charging routines',
+      ]);
+      expect(block('Overview, paragraph 1').attributes('aria-multiline')).toBe('true');
+      expect(block('Synopsis').text()).toBe('Anna charges her aids every night.');
+      expect(wrapper!.get('.head [aria-live="polite"]').text()).toBe('Editing');
+      // A quote's words can't be edited, and the question's wording is the brief's.
+      expect(wrapper!.find('.quote-card [contenteditable]').exists()).toBe(false);
+      expect(wrapper!.get('.question').attributes('contenteditable')).toBeUndefined();
+
+      await button('Done')!.trigger('click');
+      await flushPromises();
+      expect(wrapper!.find('[contenteditable]').exists()).toBe(false);
+      expect(button('Edit')).toBeDefined();
+      expect(wrapper!.get('.head [aria-live="polite"]').text()).toBe('Editing finished');
+    });
+
+    it('sends what is typed to the draft, and saves it', async () => {
+      const { edit, project } = await editing();
+      await type('Synopsis', 'She charges them by the bed.');
+      expect(edit.draft!.synopsis).toBe('She charges them by the bed.');
+      await type('Name of theme 1', 'Bedtime');
+      expect(edit.draft!.themes[0]).toMatchObject({ name: 'Bedtime', isNew: true });
+      await edit.flush();
+      expect(project.saveEditedSummary).toHaveBeenCalled();
+    });
+
+    it('gives an emptied title back its text, and makes an emptied finding "not discussed"', async () => {
+      const { edit } = await editing();
+      await type('Title', '');
+      await block('Title').trigger('blur');
+      expect(edit.draft!.title).toBe('P07 – home visit, Hamburg');
+      expect(block('Title').text()).toBe('P07 – home visit, Hamburg');
+      await type('Finding: How do people charge?', '  ');
+      await block('Finding: How do people charge?').trigger('blur');
+      expect(edit.draft!.researchQuestions[0]!.finding).toBe(NOT_DISCUSSED);
+    });
+
+    it('Enter splits an overview paragraph, and Backspace at its start joins it again', async () => {
+      const { edit } = await editing();
+      await key('Overview, paragraph 1', 'Enter', 5);
+      expect(edit.draft!.overview).toBe('First\n\nparagraph.\n\nSecond paragraph.');
+      expect(block('Overview, paragraph 1').text()).toBe('First');
+      expect(focused()).toBe('Overview, paragraph 2');
+      await key('Overview, paragraph 2', 'Backspace', 'start');
+      expect(edit.draft!.overview).toBe('First paragraph.\n\nSecond paragraph.');
+      expect(blockNames().filter((n) => n?.startsWith('Overview'))).toHaveLength(2);
+    });
+
+    it('Enter at the end of a description adds a theme, and Backspace in it removes it', async () => {
+      const { edit } = await editing();
+      await key('Description of charging routines', 'Enter');
+      expect(edit.draft!.themes).toHaveLength(2);
+      expect(focused()).toBe('Name of theme 2');
+      await key('Name of theme 2', 'Backspace', 'start');
+      expect(edit.draft!.themes).toHaveLength(1);
+      expect(focused()).toBe('Description of charging routines');
+    });
+
+    it('Enter at the end of a detail adds a row; elsewhere it goes on to the next block', async () => {
+      const { edit } = await editing();
+      await key('Age of Anna', 'Enter');
+      expect(edit.draft!.respondents[0]!.attributes.map((a) => a.field)).toEqual([
+        'Age',
+        '',
+        'Country',
+      ]);
+      expect(focused()).toBe('Detail of Anna');
+      await key('Synopsis', 'Enter', 'start');
+      expect(focused()).toBe('Overview, paragraph 1');
+      expect(edit.draft!.synopsis).toBe('Anna charges her aids every night.');
+    });
+
+    it('the arrow keys cross from block to block, and Escape goes to Done', async () => {
+      await editing();
+      await key('Title', 'ArrowRight', 'end');
+      expect(focused()).toBe('Synopsis');
+      await key('Synopsis', 'ArrowLeft', 'start');
+      expect(focused()).toBe('Title');
+      await key('Title', 'ArrowLeft', 'end');
+      expect(focused()).toBe('Title');
+      await key('Synopsis', 'Escape');
+      expect(document.activeElement).toBe(button('Done')!.element);
+    });
+
+    it('pastes plain text on one line', async () => {
+      const { edit } = await editing();
+      const el = block('Synopsis').element as HTMLElement;
+      el.focus();
+      placeCaret(el, 'end');
+      const paste = new Event('paste', { bubbles: true, cancelable: true });
+      Object.defineProperty(paste, 'clipboardData', { value: { getData: () => ' More\nlines.' } });
+      el.dispatchEvent(paste);
+      await flushPromises();
+      expect(paste.defaultPrevented).toBe(true);
+      expect(edit.draft!.synopsis).toBe('Anna charges her aids every night. More lines.');
+    });
+
+    it('removes a quote, and adds one from its words: found in its turn, or kept and marked', async () => {
+      const { edit } = await editing();
+      const card = wrapper!.findAllComponents(QuoteCard)[0]!;
+      await card.get('button[aria-label^="Remove quote"]').trigger('click');
+      await flushPromises();
+      expect(edit.draft!.researchQuestions[0]!.quotes).toEqual([]);
+      expect(edit.draft!.researchQuestions[0]!.turnIds).toEqual(['t2']);
+
+      await button('Add quote')!.trigger('click');
+      await flushPromises();
+      expect(focused()).toBe('New quote');
+      block('New quote').element.textContent = 'charger by the bed, every night';
+      await block('New quote').trigger('blur');
+      expect(edit.draft!.researchQuestions[0]!.quotes).toEqual([
+        { turnId: 't2', text: 'charger by the bed, every night.' },
+      ]);
+
+      await button('Add quote')!.trigger('click');
+      await flushPromises();
+      block('New quote').element.textContent = 'words nobody said';
+      await block('New quote').trigger('blur');
+      await flushPromises();
+      expect(edit.draft!.researchQuestions[0]!.quotes[1]).toEqual({
+        turnId: '',
+        text: 'words nobody said',
+      });
+      expect(wrapper!.text()).toContain('Not found in the transcript');
+    });
+
+    it('hides Add quote at 3 quotes, and Remove theme removes a theme', async () => {
+      const { edit } = await editing();
+      const draft = edit.draft!;
+      const three = [1, 2, 3].map(() => ({ turnId: 't3', text: 'My daughter helps me' }));
+      edit.change({ ...draft, themes: [{ ...draft.themes[0]!, quotes: three }] });
+      await flushPromises();
+      expect(wrapper!.findAll('.themes button').map((b) => b.text())).not.toContain('Add quote');
+      // Remove theme is on the theme's name row.
+      const remove = wrapper!.get(
+        '.themes dt button[aria-label="Remove theme: charging routines"]',
+      );
+      await remove.trigger('click');
+      await flushPromises();
+      expect(edit.draft!.themes).toEqual([]);
+      expect(button('Add theme')).toBeDefined();
+    });
+
+    it('hides Regenerate while editing, and Edit while the pipeline works on the session', async () => {
+      await editing({ status: 'stale' });
+      expect(button('Regenerate')).toBeUndefined();
+      await button('Done')!.trigger('click');
+      await flushPromises();
+      expect(button('Regenerate')).toBeDefined();
+      wrapper!.unmount();
+      wrapper = null;
+      vi.spyOn(usePipelineStore(), 'statusOf').mockReturnValue('running');
+      show();
+      expect(button('Edit')).toBeUndefined();
+    });
   });
 });

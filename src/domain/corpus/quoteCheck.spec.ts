@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { checkQuote } from './quoteCheck';
+import { checkQuote, findQuoteTurn } from './quoteCheck';
+import type { SessionText } from './sessionText';
 
 const TURN =
   'I just put them on the charger by the bed, like my phone. Do you charge them at night? Yes, every night.';
@@ -163,5 +164,55 @@ describe('checkQuote: omissions that could change what was said (D44)', () => {
 
   it('says a quote is not found before it says an omission is unsafe', () => {
     expect(checkQuote(TURN, 'I … charger by my bed')).toEqual(NOT_FOUND);
+  });
+});
+
+describe('findQuoteTurn', () => {
+  const session = (
+    languageCode: string,
+    turns: [string, string, string | null][],
+  ): SessionText => ({
+    sessionId: 's',
+    recordingName: 'r.mp3',
+    recordedAt: 0,
+    durationSec: null,
+    languageCode,
+    speakers: [{ id: 'A', label: 'Anna' }],
+    turns: turns.map(([id, text, en], i) => ({ id, speakerId: 'A', start: i * 10, text, en })),
+    transcriptHash: 'h',
+  });
+
+  it('finds the first turn that verifies the words, with the transcript’s own words', () => {
+    const s = session('en', [
+      ['t1', 'Hello there.', null],
+      ['t2', TURN, null],
+      ['t3', TURN, null],
+    ]);
+    expect(findQuoteTurn(s, 'i just put them ON the charger')).toEqual({
+      turnId: 't2',
+      text: 'I just put them on the charger',
+    });
+  });
+
+  it('handles omissions as checkQuote does', () => {
+    const s = session('en', [['t1', TURN, null]]);
+    expect(findQuoteTurn(s, 'I just put them … by the bed, like my phone')).toEqual({
+      turnId: 't1',
+      text: 'I just put them … by the bed, like my phone.',
+    });
+    expect(findQuoteTurn(s, 'Do … every night')).toBeNull();
+  });
+
+  it('reads the English of a translated session, and skips turns without English', () => {
+    const s = session('de', [
+      ['t1', GERMAN, null],
+      ['t2', 'Ja, jede Nacht.', 'Yes, every night.'],
+    ]);
+    expect(findQuoteTurn(s, 'every night')).toEqual({ turnId: 't2', text: 'every night.' });
+    expect(findQuoteTurn(s, 'das Hörgerät nachts')).toBeNull();
+  });
+
+  it('returns null when no turn has the words', () => {
+    expect(findQuoteTurn(session('en', [['t1', TURN, null]]), 'charging in the car')).toBeNull();
   });
 });

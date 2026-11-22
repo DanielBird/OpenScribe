@@ -268,8 +268,27 @@ Each finding and theme has up to two quotes that support it.
 - The open button beside a quote opens the transcript on the Output step at the quote's turn, in English if the quote
   is a translation. Marked quotes have it too, so you can read what was said.
 - **Open transcript** opens the session on the Output step, linked to the project. Attach the recording to listen.
-- Summaries are written in English and can't be edited. To change one, correct the transcript, the speaker names or
-  the brief, then make it again.
+- Summaries are written in English. To correct one, edit it (below), or correct the transcript, the speaker names or
+  the brief and make it again.
+
+### Correct a summary
+
+Click **Edit** under the summary's title. The summary stays as it is, and you type in it where it stands, as in a
+Word document: click anywhere in the text, and use the arrow keys to move through it. Your changes are saved to the
+project folder as you type. Click **Done** when you have finished.
+- **Enter** in the overview starts a new paragraph, and **Backspace** at the start of one joins it to the one above.
+  Enter at the end of a theme's description adds a theme, and at the end of a respondent's detail adds a detail.
+  Anywhere else, Enter moves on.
+- **Add theme** adds a theme at the end, and the button at the end of a theme removes it with its quotes.
+- A quote's words are the transcript's, so they can't be edited. The button on a quote removes it. **Add quote** under
+  a finding or a theme opens a quote: paste or type the respondent's words, then click elsewhere. DeScribe finds them
+  in the transcript and shows the speaker and time; words it can't find are kept and marked **Not found**.
+- The research questions are the brief's, and can only be changed there.
+- If a colleague changed the summary while you were editing it, saving stops. **Reload** shows their version, and
+  **Keep mine** saves yours over it.
+- **Regenerate** makes a new summary and replaces your changes.
+- A chat that is already open keeps the summaries it started with. It says how many sessions changed; **New chat**
+  uses your corrections.
 
 ### When a summary is out of date
 

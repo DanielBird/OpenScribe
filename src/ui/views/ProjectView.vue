@@ -81,10 +81,13 @@ async function onNewChat(): Promise<void> {
   chatPane.value?.focusInput();
 }
 
-/** Escape in a summary goes back to the chat, unless something inside used it (a dialog, a field). */
+/** Escape in a summary goes back to the chat, unless something inside used it (a dialog, a field, a summary's text). */
 function onDetailKeydown(event: KeyboardEvent): void {
   if (event.key !== 'Escape' || event.defaultPrevented || ui.selected === null) return;
-  if ((event.target as Element | null)?.closest('dialog, input, textarea, select')) return;
+  if (
+    (event.target as Element | null)?.closest('dialog, input, textarea, select, [contenteditable]')
+  )
+    return;
   event.preventDefault();
   back();
 }

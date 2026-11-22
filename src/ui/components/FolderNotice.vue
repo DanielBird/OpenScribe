@@ -1,10 +1,15 @@
 <script setup lang="ts">
 import { ref } from 'vue';
+import { useSummaryEditStore } from '../../stores/summaryEdit';
 import { useTranscriptStore } from '../../stores/transcript';
 
-// Why the Output tab stopped saving a project transcript to its file (PROJECTS.md §5.2), and the way on. The
-// transcript is still saved in this browser meanwhile.
-const transcript = useTranscriptStore();
+// Why DeScribe stopped saving a project file (PROJECTS.md §5.2), and the way on: the Output tab's transcript (still
+// saved in this browser meanwhile), or a summary being edited in Project mode (Phase 39, kept on screen meanwhile).
+// Both stores give the same notice and the same actions.
+const props = withDefaults(defineProps<{ source?: 'transcript' | 'summary' }>(), {
+  source: 'transcript',
+});
+const store = props.source === 'summary' ? useSummaryEditStore() : useTranscriptStore();
 const working = ref(false);
 
 async function act(action: () => Promise<void>): Promise<void> {
@@ -19,15 +24,15 @@ async function act(action: () => Promise<void>): Promise<void> {
 </script>
 
 <template>
-  <div v-if="transcript.folderNotice" class="folder-notice" role="alert">
-    <template v-if="transcript.folderNotice.kind === 'conflict'">
-      <p>The project's copy of this transcript has changed.</p>
+  <div v-if="store.folderNotice" class="folder-notice" role="alert">
+    <template v-if="store.folderNotice.kind === 'conflict'">
+      <p>The project's copy of this {{ source }} has changed.</p>
       <div class="actions">
         <button
           type="button"
           class="button"
           :disabled="working"
-          @click="act(() => transcript.resolveConflict('reload'))"
+          @click="act(() => store.resolveConflict('reload'))"
         >
           Reload
         </button>
@@ -35,40 +40,40 @@ async function act(action: () => Promise<void>): Promise<void> {
           type="button"
           class="button"
           :disabled="working"
-          @click="act(() => transcript.resolveConflict('keep'))"
+          @click="act(() => store.resolveConflict('keep'))"
         >
           Keep mine
         </button>
       </div>
     </template>
-    <template v-else-if="transcript.folderNotice.kind === 'reconnect'">
-      <p>DeScribe no longer has access to “{{ transcript.folderNotice.projectName }}”.</p>
+    <template v-else-if="store.folderNotice.kind === 'reconnect'">
+      <p>DeScribe no longer has access to “{{ store.folderNotice.projectName }}”.</p>
       <div class="actions">
         <button
           type="button"
           class="button"
           :disabled="working"
-          @click="act(() => transcript.reconnectFolder())"
+          @click="act(() => store.reconnectFolder())"
         >
           Reconnect
         </button>
       </div>
     </template>
-    <template v-else-if="transcript.folderNotice.kind === 'retry'">
-      <p>{{ transcript.folderNotice.message }}</p>
+    <template v-else-if="store.folderNotice.kind === 'retry'">
+      <p>{{ store.folderNotice.message }}</p>
       <div class="actions">
         <button
           type="button"
           class="button"
           :disabled="working"
-          @click="act(() => transcript.retryFolderSave())"
+          @click="act(() => store.retryFolderSave())"
         >
           Try again
         </button>
       </div>
     </template>
     <p v-else>
-      Open “{{ transcript.folderNotice.projectName }}” in Analyse mode to save your changes to it.
+      Open “{{ store.folderNotice.projectName }}” in Analyse mode to save your changes to it.
     </p>
   </div>
 </template>

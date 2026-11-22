@@ -326,4 +326,42 @@ describe('summary files', () => {
     expect(await providerOf('b--2')).toBeUndefined();
     expect(await providerOf('c--3')).toBeUndefined();
   });
+
+  describe('a hand edit (Phase 39)', () => {
+    it('writes when the file still has the expected stat, and refuses when it changed or is gone', async () => {
+      const folder = memoryFolder();
+      const file = makeSummaryFile(doc);
+      const first = await writeSummaryFile(folder, file, name);
+      const second = await writeSummaryFile(folder, file, name, { expected: first.stat });
+      expect(second.stat.lastModified).toBeGreaterThan(first.stat.lastModified);
+      folder.put(`sessions/${name}`, 'their edit');
+      await expect(
+        writeSummaryFile(folder, file, name, { expected: second.stat }),
+      ).rejects.toMatchObject({ kind: 'changed', path: `sessions/${name}` });
+      folder.remove(`sessions/${name}`);
+      await expect(
+        writeSummaryFile(folder, file, name, { expected: second.stat }),
+      ).rejects.toMatchObject({ kind: 'changed' });
+      expect(folder.text(`sessions/${name}`)).toBeUndefined();
+    });
+
+    it('keeps fields this build doesn’t know, at every level, from read to write', async () => {
+      const base = makeSummaryFile(doc);
+      const [theme, ...themes] = base.summary.themes;
+      const withUnknown = {
+        ...base,
+        reviewedBy: 'later build',
+        summary: {
+          ...base.summary,
+          tone: 'warm',
+          themes: theme ? [{ ...theme, colour: 'blue' }, ...themes] : themes,
+        },
+      };
+      const folder = memoryFolder('P', { [`sessions/${name}`]: JSON.stringify(withUnknown) });
+      const { file, stat } = await readSummaryFile(folder, name);
+      await writeSummaryFile(folder, file, name, { expected: stat });
+      const written: unknown = JSON.parse(folder.text(`sessions/${name}`) ?? '');
+      expect(written).toEqual(withUnknown);
+    });
+  });
 });

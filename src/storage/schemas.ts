@@ -87,24 +87,27 @@ export const SessionTextSchema = z.object({
   transcriptHash: z.string(),
 }) satisfies z.ZodType<SessionText>;
 
-const SummaryQuoteSchema = z.object({ turnId: z.string(), text: z.string() });
+const SummaryQuoteSchema = z.looseObject({ turnId: z.string(), text: z.string() });
 
-/** A session summary as it is saved in the project folder (`domain/summary.ts`). */
-export const SessionSummarySchema = z.object({
+/**
+ * A session summary as it is saved in the project folder (`domain/summary.ts`). Loose at every level: a summary is
+ * read and written back when it is edited by hand (Phase 39), so fields this build doesn't know survive (D38).
+ */
+export const SessionSummarySchema = z.looseObject({
   title: z.string(),
   synopsis: z.string(),
   overview: z.string(),
   respondents: z.array(
-    z.object({
+    z.looseObject({
       speakerId: z.string().nullable(),
       label: z.string(),
       attributes: z.array(
-        z.object({ field: z.string(), value: z.string(), turnIds: z.array(z.string()) }),
+        z.looseObject({ field: z.string(), value: z.string(), turnIds: z.array(z.string()) }),
       ),
     }),
   ),
   researchQuestions: z.array(
-    z.object({
+    z.looseObject({
       question: z.string(),
       finding: z.string(),
       turnIds: z.array(z.string()),
@@ -112,7 +115,7 @@ export const SessionSummarySchema = z.object({
     }),
   ),
   themes: z.array(
-    z.object({
+    z.looseObject({
       name: z.string(),
       description: z.string(),
       turnIds: z.array(z.string()),

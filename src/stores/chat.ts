@@ -12,7 +12,7 @@ import {
   type ChatFileQuestion,
 } from '../domain/chat';
 import { EMPTY_BRIEF } from '../domain/project';
-import type { SessionSummary } from '../domain/summary';
+import type { SessionSummary, SessionSummaryFile } from '../domain/summary';
 import { parseAnswer, type AnswerBlock } from '../features/agent/answer';
 import { askProject } from '../features/agent/ask';
 import { compactChat, compactedHistory } from '../features/agent/compact';
@@ -93,8 +93,8 @@ export const CHAT_MESSAGES = {
 interface Snapshot {
   corpus: CorpusReader;
   context: string;
-  /** Session id → its summary's `createdAt` (`null`: none), to notice sessions added or summarised later. */
-  summaryStamps: ReadonlyMap<string, string | null>;
+  /** Session id → its summary file (`null`: none), to notice sessions added, summarised or edited later. */
+  summaryFiles: ReadonlyMap<string, SessionSummaryFile | null>;
 }
 
 /**
@@ -237,14 +237,24 @@ export const useChatStore = defineStore('chat', () => {
     );
   });
 
-  /** Sessions added, or summarised again, since the chat started. */
+  /**
+   * Sessions added, summarised again or edited by hand (Phase 39) since the chat started. The project store keeps a
+   * summary file's object while the file is unchanged, and a save or a newer file makes a new one; a file read again
+   * with the same content (a reload of the folder) isn't a change.
+   */
   const newSessionCount = computed(() => {
-    const stamps = snapshot.value?.summaryStamps;
-    if (!stamps) return 0;
+    const files = snapshot.value?.summaryFiles;
+    if (!files) return 0;
     return project.sessions.filter((s) => {
-      if (!stamps.has(s.sessionId)) return true;
-      const now = s.summary?.createdAt ?? null;
-      return now !== null && now !== stamps.get(s.sessionId);
+      if (!files.has(s.sessionId)) return true;
+      const now = s.summary;
+      const then = files.get(s.sessionId) ?? null;
+      if (now === null || now === then) return false;
+      return (
+        then === null ||
+        now.createdAt !== then.createdAt ||
+        JSON.stringify(now.summary) !== JSON.stringify(then.summary)
+      );
     }).length;
   });
   const modelChanged = computed(
@@ -269,17 +279,17 @@ export const useChatStore = defineStore('chat', () => {
   /** `fixedKeys`: an opened chat's session keys, which its answers' quote refs use. */
   function takeSnapshot(fixedKeys: Readonly<Record<string, string>> = {}): Snapshot {
     const summaries = new Map<string, SessionSummary>();
-    const summaryStamps = new Map<string, string | null>();
+    const summaryFiles = new Map<string, SessionSummaryFile | null>();
     for (const s of project.sessions) {
       if (s.summary) summaries.set(s.sessionId, s.summary.summary);
-      summaryStamps.set(s.sessionId, s.summary?.createdAt ?? null);
+      summaryFiles.set(s.sessionId, s.summary);
     }
     const corpus = createCorpusReader(project.corpus, summaries, fixedKeys);
     const open = project.project;
     return {
       corpus,
       context: renderContext(open?.name ?? '', open?.brief ?? EMPTY_BRIEF, corpus),
-      summaryStamps,
+      summaryFiles,
     };
   }
 
