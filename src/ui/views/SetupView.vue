@@ -226,16 +226,18 @@ const optionsSummary = computed(() => {
 
 /* The band layout itself is in base.css, shared with Settings. */
 
-/* A section that opens and closes keeps its name at the top of the band. On the baseline it would move
-   when the section opens: the first line of Options is a label centred against its taller select. */
-.band > h2:has(.band-toggle) {
-  align-self: start;
+/* The height of a field's control, which its label is centred against. */
+.view {
+  --field-height: 2.625rem;
 }
 
+/* Collapsed, the summary's first line sits where the first label sits when open (centred against its
+   control), so neither it nor the band's name, which shares its baseline, moves as Options opens. */
 .band-summary {
   grid-column: 2;
   grid-row: 1;
   min-width: 0;
+  padding-top: calc((var(--field-height) - 1lh) / 2);
   color: var(--color-text-muted);
   overflow-wrap: anywhere;
   transition: color 0.15s;
@@ -383,7 +385,7 @@ const optionsSummary = computed(() => {
 .field .control {
   box-sizing: border-box;
   width: 8rem;
-  height: 2.625rem;
+  height: var(--field-height);
 }
 
 .speakers {

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, useTemplateRef, watch } from 'vue';
-import { usePipelineStore, type PipelineJob } from '../../stores/pipeline';
+import { usePipelineStore, usesModel, type PipelineJob } from '../../stores/pipeline';
 import { useProjectStore } from '../../stores/project';
 import ErrorDetails from './ErrorDetails.vue';
 
@@ -96,7 +96,8 @@ async function resume(): Promise<void> {
   const f = failure.value;
   if (!f) return;
   if (f.reconnect && !(await project.reconnect())) return;
-  if (pipeline.needsKey) {
+  // A job that only saves is left needs no key (D62).
+  if (pipeline.needsKey && usesModel(f.steps, f.step)) {
     emit('needKey');
     return;
   }

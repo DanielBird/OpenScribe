@@ -199,7 +199,7 @@ async function remove(): Promise<void> {
             :disabled="store.busy !== null"
             @click="remove"
           >
-            Remove
+            Remove models
           </button>
         </div>
       </template>

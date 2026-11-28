@@ -1300,3 +1300,39 @@ summarise them.
   - The editable text uses `contenteditable="plaintext-only"` with `role="textbox"` on the elements that show it,
     not `<textarea>`, so headings stay headings (an exception to AGENTS.md rule 9's "real `<input>`").
   - The project agent stays read-only.
+
+### D61 — The desktop app saves the .docx with Windows' Save dialog (2026-11-28; at the maintainer's request)
+- **Decision:** in the desktop app, the Output tab's export button is **Save as .docx** (the version dialog's button
+  **Save**). The file is built first, then Windows' Save dialog asks where (`showSaveFilePicker`, through
+  `src/storage/folder.ts`; it opens where the last one was saved, Documents the first time). Once written, the button
+  shows a tick for three seconds (no tip: the maintainer found the tick enough), and a status line tells screen
+  readers the file name. A dismissed
+  dialog saves nothing and says nothing. The web build keeps the browser's download.
+- **Why:** the web view saves a download to Downloads with no dialog and no sign (desktop.md W7), so the button seemed
+  to do nothing. The maintainer asked for "Save as .docx" and a confirmation.
+- **Consequences:**
+  - Building comes before the dialog because the browser lets a file picker open only within seconds of the click,
+    and a file that can't be built then never leaves an empty one. A failed write is aborted, so a replaced file
+    stays whole; the message suggests closing the file in Word, the usual cause.
+  - No Rust command and no Tauri plugin: the app already grants the web view File System Access (W10). The cost:
+    WebView2 titles Windows' dialog "Warning: this site can see edits you make", and the page can't change that.
+    Another title needs the dialog shown from Rust.
+  - The confirmation is not repeated in words on screen: the user just chose the place and name (D13).
+
+### D62 — Add to project can leave the summary for later (2026-11-28; at the maintainer's request)
+- **Decision:** the **Add to project** dialog has a **Summarise** checkbox (**Translate and summarise** for a transcript
+  that isn't in English). It starts ticked when the project provider's key is saved, unticked when it's missing.
+  Unticked, the job only saves the transcript: no key, no model, nothing sent to Claude or Gemini, and no translation,
+  which exists only for the summary. A session added without a summary shows **Summarise** on Output where **Open
+  summary** goes; it asks for the key when it's missing, as **Summarise** in Project mode does. This changes A14 in
+  PROJECTS.md.
+- **Why:** adding a session to a project shouldn't need a key or cost a model call. The maintainer wanted colleagues
+  without a key to add transcripts too, and the summary can be made later from Output or Project mode.
+- **Consequences:**
+  - The pipeline asks for a key only when a step still to run translates or summarises (`usesModel`). A failed
+    save-only add resumes without one.
+  - When the dialog is only there for the key (a linked transcript, or a failed add), the box isn't shown: the job
+    that resumes decides.
+  - The data notice under the box no longer repeats its words: "The transcript text is sent to Anthropic."
+  - **Summarise** for the session open on Output decides whether to translate from that transcript, not the folder's
+    last scan, so edits made on Output since count.

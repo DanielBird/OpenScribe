@@ -3,7 +3,7 @@ import { computed, ref, watch } from 'vue';
 import type { TranscriptVersion } from '../../domain/transcript';
 import ConfirmDialog from './ConfirmDialog.vue';
 
-// Asks which version to download when an English translation exists (DECISIONS.md D7).
+// Asks which version to download (or save, in the desktop app: D61) when an English translation exists (D7).
 const props = defineProps<{
   open: boolean;
   /** The original's language name, e.g. 'German', or '' when it is not known. */
@@ -15,6 +15,7 @@ const props = defineProps<{
 }>();
 const emit = defineEmits<{ download: [version: TranscriptVersion]; cancel: [] }>();
 
+const confirmLabel = __DESKTOP__ ? 'Save' : 'Download';
 const choice = ref<TranscriptVersion>(props.initial);
 const originalLabel = computed(() =>
   props.language ? `Original (${props.language})` : 'Original',
@@ -37,7 +38,7 @@ watch(
   <ConfirmDialog
     :open="open"
     title="Which version?"
-    confirm-label="Download"
+    :confirm-label="confirmLabel"
     @confirm="emit('download', choice)"
     @cancel="emit('cancel')"
   >

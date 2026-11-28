@@ -1,5 +1,5 @@
-// The project folder, through the browser's File System Access API (DECISIONS.md T11). This is the only code that
-// calls the API (AGENTS.md rule 4). Every browser error becomes a FolderError with a kind and a message that says
+// The project folder, through the browser's File System Access API (DECISIONS.md T11), and the desktop app's Save
+// dialog for exports (D61). This is the only code that calls the API (AGENTS.md rule 4). Every browser error becomes a FolderError with a kind and a message that says
 // what happened and what to do; the mapping follows reference/file-system-access.md, "Rules for Phase 14".
 import { del, get, set } from 'idb-keyval';
 import { keyvalStore } from './idb';
@@ -224,6 +224,44 @@ export async function requestFolderPermission(handle: FileSystemDirectoryHandle)
     return (await handle.requestPermission({ mode: 'readwrite' })) === 'granted';
   } catch {
     return false;
+  }
+}
+
+// --- Saving a file where the user chooses (the desktop app's Save as, DECISIONS.md D61) ---------------
+
+const DOCX_TYPE = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+
+/**
+ * Asks where to save a Word file, in Windows' Save dialog, which opens where the last one was saved. Call it
+ * straight from a click: the browser requires it. `FolderError('cancelled')` if it's dismissed.
+ */
+export async function pickSaveFile(suggestedName: string): Promise<FileSystemFileHandle> {
+  if (typeof window === 'undefined' || !('showSaveFilePicker' in window)) {
+    throw new FolderError('unsupported', FOLDER_MESSAGES.unsupported);
+  }
+  try {
+    return await window.showSaveFilePicker({
+      id: 'describe-export',
+      startIn: 'documents',
+      suggestedName,
+      types: [{ description: 'Word document', accept: { [DOCX_TYPE]: ['.docx'] } }],
+    });
+  } catch (err) {
+    throw toFolderError(err, 'pick');
+  }
+}
+
+/** Replaces the file's contents in one step (`createWritable`): an old file stays whole if the write fails. */
+export async function writeFile(handle: FileSystemFileHandle, data: Blob): Promise<void> {
+  let writable: FileSystemWritableFileStream | null = null;
+  try {
+    writable = await handle.createWritable();
+    await writable.write(data);
+    await writable.close();
+    writable = null;
+  } catch (err) {
+    await writable?.abort().catch(() => undefined);
+    throw toFolderError(err, 'write');
   }
 }
 

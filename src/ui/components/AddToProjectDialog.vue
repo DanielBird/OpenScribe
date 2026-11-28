@@ -13,10 +13,11 @@ import ConfirmDialog from './ConfirmDialog.vue';
 import ProjectModelSelect from './ProjectModelSelect.vue';
 
 // The choices for **Add to project** (Phase 15): which project (a recent one, D49, or open, create or reconnect one
-// here), the project model (the setting the Analyse header shows), its provider's key if it's missing (Claude or
-// Gemini, D26), and where the text goes. The work runs after the dialog closes, in the actions row.
+// here), whether to summarise now (D62), and for a summary the project model (the setting the Analyse header shows),
+// its provider's key if it's missing (Claude or Gemini, D26), and where the text goes. The work runs after the dialog
+// closes, in the actions row.
 const props = defineProps<{ open: boolean }>();
-const emit = defineEmits<{ add: []; cancel: [] }>();
+const emit = defineEmits<{ add: [options: { summarise: boolean }]; cancel: [] }>();
 
 const project = useProjectStore();
 const pipeline = usePipelineStore();
@@ -51,8 +52,14 @@ const canChoose = computed(() => {
 /** Changing project cancels this work: the pipeline and the chat belong to the project they started in. */
 const locked = computed(() => pipeline.isBusy || chat.running);
 const showSelect = computed(() => canChoose.value && project.recentProjects.length > 1);
+/**
+ * **Summarise** (D62): ticked when the dialog opens if the key is saved. Offered only for a new add: when the dialog is
+ * here only for the key, the job it resumes makes a summary.
+ */
+const summarise = ref(true);
+const summarises = computed(() => !canChoose.value || summarise.value);
 const canAdd = computed(() => {
-  if (keyMissing.value || opening.value || loading.value) return false;
+  if ((summarises.value && keyMissing.value) || opening.value || loading.value) return false;
   return other.value ? !locked.value : ready.value;
 });
 
@@ -72,6 +79,7 @@ watch(
   () => props.open,
   (open) => {
     if (!open) return;
+    summarise.value = !keyMissing.value;
     keyNeeded.value = pipeline.needsKey;
     project.notice = null;
     announcement.value = '';
@@ -154,7 +162,7 @@ async function onConfirm(): Promise<void> {
     // Cancelled while it opened, or the transcript turned out to be in that project: nothing to add.
     if (!props.open || transcript.projectLink) return;
   }
-  emit('add');
+  emit('add', { summarise: summarises.value });
 }
 </script>
 
@@ -164,6 +172,7 @@ async function onConfirm(): Promise<void> {
     :title="title"
     confirm-label="Add"
     :confirm-disabled="!canAdd"
+    smooth-height
     @confirm="onConfirm"
     @cancel="emit('cancel')"
   >
@@ -229,22 +238,32 @@ async function onConfirm(): Promise<void> {
         <p v-if="project.notice" class="notice" role="alert">{{ project.notice }}</p>
       </div>
 
-      <div class="field">
-        <label :for="`${id}-model`" class="label">Model</label>
-        <ProjectModelSelect :id="`${id}-model`" class="control" />
-      </div>
+      <label v-if="canChoose" class="check">
+        <input v-model="summarise" type="checkbox" />
+        {{ translates ? 'Translate and summarise' : 'Summarise' }}
+      </label>
 
-      <ApiKeyField
-        v-if="keyNeeded"
-        :key="settings.projectProvider"
-        :provider="settings.projectProvider"
-        :label="names.keyLabel"
-      />
+      <template v-if="summarises">
+        <div class="field">
+          <label :for="`${id}-model`" class="label">Model</label>
+          <ProjectModelSelect :id="`${id}-model`" class="control" />
+        </div>
 
-      <p class="data-notice">
-        The transcript text is sent to {{ names.company }} to
-        {{ translates ? 'translate and summarise' : 'summarise' }}.
-      </p>
+        <ApiKeyField
+          v-if="keyNeeded"
+          :key="settings.projectProvider"
+          :provider="settings.projectProvider"
+          :label="names.keyLabel"
+        />
+
+        <p class="data-notice">
+          <template v-if="canChoose">The transcript text is sent to {{ names.company }}.</template>
+          <template v-else>
+            The transcript text is sent to {{ names.company }} to
+            {{ translates ? 'translate and summarise' : 'summarise' }}.
+          </template>
+        </p>
+      </template>
     </div>
   </ConfirmDialog>
   <BriefDialog :open="open && ui.briefOpen" @close="ui.briefOpen = false" />
@@ -264,6 +283,13 @@ async function onConfirm(): Promise<void> {
 
 .label {
   font-weight: 600;
+}
+
+.check {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+  justify-self: start;
 }
 
 .connect {

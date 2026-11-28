@@ -52,7 +52,7 @@ describe('SpeechPackSection', () => {
 
   it('says what is wrong in each other state', async () => {
     const cases: [LocalSttStatus, string, string | null][] = [
-      [{ state: 'ready', pack: TEST_PACK }, 'Speech models are installed.', 'Remove'],
+      [{ state: 'ready', pack: TEST_PACK }, 'Speech models are installed.', 'Remove models'],
       [
         { state: 'unusable', pack: TEST_PACK, reason: 'outdated' },
         'This version of DeScribe needs newer speech models.',
@@ -294,7 +294,7 @@ describe('SpeechPackSection', () => {
     await flushPromises();
     expect(wrapper!.text()).toContain('Speech models are installed.');
     expect(live()).toBe('Speech models installed.');
-    expect(document.activeElement?.textContent?.trim()).toBe('Remove');
+    expect(document.activeElement?.textContent?.trim()).toBe('Remove models');
   });
 
   it('goes back to the download after Cancel, with no error', async () => {
@@ -334,9 +334,9 @@ describe('SpeechPackSection', () => {
     }
   });
 
-  it('asks before Remove, and does nothing on Cancel', async () => {
+  it('asks before Remove models, and does nothing on Cancel', async () => {
     await mountWith({ state: 'ready', pack: TEST_PACK });
-    await button('Remove')!.trigger('click');
+    await button('Remove models')!.trigger('click');
     await flushPromises();
     const dialog = wrapper!.get('dialog');
     expect(dialog.text()).toContain('Remove the speech models?');
@@ -348,7 +348,7 @@ describe('SpeechPackSection', () => {
     await flushPromises();
     expect(bridge.calls).not.toContain('remove');
 
-    await button('Remove')!.trigger('click');
+    await button('Remove models')!.trigger('click');
     await flushPromises();
     bridge.next = { state: 'missing', pack: TEST_PACK };
     await wrapper!

@@ -381,6 +381,7 @@ test('Add to project, its progress and error, the folder notice, and a summary',
   await page.getByRole('button', { name: 'Open project…' }).click();
   await expect(page.getByRole('dialog', { name: 'Add to Hearing at home 2026' })).toBeVisible();
   await expectAccessible(page, testInfo, 'Add to project, project open, key missing');
+  await page.getByRole('checkbox', { name: 'Translate and summarise' }).check();
   await page.getByLabel('Claude (Anthropic) API key').fill('test-key');
   await page.getByRole('button', { name: 'Add', exact: true }).click();
 

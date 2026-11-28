@@ -8,6 +8,7 @@ import { useNavStore } from '../../stores/nav';
 import { usePipelineStore, type PipelineJob } from '../../stores/pipeline';
 import { usePlaybackStore } from '../../stores/playback';
 import { useProjectStore } from '../../stores/project';
+import { useSettingsStore } from '../../stores/settings';
 import { useTranscriptStore } from '../../stores/transcript';
 import { useTranslationStore } from '../../stores/translation';
 import { makeProjectFile, makeSummaryFile } from '../../testing/projectSeed';
@@ -24,6 +25,7 @@ import ExportButton from '../components/ExportButton.vue';
 import JobStatus from '../components/JobStatus.vue';
 import ReplaceDialog from '../components/ReplaceDialog.vue';
 import SpeakerPanel from '../components/SpeakerPanel.vue';
+import SummariseDialog from '../components/SummariseDialog.vue';
 import TranslateButton from '../components/TranslateButton.vue';
 import TurnList from '../components/TurnList.vue';
 import VersionToggle from '../components/VersionToggle.vue';
@@ -134,6 +136,52 @@ describe('OutputView', () => {
       await useTranscriptStore().setDoc(makeDoc({ id: 'other' }));
       wrapper = mount(OutputView);
       expect(openSummary()).toBeUndefined();
+    });
+
+    describe('Summarise, for a transcript added without a summary (D62)', () => {
+      // Not the confirm button of the closed key dialog.
+      const summarise = () =>
+        wrapper!
+          .findAll('.actions button')
+          .find((b) => b.text() === 'Summarise' && !b.element.closest('dialog'));
+
+      it('takes the place of Open summary, and summarises this session', async () => {
+        useSettingsStore().claudeKey = 'test-key';
+        const doc = await inProject(false);
+        const run = vi.spyOn(usePipelineStore(), 'summarise').mockResolvedValue(undefined);
+        wrapper = mount(OutputView);
+        expect(openSummary()).toBeUndefined();
+        await summarise()!.trigger('click');
+        expect(run).toHaveBeenCalledWith([doc.id]);
+        expect(wrapper.findComponent(SummariseDialog).props('open')).toBe(false);
+      });
+
+      it('asks for the key first when it is missing', async () => {
+        const doc = await inProject(false);
+        const run = vi.spyOn(usePipelineStore(), 'summarise').mockResolvedValue(undefined);
+        wrapper = mount(OutputView);
+        await summarise()!.trigger('click');
+        const dialog = wrapper.findComponent(SummariseDialog);
+        expect(dialog.props()).toMatchObject({ open: true, title: 'Summarise', translates: true });
+        expect(run).not.toHaveBeenCalled();
+
+        useSettingsStore().claudeKey = 'test-key';
+        dialog.vm.$emit('confirm');
+        await flushPromises();
+        expect(run).toHaveBeenCalledWith([doc.id]);
+        expect(dialog.props('open')).toBe(false);
+      });
+
+      it('is not offered once there is a summary, nor for a transcript in no project', async () => {
+        await inProject(true);
+        wrapper = mount(OutputView);
+        expect(summarise()).toBeUndefined();
+        wrapper.unmount();
+
+        await useTranscriptStore().setDoc(makeDoc({ id: 'other' }));
+        wrapper = mount(OutputView);
+        expect(summarise()).toBeUndefined();
+      });
     });
   });
 

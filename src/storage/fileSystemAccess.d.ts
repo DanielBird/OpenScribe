@@ -11,13 +11,23 @@ interface FileSystemHandle {
   requestPermission(descriptor?: FileSystemHandlePermissionDescriptor): Promise<PermissionState>;
 }
 
+type WellKnownDirectory = 'desktop' | 'documents' | 'downloads' | 'music' | 'pictures' | 'videos';
+
 interface DirectoryPickerOptions {
   id?: string;
   mode?: 'read' | 'readwrite';
-  startIn?:
-    FileSystemHandle | 'desktop' | 'documents' | 'downloads' | 'music' | 'pictures' | 'videos';
+  startIn?: FileSystemHandle | WellKnownDirectory;
+}
+
+interface SaveFilePickerOptions {
+  id?: string;
+  startIn?: FileSystemHandle | WellKnownDirectory;
+  suggestedName?: string;
+  types?: { description?: string; accept: Record<string, string[]> }[];
+  excludeAcceptAllOption?: boolean;
 }
 
 interface Window {
   showDirectoryPicker(options?: DirectoryPickerOptions): Promise<FileSystemDirectoryHandle>;
+  showSaveFilePicker(options?: SaveFilePickerOptions): Promise<FileSystemFileHandle>;
 }

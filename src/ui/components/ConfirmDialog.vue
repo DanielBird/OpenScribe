@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { useId, useTemplateRef } from 'vue';
+import { computed, useId, useTemplateRef } from 'vue';
 import { useModalDialog } from '../composables/useModalDialog';
+import { useSmoothHeight } from '../composables/useSmoothHeight';
 
 // A modal confirmation on the native <dialog>. Usually driven by useConfirm():
 // `<ConfirmDialog v-bind="dialog" />`. Content in the default slot (e.g. a choice) goes below the message.
@@ -13,8 +14,10 @@ const props = withDefaults(
     danger?: boolean;
     /** Disables the confirm button, e.g. until a required field is filled. */
     confirmDisabled?: boolean;
+    /** Glides to its new height when its content shows or hides fields, instead of jumping (useSmoothHeight). */
+    smoothHeight?: boolean;
   }>(),
-  { message: '', danger: false, confirmDisabled: false },
+  { message: '', danger: false, confirmDisabled: false, smoothHeight: false },
 );
 const emit = defineEmits<{ confirm: []; cancel: [] }>();
 
@@ -23,6 +26,13 @@ const ids = { title: `${id}-title`, message: `${id}-message` };
 const dialogEl = useTemplateRef<HTMLDialogElement>('dialog');
 const cancelButton = useTemplateRef<HTMLButtonElement>('cancelButton');
 const confirmButton = useTemplateRef<HTMLButtonElement>('confirmButton');
+const contentEl = useTemplateRef<HTMLElement>('content');
+
+// Read once, when mounted: the prop is fixed for each dialog.
+useSmoothHeight(
+  dialogEl,
+  computed(() => (props.smoothHeight ? contentEl.value : null)),
+);
 
 const { onCancelEvent, onClose } = useModalDialog(dialogEl, () => props.open, {
   // Start on the safe choice when the action can't be undone.
@@ -40,23 +50,26 @@ const { onCancelEvent, onClose } = useModalDialog(dialogEl, () => props.open, {
     @cancel="onCancelEvent"
     @close="onClose"
   >
-    <h2 :id="ids.title" class="title">{{ title }}</h2>
-    <p v-if="message" :id="ids.message" class="message">{{ message }}</p>
-    <slot />
-    <div class="actions">
-      <button ref="cancelButton" type="button" class="button" @click="emit('cancel')">
-        Cancel
-      </button>
-      <button
-        ref="confirmButton"
-        type="button"
-        class="button"
-        :class="danger ? 'button-danger' : 'button-primary'"
-        :disabled="confirmDisabled"
-        @click="emit('confirm')"
-      >
-        {{ confirmLabel }}
-      </button>
+    <!-- Sized by what's in it, not by the dialog: the height the dialog glides to (smoothHeight). -->
+    <div ref="content">
+      <h2 :id="ids.title" class="title">{{ title }}</h2>
+      <p v-if="message" :id="ids.message" class="message">{{ message }}</p>
+      <slot />
+      <div class="actions">
+        <button ref="cancelButton" type="button" class="button" @click="emit('cancel')">
+          Cancel
+        </button>
+        <button
+          ref="confirmButton"
+          type="button"
+          class="button"
+          :class="danger ? 'button-danger' : 'button-primary'"
+          :disabled="confirmDisabled"
+          @click="emit('confirm')"
+        >
+          {{ confirmLabel }}
+        </button>
+      </div>
     </div>
   </dialog>
 </template>

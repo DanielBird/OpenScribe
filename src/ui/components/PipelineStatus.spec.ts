@@ -125,6 +125,24 @@ describe('PipelineStatus', () => {
     expect(wrapper.emitted('needKey')).toHaveLength(1);
   });
 
+  it('resumes a failed save without the key when no summary was asked for (D62)', async () => {
+    useSettingsStore().claudeKey = '';
+    const pipeline = withState(
+      null,
+      failure({
+        steps: ['save'],
+        step: 'save',
+        error: new FolderError('not_found', FOLDER_MESSAGES.notFound),
+      }),
+    );
+    const resume = vi.spyOn(pipeline, 'resume').mockResolvedValue(undefined);
+    wrapper = mountFor();
+    await wrapper.get('button').trigger('click');
+    await flushPromises();
+    expect(wrapper.emitted('needKey')).toBeUndefined();
+    expect(resume).toHaveBeenCalledWith('doc-1');
+  });
+
   it('offers Reconnect when access to the folder ended, then resumes', async () => {
     const pipeline = withState(
       null,

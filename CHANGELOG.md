@@ -8,6 +8,9 @@ All notable changes to DeScribe are recorded here. The format follows
 
 ### Added
 
+- **Add to project without a summary:** untick **Summarise** in the **Add to project** dialog to save the transcript
+  to the project without a key, and without sending it to Claude or Gemini. The box is ticked when the key is saved.
+  **Summarise** on Output, or in Analyse mode, makes the summary later.
 - **Correct a summary:** **Edit** in Analyse mode lets you type in a session's summary where it stands, as in a Word
   document: its title, synopsis, overview, respondents' details, findings and themes. Enter adds a paragraph, a theme
   or a detail; themes and quotes can be added and removed, and a quote's words are found in the transcript. Changes

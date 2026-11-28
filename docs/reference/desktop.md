@@ -202,7 +202,7 @@ link.
 | W4 | Choose a recording with the button and by drag and drop. Upload progress moves, and the transcript appears. | **Pass**, with the button and by drag and drop. | *not run* |
 | W5 | **Translate to English** with Claude and with Gemini. | **Pass, mocked:** one request to each, and the turns read in English. *Real APIs: work laptop.* | *not run* |
 | W6 | Click a turn: playback starts there, for an MP3, an M4A and an MP4. | **Pass** for all three. | *not run* |
-| W7 | **Download .docx:** what happens, and where the file goes. | **Works:** the file goes to Downloads with no Save dialog. The app shows no sign that it saved. The maintainer wants a confirmation and "Save as .docx" in the app (Phase 25). | *not run* |
+| W7 | **Download .docx:** what happens, and where the file goes. | **Works:** the file goes to Downloads with no Save dialog. The app shows no sign that it saved. The maintainer wants a confirmation and "Save as .docx" in the app (Phase 25). **Done (D61, 2026-11-28):** **Save as .docx** opens Windows' Save dialog, then shows a tick. | *not run* |
 | W8 | The links in Settings open in the default browser, not in the app window. | **Failed, fixed.** In the installed 1.0.0 the links did nothing. With the `on_new_window` handler, **ElevenLabs API keys page** opened in Chrome (the default browser), the app stayed put, and no error was logged (debug exe, over CDP). **Confirmed on the installed build.** | *not run* |
 | W9 | The Copy buttons put text on the clipboard. | **Pass** (the maintainer). Over CDP, **Copy list** said "Copied 1 term."; reading the clipboard back from the page raises a WebView2 permission prompt. | *not run* |
 | W10 | **Open project** with the existing folder code: the picker, **Add to project**, access after a restart. On the work laptop: does Edge's folder-write block (D34) apply inside the app? | **Pass, with Reconnect.** The picker opens, **Add to project** saves (the file is there after a restart). After a restart **Reconnect** is needed, and it asks for permission twice (view, then edit), in prompts that name `http://tauri.localhost`. The app now grants folder access itself, and the prompts are gone (**confirmed on the installed build**). The Reconnect screen had no **New project…**, though refusing a folder pointed to it; it has now, in both builds (**confirmed on the installed build**), on the same row as the other buttons when the window has room. | *not run* |
@@ -413,7 +413,7 @@ localStorage in the app's own profile, the keys' Remember setting, and Clear sav
 - **Folders:** W10 decides whether the web view's File System Access is enough, or whether Tauri's `fs` and `dialog`
   plugins are needed (with access that survives a restart).
 - **Export (W7):** the `.docx` lands in Downloads with no sign in the app. The maintainer wants a confirmation, and
-  the button named "Save as .docx" in the app, which suggests a **Save** dialog.
+  the button named "Save as .docx" in the app, which suggests a **Save** dialog. **Done:** D61.
 - **Reconnect is still needed (W10):** the app now grants folder access without prompts, but after a restart the
   remembered folder still needs the **Reconnect** click. Tauri's native file access would keep it across restarts.
 - **Keys:** they sit in the app's localStorage. Windows Credential Manager would need an async `secrets.ts`.

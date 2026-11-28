@@ -3,8 +3,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { DocModel } from '../features/export/docxModel';
 import { renderDocx } from '../features/export/docxRender';
 import { downloadBlob } from '../features/export/download';
+import { FolderError, pickSaveFile, writeFile } from '../storage/folder';
 import { makeDoc, withTranslation } from '../testing/transcriptDoc';
-import { EXPORT_ERROR, useExportStore } from './export';
+import { EXPORT_ERROR, SAVE_ERROR, SAVED_MS, useExportStore } from './export';
 import { useTranscriptStore } from './transcript';
 
 vi.mock('../storage/idb', () => ({
@@ -13,9 +14,16 @@ vi.mock('../storage/idb', () => ({
 }));
 vi.mock('../features/export/docxRender', () => ({ renderDocx: vi.fn() }));
 vi.mock('../features/export/download', () => ({ downloadBlob: vi.fn() }));
+vi.mock('../storage/folder', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../storage/folder')>()),
+  pickSaveFile: vi.fn(),
+  writeFile: vi.fn(),
+}));
 
 const render = vi.mocked(renderDocx);
 const download = vi.mocked(downloadBlob);
+const pick = vi.mocked(pickSaveFile);
+const write = vi.mocked(writeFile);
 const BLOB = new Blob(['docx']);
 
 /** A render that waits until `finish()` or `fail()` is called. */
@@ -37,6 +45,8 @@ describe('export store', () => {
     setActivePinia(createPinia());
     render.mockReset().mockResolvedValue(BLOB);
     download.mockReset();
+    pick.mockReset();
+    write.mockReset().mockResolvedValue();
   });
 
   afterEach(() => {
@@ -148,5 +158,80 @@ describe('export store', () => {
     await store.download('original');
     expect(render).not.toHaveBeenCalled();
     expect(download).not.toHaveBeenCalled();
+  });
+
+  describe('in the desktop app (D61)', () => {
+    const handle = (name: string) => ({ name }) as FileSystemFileHandle;
+
+    beforeEach(() => vi.stubGlobal('__DESKTOP__', true));
+    afterEach(() => {
+      vi.unstubAllGlobals();
+      vi.useRealTimers();
+    });
+
+    it('builds the file, asks where to save it, writes it and says so for a moment', async () => {
+      vi.useFakeTimers();
+      await useTranscriptStore().setDoc(makeDoc());
+      const store = useExportStore();
+      const chosen = handle('Interview, final.docx');
+      pick.mockResolvedValue(chosen);
+
+      await store.download('original');
+      expect(pick).toHaveBeenCalledExactlyOnceWith('interview - transcript (German).docx');
+      expect(render.mock.invocationCallOrder[0]).toBeLessThan(pick.mock.invocationCallOrder[0]!);
+      expect(write).toHaveBeenCalledExactlyOnceWith(chosen, BLOB);
+      expect(download).not.toHaveBeenCalled();
+      expect(store.saved).toBe('Interview, final.docx');
+      expect(store.error).toBeNull();
+      expect(store.busy).toBe(false);
+
+      vi.advanceTimersByTime(SAVED_MS);
+      expect(store.saved).toBeNull();
+    });
+
+    it('saves nothing and says nothing when the Save dialog is dismissed', async () => {
+      await useTranscriptStore().setDoc(makeDoc());
+      const store = useExportStore();
+      pick.mockRejectedValue(new FolderError('cancelled', ''));
+      await store.download('original');
+      expect(write).not.toHaveBeenCalled();
+      expect(store.saved).toBeNull();
+      expect(store.error).toBeNull();
+    });
+
+    it("shows an error when the file can't be written", async () => {
+      const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+      await useTranscriptStore().setDoc(makeDoc());
+      const store = useExportStore();
+      pick.mockResolvedValue(handle('a.docx'));
+      write.mockRejectedValue(new FolderError('io', 'locked'));
+      await store.download('original');
+      expect(store.error).toBe(SAVE_ERROR);
+      expect(store.saved).toBeNull();
+      expect(consoleError).toHaveBeenCalledOnce();
+    });
+
+    it("doesn't open the Save dialog when the file can't be built", async () => {
+      vi.spyOn(console, 'error').mockImplementation(() => {});
+      await useTranscriptStore().setDoc(makeDoc());
+      const store = useExportStore();
+      render.mockRejectedValueOnce(new Error('zip failed'));
+      await store.download('original');
+      expect(pick).not.toHaveBeenCalled();
+      expect(store.error).toBe(EXPORT_ERROR);
+    });
+
+    it('forgets the save when another transcript is shown', async () => {
+      const transcript = useTranscriptStore();
+      await transcript.setDoc(makeDoc());
+      const store = useExportStore();
+      pick.mockResolvedValue(handle('a.docx'));
+      await store.download('original');
+      expect(store.saved).toBe('a.docx');
+
+      await transcript.setDoc(makeDoc({ id: 'another-doc' }));
+      await Promise.resolve();
+      expect(store.saved).toBeNull();
+    });
   });
 });

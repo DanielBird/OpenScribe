@@ -303,6 +303,9 @@ test('Add to project works from the keyboard, and focus stays in the actions row
   const dialog = page.getByRole('dialog', { name: 'Add to project' });
   await tabTo(page, dialog.getByRole('button', { name: 'Open project…' }));
   await page.keyboard.press('Enter');
+  // Without a saved key, Summarise starts unticked (D62).
+  await tabTo(page, page.getByRole('checkbox', { name: 'Translate and summarise' }));
+  await page.keyboard.press('Space');
   await tabTo(page, page.getByLabel('Claude (Anthropic) API key'));
   await page.keyboard.type('test-key');
   await tabTo(page, page.getByRole('button', { name: 'Add', exact: true }));

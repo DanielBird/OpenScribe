@@ -69,32 +69,60 @@ describe('AddToProjectDialog', () => {
   const button = (name: string) => wrapper!.findAll('button').find((b) => b.text() === name);
   const add = () => button('Add')!;
 
-  it('names the open project, and adds once the key is there', async () => {
+  /** The **Summarise** checkbox (D62). */
+  const summariseBox = () => wrapper!.find<HTMLInputElement>('input[type="checkbox"]');
+  const keyInput = () => wrapper!.findComponent(ApiKeyField).get('input');
+
+  it('names the open project, and adds with a summary once the key is there', async () => {
     useSettingsStore().claudeKey = 'test-key';
     await open('ready');
     expect(wrapper!.get('h2').text()).toBe('Add to Hearing at home 2026');
     expect(wrapper!.findComponent(ApiKeyField).exists()).toBe(false);
-    expect(wrapper!.get('.data-notice').text()).toBe(
-      'The transcript text is sent to Anthropic to translate and summarise.',
+    expect(summariseBox().element.checked).toBe(true);
+    expect(summariseBox().element.closest('label')!.textContent!.trim()).toBe(
+      'Translate and summarise',
     );
+    expect(wrapper!.get('.data-notice').text()).toBe('The transcript text is sent to Anthropic.');
     await add().trigger('click');
-    expect(wrapper!.emitted('add')).toHaveLength(1);
+    expect(wrapper!.emitted('add')).toEqual([[{ summarise: true }]]);
   });
 
-  it('says only summarise for an English transcript', async () => {
+  it('says only Summarise for an English transcript', async () => {
     useSettingsStore().claudeKey = 'test-key';
     await open('ready', englishDoc());
-    expect(wrapper!.get('.data-notice').text()).toBe(
-      'The transcript text is sent to Anthropic to summarise.',
-    );
+    expect(summariseBox().element.closest('label')!.textContent!.trim()).toBe('Summarise');
   });
 
-  it('asks for the Claude key when it is missing', async () => {
+  it('adds without a summary when the box is unticked: no model, no key, nothing sent', async () => {
+    useSettingsStore().claudeKey = 'test-key';
     await open('ready');
+    await summariseBox().setValue(false);
+    expect(wrapper!.find('select').exists()).toBe(false);
+    expect(wrapper!.find('.data-notice').exists()).toBe(false);
+    await add().trigger('click');
+    expect(wrapper!.emitted('add')).toEqual([[{ summarise: false }]]);
+  });
+
+  it('with no key, starts unticked and adds without one', async () => {
+    await open('ready');
+    expect(summariseBox().element.checked).toBe(false);
+    expect(wrapper!.findComponent(ApiKeyField).exists()).toBe(false);
+    expect(add().attributes('disabled')).toBeUndefined();
+    await add().trigger('click');
+    expect(wrapper!.emitted('add')).toEqual([[{ summarise: false }]]);
+  });
+
+  it('asks for the Claude key when Summarise is ticked without one', async () => {
+    await open('ready');
+    await summariseBox().setValue(true);
     expect(wrapper!.findComponent(ApiKeyField).props('provider')).toBe('claude');
     expect(add().attributes('disabled')).toBeDefined();
-    await wrapper!.get('input').setValue('test-key');
+    await keyInput().setValue('test-key');
     expect(add().attributes('disabled')).toBeUndefined();
+    // The field stays while the key is typed.
+    expect(wrapper!.findComponent(ApiKeyField).exists()).toBe(true);
+    await add().trigger('click');
+    expect(wrapper!.emitted('add')).toEqual([[{ summarise: true }]]);
   });
 
   it('with a Gemini model, asks for the Gemini key and says the text goes to Google', async () => {
@@ -102,13 +130,12 @@ describe('AddToProjectDialog', () => {
     settings.claudeKey = 'test-key';
     settings.projectModel = 'gemini-3.8-flash';
     await open('ready');
+    await summariseBox().setValue(true);
     const field = wrapper!.findComponent(ApiKeyField);
     expect(field.props()).toMatchObject({ provider: 'gemini', label: 'Gemini (Google) API key' });
-    expect(wrapper!.get('.data-notice').text()).toBe(
-      'The transcript text is sent to Google to translate and summarise.',
-    );
+    expect(wrapper!.get('.data-notice').text()).toBe('The transcript text is sent to Google.');
     expect(add().attributes('disabled')).toBeDefined();
-    await wrapper!.get('input').setValue('test-key-gemini');
+    await keyInput().setValue('test-key-gemini');
     expect(settings.geminiKey).toBe('test-key-gemini');
     expect(add().attributes('disabled')).toBeUndefined();
   });
@@ -145,11 +172,9 @@ describe('AddToProjectDialog', () => {
       provider: 'gemini',
       label: 'Gemini (Google) API key',
     });
-    expect(wrapper!.get('.data-notice').text()).toBe(
-      'The transcript text is sent to Google to translate and summarise.',
-    );
+    expect(wrapper!.get('.data-notice').text()).toBe('The transcript text is sent to Google.');
     expect(add().attributes('disabled')).toBeDefined();
-    await wrapper!.get('input').setValue('test-key-gemini');
+    await keyInput().setValue('test-key-gemini');
     expect(add().attributes('disabled')).toBeUndefined();
     // The field stays while the key is typed.
     expect(wrapper!.findComponent(ApiKeyField).exists()).toBe(true);
@@ -458,11 +483,16 @@ describe('AddToProjectDialog', () => {
       await connect();
       useSettingsStore().claudeKey = '';
       await useTranscriptStore().setDoc(makeDoc());
-      await usePipelineStore().addCurrentTranscript();
+      await usePipelineStore().addCurrentTranscript({ summarise: true });
       await show();
       expect(wrapper!.get('h2').text()).toBe('Add to Prosthetics');
       expect(projectSelect().exists()).toBe(false);
       expect(button('New project…')).toBeUndefined();
+      // Here for the key only: the failed job makes the summary.
+      expect(summariseBox().exists()).toBe(false);
+      expect(wrapper!.get('.data-notice').text()).toBe(
+        'The transcript text is sent to Anthropic to translate and summarise.',
+      );
     });
   });
 });

@@ -99,4 +99,36 @@ describe('ExportButton', () => {
     await flushPromises();
     expect(wrapper!.get('[role="alert"]').text()).toBe(EXPORT_ERROR);
   });
+
+  describe('in the desktop app (D61)', () => {
+    beforeEach(() => vi.stubGlobal('__DESKTOP__', true));
+    afterEach(() => vi.unstubAllGlobals());
+
+    it('is named Save as .docx, and the version dialog says Save', async () => {
+      const { button } = await setup(withTranslation(makeDoc()));
+      expect(button.attributes('aria-label')).toBe('Save as .docx');
+      expect(button.get('.icon-tip').text()).toBe('Save as .docx');
+      expect(wrapper!.getComponent(ExportDialog).text()).toContain('Save');
+      expect(wrapper!.getComponent(ExportDialog).text()).not.toContain('Download');
+    });
+
+    it('shows a tick, and tells screen readers the file name', async () => {
+      const { store, button } = await setup();
+      const status = () => wrapper!.get('[role="status"]').text();
+      expect(status()).toBe('');
+
+      store.saved = 'interview - transcript (German).docx';
+      await flushPromises();
+      expect(button.classes()).toContain('saved');
+      expect(button.get('svg path').attributes('d')).toBe('M5 12.5 9.5 17 19 7');
+      expect(button.get('.icon-tip').text()).toBe('Save as .docx');
+      expect(button.attributes('aria-label')).toBe('Save as .docx');
+      expect(status()).toBe('Saved interview - transcript (German).docx');
+
+      store.saved = null;
+      await flushPromises();
+      expect(button.classes()).not.toContain('saved');
+      expect(status()).toBe('');
+    });
+  });
 });

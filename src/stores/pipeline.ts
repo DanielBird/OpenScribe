@@ -79,6 +79,18 @@ export function needsTranslation(doc: TranscriptDoc): boolean {
 }
 
 /**
+ * True when the steps still to run, from `from` (the first when null), need the project model: translate or summarise.
+ * A job that only saves needs no key (DECISIONS.md D62).
+ */
+export function usesModel(
+  steps: readonly PipelineStep[],
+  from: PipelineStep | null = null,
+): boolean {
+  const first = from ? steps.indexOf(from) : 0;
+  return steps.slice(Math.max(first, 0)).some((step) => step !== 'save');
+}
+
+/**
  * Errors that would fail every session after this one too: stop the queue. Google doesn't document how to tell a spent
  * daily quota from a rate limit, so a Gemini rate limit stops it too (DECISIONS.md T15); the SDK has already retried.
  */
@@ -252,7 +264,8 @@ export const usePipelineStore = defineStore('pipeline', () => {
     const isCurrent = () => controller === ctrl && !ctrl.signal.aborted;
 
     try {
-      const apiKey = settings.keyFor(providerId).trim();
+      // Only a job that translates or summarises needs the key (D62).
+      const apiKey = usesModel(job.steps, job.current) ? settings.keyFor(providerId).trim() : null;
       if (apiKey === '') {
         throw new ProviderError('auth', PIPELINE_MESSAGES.keyMissing[providerId]);
       }
@@ -260,7 +273,7 @@ export const usePipelineStore = defineStore('pipeline', () => {
         throw new FolderError('permission', FOLDER_MESSAGES.permission);
       }
       const model = settings.projectModel;
-      const provider = getLlmProvider(providerId, apiKey, model);
+      const provider = apiKey ? getLlmProvider(providerId, apiKey, model) : null;
       const first = job.current ? job.steps.indexOf(job.current) : 0;
 
       for (const step of job.steps.slice(Math.max(first, 0))) {
@@ -268,6 +281,9 @@ export const usePipelineStore = defineStore('pipeline', () => {
         progress.value = null;
         if (step === 'save') {
           await saveStep(job);
+        } else if (!provider) {
+          // Not reached: usesModel said no step needs the model.
+          throw new ProviderError('auth', PIPELINE_MESSAGES.keyMissing[providerId]);
         } else if (step === 'translate') {
           await translateStep(job, provider, model, ctrl.signal, isCurrent, (partial) => {
             if (isCurrent()) job = replace(job, { partial });
@@ -449,13 +465,19 @@ export const usePipelineStore = defineStore('pipeline', () => {
   }
 
   /**
-   * **Add to project** on Output, after the dialog: save, translate if needed, summarise. Resolves when the queue is
-   * idle again.
+   * **Add to project** on Output, after the dialog: save, then, when `summarise` is set, translate if needed and
+   * summarise (D62). A failed add resumes where it stopped, whatever `summarise` says. Resolves when the queue is idle
+   * again.
    */
-  function addCurrentTranscript(): Promise<void> {
+  function addCurrentTranscript(options: { summarise: boolean }): Promise<void> {
     const doc = transcript.doc;
     if (!doc || jobs.value.some((j) => j.sessionId === doc.id)) return whenIdle();
     const failure = failures.value.get(doc.id);
+    const steps: PipelineStep[] = !options.summarise
+      ? ['save']
+      : needsTranslation(doc)
+        ? ['save', 'translate', 'summarise']
+        : ['save', 'summarise'];
     enqueue(
       failure
         ? fromFailure(failure)
@@ -463,9 +485,7 @@ export const usePipelineStore = defineStore('pipeline', () => {
             sessionId: doc.id,
             title: doc.source.fileName,
             kind: 'add',
-            steps: needsTranslation(doc)
-              ? ['save', 'translate', 'summarise']
-              : ['save', 'summarise'],
+            steps,
             current: null,
             status: 'queued',
             partial: null,
@@ -490,12 +510,15 @@ export const usePipelineStore = defineStore('pipeline', () => {
       }
       const session = project.session(id);
       if (!session) continue;
+      // The session open on Output may have changed since the folder was read: ask its transcript.
+      const open = isOpenOnOutput(id) ? transcript.doc : null;
+      const translate = open ? needsTranslation(open) : lacksEnglish(session.text);
       enqueue(
         {
           sessionId: id,
           title: session.title,
           kind: 'summarise',
-          steps: lacksEnglish(session.text) ? ['translate', 'summarise'] : ['summarise'],
+          steps: translate ? ['translate', 'summarise'] : ['summarise'],
           current: null,
           status: 'queued',
           partial: null,

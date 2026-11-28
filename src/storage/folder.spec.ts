@@ -12,9 +12,11 @@ import {
   loadFolderHandle,
   openFolder,
   pickFolder,
+  pickSaveFile,
   requestFolderPermission,
   saveFolderHandle,
   toFolderError,
+  writeFile,
 } from './folder';
 
 // happy-dom has no File System Access, so these fakes stand in for the browser's handles.
@@ -319,6 +321,77 @@ describe('picking and permission', () => {
     } as unknown as FileSystemDirectoryHandle;
     await expect(folderPermission(broken)).resolves.toBe('prompt');
     await expect(requestFolderPermission(broken)).resolves.toBe(false);
+  });
+});
+
+describe('saving a file where the user chooses', () => {
+  /** A file handle whose writable keeps what was written, and fails at `failAt` with a DOMException. */
+  function savedFile(failAt: 'create' | 'write' | 'close' | null = null) {
+    const state = { written: [] as unknown[], closed: false, aborted: false };
+    const handle = {
+      kind: 'file',
+      name: 'interview - transcript.docx',
+      createWritable: async () => {
+        if (failAt === 'create') throw domError('NoModificationAllowedError');
+        return {
+          write: async (data: unknown) => {
+            if (failAt === 'write') throw domError('NotReadableError');
+            state.written.push(data);
+          },
+          close: async () => {
+            if (failAt === 'close') throw domError('InvalidStateError');
+            state.closed = true;
+          },
+          abort: async () => {
+            state.aborted = true;
+          },
+        };
+      },
+    } as unknown as FileSystemFileHandle;
+    return { handle, state };
+  }
+
+  it('is unsupported without showSaveFilePicker', async () => {
+    await expect(pickSaveFile('a.docx')).rejects.toMatchObject({ kind: 'unsupported' });
+  });
+
+  it('suggests the name and offers Word documents, starting where the last save went', async () => {
+    const { handle } = savedFile();
+    const picker = vi.fn(async (_options: SaveFilePickerOptions) => handle);
+    vi.stubGlobal('showSaveFilePicker', picker);
+    await expect(pickSaveFile('interview - transcript.docx')).resolves.toBe(handle);
+    const options = picker.mock.calls[0]![0];
+    expect(options).toMatchObject({
+      id: 'describe-export',
+      suggestedName: 'interview - transcript.docx',
+    });
+    expect(Object.values(options.types![0]!.accept)).toEqual([['.docx']]);
+  });
+
+  it('reports a dismissed Save dialog as cancelled', async () => {
+    vi.stubGlobal('showSaveFilePicker', async () => {
+      throw domError('AbortError');
+    });
+    await expect(pickSaveFile('a.docx')).rejects.toMatchObject({ kind: 'cancelled' });
+  });
+
+  it('writes the data and closes the file', async () => {
+    const { handle, state } = savedFile();
+    const blob = new Blob(['docx']);
+    await writeFile(handle, blob);
+    expect(state).toEqual({ written: [blob], closed: true, aborted: false });
+  });
+
+  it('aborts a failed write, so an old file stays whole', async () => {
+    const { handle, state } = savedFile('write');
+    await expect(writeFile(handle, new Blob(['docx']))).rejects.toBeInstanceOf(FolderError);
+    expect(state.aborted).toBe(true);
+    expect(state.closed).toBe(false);
+  });
+
+  it('fails as an io error when the file is locked', async () => {
+    const { handle } = savedFile('create');
+    await expect(writeFile(handle, new Blob(['docx']))).rejects.toMatchObject({ kind: 'io' });
   });
 });
 

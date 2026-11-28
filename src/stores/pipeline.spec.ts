@@ -30,7 +30,7 @@ import {
   withSourceHashes,
   withTranslation,
 } from '../testing/transcriptDoc';
-import { needsTranslation, PIPELINE_MESSAGES, usePipelineStore } from './pipeline';
+import { needsTranslation, PIPELINE_MESSAGES, usePipelineStore, usesModel } from './pipeline';
 import { useProjectStore } from './project';
 import { useSettingsStore } from './settings';
 import { useTranscriptStore } from './transcript';
@@ -180,7 +180,7 @@ describe('Add to project', () => {
     await transcript.setDoc(doc);
     const pipeline = usePipelineStore();
 
-    await pipeline.addCurrentTranscript();
+    await pipeline.addCurrentTranscript({ summarise: true });
 
     expect(claude.requests.map((r) => r.schemaName)).toEqual(['session_summary']);
     // The transcript was in the folder before the request was made.
@@ -209,7 +209,7 @@ describe('Add to project', () => {
     const doc = german('de-1');
     await transcript.setDoc(doc);
 
-    await usePipelineStore().addCurrentTranscript();
+    await usePipelineStore().addCurrentTranscript({ summarise: true });
 
     expect(claude.requests.map((r) => r.schemaName)).toEqual([
       'translation_batch',
@@ -242,7 +242,7 @@ describe('Add to project', () => {
     await useTranscriptStore().setDoc(doc);
     const pipeline = usePipelineStore();
 
-    await pipeline.addCurrentTranscript();
+    await pipeline.addCurrentTranscript({ summarise: true });
 
     expect(claude.requests.map((r) => r.schemaName)).toEqual([
       'translation_batch',
@@ -263,7 +263,7 @@ describe('Add to project', () => {
     useSettingsStore().projectModel = 'claude-opus-5-5';
     const doc = english('en-1');
     await useTranscriptStore().setDoc(doc);
-    await usePipelineStore().addCurrentTranscript();
+    await usePipelineStore().addCurrentTranscript({ summarise: true });
     expect(claude.requests[0]).toMatchObject({
       provider: 'claude',
       model: 'claude-opus-5-5',
@@ -282,7 +282,7 @@ describe('Add to project', () => {
     const doc = german('de-1');
     await useTranscriptStore().setDoc(doc);
 
-    await usePipelineStore().addCurrentTranscript();
+    await usePipelineStore().addCurrentTranscript({ summarise: true });
 
     expect(llm.requests.map((r) => [r.schemaName, r.provider, r.model, r.apiKey])).toEqual([
       ['translation_batch', 'gemini', 'gemini-4-argon', 'test-key-gemini'],
@@ -310,7 +310,7 @@ describe('Add to project', () => {
     expect(pipeline.needsKey).toBe(false);
     settings.projectModel = 'gemini-3.8-flash';
 
-    await pipeline.addCurrentTranscript();
+    await pipeline.addCurrentTranscript({ summarise: true });
     expect(llm.requests).toEqual([]);
     expect(pipeline.failureFor(doc.id)?.error).toMatchObject({
       kind: 'auth',
@@ -329,7 +329,7 @@ describe('Add to project', () => {
     };
     const pipeline = usePipelineStore();
 
-    await pipeline.addCurrentTranscript();
+    await pipeline.addCurrentTranscript({ summarise: true });
 
     expect(folder.text(transcriptPath(doc))).toBeDefined();
     expect(folder.text(summaryPath(doc))).toBeUndefined();
@@ -359,7 +359,7 @@ describe('Add to project', () => {
     };
     const pipeline = usePipelineStore();
 
-    await pipeline.addCurrentTranscript();
+    await pipeline.addCurrentTranscript({ summarise: true });
     expect(pipeline.failureFor(doc.id)).toMatchObject({ step: 'translate' });
     expect(Object.keys(pipeline.failureFor(doc.id)!.partial?.texts ?? {})).toHaveLength(60);
 
@@ -384,7 +384,7 @@ describe('Add to project', () => {
       return undefined;
     };
     const pipeline = usePipelineStore();
-    await pipeline.addCurrentTranscript();
+    await pipeline.addCurrentTranscript({ summarise: true });
     expect(pipeline.failureFor(doc.id)).toMatchObject({ step: 'translate' });
 
     transcript.editTurnText('t5', 'Korrigiert.');
@@ -408,7 +408,7 @@ describe('Add to project', () => {
     folder.failOn(transcriptPath(doc), 'io');
     const pipeline = usePipelineStore();
 
-    await pipeline.addCurrentTranscript();
+    await pipeline.addCurrentTranscript({ summarise: true });
     expect(claude.requests).toEqual([]);
     expect(pipeline.failureFor(doc.id)).toMatchObject({ step: 'save', error: { kind: 'io' } });
 
@@ -427,7 +427,7 @@ describe('Add to project', () => {
     claude.state.respond = () => reply.promise;
     const pipeline = usePipelineStore();
 
-    const done = pipeline.addCurrentTranscript();
+    const done = pipeline.addCurrentTranscript({ summarise: true });
     await vi.waitFor(() => expect(pipeline.current?.current).toBe('summarise'));
     pipeline.cancel();
     await done;
@@ -451,7 +451,7 @@ describe('Add to project', () => {
     const pipeline = usePipelineStore();
 
     expect(beforeUnloadPrevented()).toBe(false);
-    const done = pipeline.addCurrentTranscript();
+    const done = pipeline.addCurrentTranscript({ summarise: true });
     await vi.waitFor(() => expect(claude.requests).toHaveLength(1));
     expect(beforeUnloadPrevented()).toBe(true);
     reply.release();
@@ -470,7 +470,7 @@ describe('Add to project', () => {
     claude.state.respond = (req) =>
       req.schemaName === 'translation_batch' ? reply.promise : undefined;
 
-    const done = usePipelineStore().addCurrentTranscript();
+    const done = usePipelineStore().addCurrentTranscript({ summarise: true });
     await vi.waitFor(() => expect(claude.requests).toHaveLength(1));
     await transcript.setDoc(english('other'));
     reply.release();
@@ -491,13 +491,82 @@ describe('Add to project', () => {
     const pipeline = usePipelineStore();
     expect(pipeline.needsKey).toBe(true);
 
-    await pipeline.addCurrentTranscript();
+    await pipeline.addCurrentTranscript({ summarise: true });
     expect(claude.requests).toEqual([]);
     expect(pipeline.failureFor(doc.id)?.error).toMatchObject({
       kind: 'auth',
       userMessage: PIPELINE_MESSAGES.keyMissing.claude,
     });
     expect(pipeline.stopped).not.toBeNull();
+  });
+
+  describe('without a summary (D62)', () => {
+    it('only saves and links a German transcript: no key, no request, no summary', async () => {
+      const folder = memoryFolder('P', projectFiles([]));
+      const claude = fakeClaude(folder);
+      await readyProject(folder);
+      useSettingsStore().claudeKey = '';
+      const transcript = useTranscriptStore();
+      const doc = german('de-1');
+      await transcript.setDoc(doc);
+      const pipeline = usePipelineStore();
+
+      await pipeline.addCurrentTranscript({ summarise: false });
+
+      expect(claude.requests).toEqual([]);
+      expect(folder.writes).toEqual([transcriptPath(doc)]);
+      expect(docOf(folder, doc).translations.en).toBeUndefined();
+      expect(transcript.projectLink).toMatchObject({ docId: doc.id });
+      expect(pipeline.failureFor(doc.id)).toBeNull();
+      expect(pipeline.stopped).toBeNull();
+      expect(pipeline.statusOf(doc.id)).toBe('none');
+    });
+
+    it('resumes a failed save without a key', async () => {
+      const folder = memoryFolder('P', projectFiles([]));
+      fakeClaude(folder);
+      await readyProject(folder);
+      useSettingsStore().claudeKey = '';
+      const doc = english('en-1');
+      await useTranscriptStore().setDoc(doc);
+      folder.failOn(transcriptPath(doc), 'io');
+      const pipeline = usePipelineStore();
+
+      await pipeline.addCurrentTranscript({ summarise: false });
+      expect(pipeline.failureFor(doc.id)).toMatchObject({ step: 'save', steps: ['save'] });
+
+      folder.failOn(transcriptPath(doc), null);
+      await pipeline.resume();
+      expect(pipeline.failureFor(doc.id)).toBeNull();
+      expect(folder.writes).toContain(transcriptPath(doc));
+    });
+
+    it('can be summarised later from Output, translating first', async () => {
+      const folder = memoryFolder('P', projectFiles([]));
+      const claude = fakeClaude(folder);
+      await readyProject(folder);
+      const doc = german('de-1');
+      await useTranscriptStore().setDoc(doc);
+      const pipeline = usePipelineStore();
+      await pipeline.addCurrentTranscript({ summarise: false });
+
+      await pipeline.summarise([doc.id]);
+
+      expect(claude.requests.map((r) => r.schemaName)).toEqual([
+        'translation_batch',
+        'session_summary',
+      ]);
+      expect(pipeline.statusOf(doc.id)).toBe('ok');
+    });
+  });
+});
+
+describe('usesModel', () => {
+  it('is true while a translate or summarise step is still to run', () => {
+    expect(usesModel(['save'])).toBe(false);
+    expect(usesModel(['save', 'summarise'])).toBe(true);
+    expect(usesModel(['save', 'translate', 'summarise'], 'translate')).toBe(true);
+    expect(usesModel(['save', 'summarise'], 'save')).toBe(true);
   });
 });
 
@@ -560,6 +629,25 @@ describe('Summarise in Project mode', () => {
 
     expect(claude.requests[0]!.input).toContain('Interviewer (speaker_0)');
     expect(docOf(folder, doc).speakers[0]!.label).toBe('Interviewer');
+    expect(usePipelineStore().statusOf(doc.id)).toBe('ok');
+  });
+
+  it('translates a session open on Output whose text was edited there since its translation', async () => {
+    const doc = withSourceHashes(withTranslation(german('de-1')));
+    const folder = memoryFolder('P', projectFiles([doc]));
+    const claude = fakeClaude(folder);
+    await readyProject(folder);
+    const transcript = useTranscriptStore();
+    await transcript.openFromProject(doc.id);
+    transcript.editTurnText('t2', 'Neuer Text.');
+
+    await usePipelineStore().summarise([doc.id]);
+
+    expect(claude.requests.map((r) => r.schemaName)).toEqual([
+      'translation_batch',
+      'session_summary',
+    ]);
+    expect(claude.requests[0]!.input).toContain('Neuer Text.');
     expect(usePipelineStore().statusOf(doc.id)).toBe('ok');
   });
 
@@ -679,7 +767,7 @@ describe('Summarise in Project mode', () => {
 
     const done = pipeline.summarise(docs.map((d) => d.id));
     await vi.waitFor(() => expect(claude.requests).toHaveLength(1));
-    void pipeline.addCurrentTranscript();
+    void pipeline.addCurrentTranscript({ summarise: true });
     expect(pipeline.queued.map((j) => j.sessionId)).toEqual(['added', 's2']);
     first.release();
     await done;

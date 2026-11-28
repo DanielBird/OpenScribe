@@ -81,9 +81,9 @@ test('Add to project on a new transcript: saved, translated, summarised, and its
   await expect(brief).toBeHidden();
   const ready = page.getByRole('dialog', { name: `Add to ${ROOT}` });
   await expect(ready).toBeVisible();
-  await expect(ready).toContainText(
-    'The transcript text is sent to Anthropic to translate and summarise.',
-  );
+  // Without a saved key, Summarise starts unticked (D62).
+  await ready.getByRole('checkbox', { name: 'Translate and summarise' }).check();
+  await expect(ready).toContainText('The transcript text is sent to Anthropic.');
   await ready.getByLabel('Claude (Anthropic) API key').fill('test-key');
   await ready.getByRole('button', { name: 'Add', exact: true }).click();
 
@@ -176,6 +176,7 @@ test('after Add to project, Open summary shows the new summary in Analyse mode, 
     .getByRole('button', { name: 'Open project…' })
     .click();
   const ready = page.getByRole('dialog', { name: /^Add to Hearing at home/ });
+  await ready.getByRole('checkbox').check();
   await ready.getByLabel('Claude (Anthropic) API key').fill('test-key');
   await ready.getByRole('button', { name: 'Add', exact: true }).click();
 
@@ -191,6 +192,48 @@ test('after Add to project, Open summary shows the new summary in Analyse mode, 
   await expect(page.getByRole('textbox', { name: 'Question' })).toBeVisible();
 });
 
+test('without a key, Add to project only saves; Summarise on Output then asks for the key (D62)', async ({
+  page,
+}) => {
+  const folder = await useProjectFolder(page, { [ROOT]: projectFiles([]) });
+  const calls = await mockAnthropic(page, projectAnswer);
+  await transcribe(page);
+  await page.getByRole('button', { name: 'Add to project…' }).click();
+  await page
+    .getByRole('dialog', { name: 'Add to project' })
+    .getByRole('button', { name: 'Open project…' })
+    .click();
+  const ready = page.getByRole('dialog', { name: /^Add to Hearing at home/ });
+  await expect(ready.getByRole('checkbox', { name: 'Translate and summarise' })).not.toBeChecked();
+  await expect(ready.getByLabel('Claude (Anthropic) API key')).toHaveCount(0);
+  await expect(ready.getByLabel('Model')).toHaveCount(0);
+  await ready.getByRole('button', { name: 'Add', exact: true }).click();
+
+  // Focus moves to Summarise once the save is done, as it takes Add to project's place.
+  const summarise = page.getByRole('button', { name: 'Summarise', exact: true });
+  await expect(summarise).toBeFocused();
+  await expect(page.getByText(/^In Hearing at home/)).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Open summary' })).toHaveCount(0);
+  expect(sessionsDir(folder.files(ROOT), '.transcript.json')).toHaveLength(1);
+  expect(sessionsDir(folder.files(ROOT), '.summary.json')).toEqual([]);
+  expect(calls).toHaveLength(0);
+
+  await summarise.click();
+  const keyDialog = page.getByRole('dialog', { name: 'Summarise' });
+  await expect(keyDialog).toContainText(
+    'The transcript text is sent to Anthropic to translate and summarise.',
+  );
+  await keyDialog.getByLabel('Claude (Anthropic) API key').fill('test-key');
+  await keyDialog.getByRole('button', { name: 'Summarise' }).click();
+
+  await expect(page.getByRole('button', { name: 'Open summary' })).toBeFocused();
+  expect(sessionsDir(folder.files(ROOT), '.summary.json')).toHaveLength(1);
+  expect(calls.map((c) => (isSummaryCall(c) ? 'summary' : 'translation'))).toEqual([
+    'translation',
+    'summary',
+  ]);
+});
+
 test('a session whose files are deleted from the folder can be added to the project again', async ({
   page,
 }) => {
@@ -203,6 +246,7 @@ test('a session whose files are deleted from the folder can be added to the proj
     .getByRole('button', { name: 'Open project…' })
     .click();
   const ready = page.getByRole('dialog', { name: /^Add to Hearing at home/ });
+  await ready.getByRole('checkbox').check();
   await ready.getByLabel('Claude (Anthropic) API key').fill('test-key');
   await ready.getByRole('button', { name: 'Add', exact: true }).click();
   await expect(page.locator('.status-line')).toHaveCount(0);
@@ -244,11 +288,10 @@ test('Add to project can switch to a Gemini model in its dialog, which asks for 
     .getByRole('button', { name: 'Open project…' })
     .click();
   const ready = page.getByRole('dialog', { name: /^Add to Hearing at home/ });
+  await ready.getByRole('checkbox').check();
   await expect(ready.getByLabel('Model')).toHaveValue('claude-sonnet-5-5');
   await ready.getByLabel('Model').selectOption({ label: 'Gemini 3.8 Flash' });
-  await expect(ready).toContainText(
-    'The transcript text is sent to Google to translate and summarise.',
-  );
+  await expect(ready).toContainText('The transcript text is sent to Google.');
   await ready.getByLabel('Gemini (Google) API key').fill('test-key-gemini');
   await ready.getByRole('button', { name: 'Add', exact: true }).click();
 

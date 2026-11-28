@@ -18,6 +18,7 @@ const NO_ZOD_SUBPATHS = { group: ['zod/*'], message: ZOD_MESSAGE };
 // Only src/storage/folder.ts calls the File System Access API (AGENTS.md rule 4).
 const FOLDER_ACCESS = 'Use src/storage/folder.ts (AGENTS.md rule 4).';
 const NO_FOLDER_PICKER = { name: 'showDirectoryPicker', message: FOLDER_ACCESS };
+const NO_SAVE_PICKER = { name: 'showSaveFilePicker', message: FOLDER_ACCESS };
 
 // Only src/desktop/ipc.ts talks to the desktop app's Rust side (AGENTS.md rule 4, DECISIONS.md D53): it alone imports
 // @tauri-apps/api and touches WebView2's chrome.webview. Every no-restricted-imports block repeats the pattern.
@@ -117,6 +118,7 @@ export default withVueTs(
         'fetch',
         'XMLHttpRequest',
         NO_FOLDER_PICKER,
+        NO_SAVE_PICKER,
         ...NO_TAURI_GLOBALS,
       ],
     },
@@ -169,11 +171,13 @@ export default withVueTs(
     files: ['src/**/*.ts', 'src/**/*.vue'],
     ignores: ['src/domain/**', 'src/storage/folder.ts', 'src/storage/folder.spec.ts'],
     rules: {
-      'no-restricted-globals': ['error', NO_FOLDER_PICKER, ...NO_TAURI_GLOBALS],
+      'no-restricted-globals': ['error', NO_FOLDER_PICKER, NO_SAVE_PICKER, ...NO_TAURI_GLOBALS],
       'no-restricted-properties': [
         'error',
         { object: 'window', property: 'showDirectoryPicker', message: FOLDER_ACCESS },
         { object: 'globalThis', property: 'showDirectoryPicker', message: FOLDER_ACCESS },
+        { object: 'window', property: 'showSaveFilePicker', message: FOLDER_ACCESS },
+        { object: 'globalThis', property: 'showSaveFilePicker', message: FOLDER_ACCESS },
       ],
     },
   },
@@ -195,7 +199,7 @@ export default withVueTs(
           ],
         },
       ],
-      'no-restricted-globals': ['error', NO_FOLDER_PICKER],
+      'no-restricted-globals': ['error', NO_FOLDER_PICKER, NO_SAVE_PICKER],
     },
   },
   {

@@ -320,6 +320,7 @@ test('in a project, the session file loses the name from its text and words, and
   await brief.getByRole('button', { name: 'Save' }).click();
   await expect(brief).toBeHidden();
   const add = page.getByRole('dialog', { name: `Add to ${ROOT}` });
+  await add.getByRole('checkbox').check();
   await add.getByLabel('Claude (Anthropic) API key').fill('test-key');
   await add.getByRole('button', { name: 'Add', exact: true }).click();
   await expect(page.getByText(`In ${ROOT}`)).toBeVisible();

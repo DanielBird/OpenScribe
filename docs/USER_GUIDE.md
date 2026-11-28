@@ -110,7 +110,7 @@ to start. If a card you chose isn't there (a laptop undocked from it, say), DeSc
 names the card it didn't use, and **Why** says what went wrong. It goes back to the card when the card returns, unless
 you choose **Processor** meanwhile.
 
-To free the space, click **Remove** on Settings. Setup then goes back to ElevenLabs. Uninstalling DeScribe removes the
+To free the space, click **Remove models** on Settings. Setup then goes back to ElevenLabs. Uninstalling DeScribe removes the
 models too.
 
 ## 4. Correct the text
@@ -238,20 +238,24 @@ the box.
 
 On the Output step, click **Add to project…**. The dialog names the project, or lets you open, create or reconnect
 one. Once you've used more than one project on this computer, a **Project** list offers the last ten: choose one, and
-**Add** opens it and adds the transcript there. That project is then the one open in Analyse. The dialog also shows
-the project's **Model** (change it there if you like), and asks for that model's key (Claude or Gemini) if it's
-missing. Click **Add**. DeScribe then, in the actions row:
+**Add** opens it and adds the transcript there. That project is then the one open in Analyse.
+
+**Summarise** (**Translate and summarise** for a transcript that isn't in English) is ticked when the project model's
+key is saved. Untick it to add the transcript without a summary: no key is needed, and nothing is sent to Claude or
+Gemini. While it's ticked, the dialog shows the project's **Model** (change it there if you like), and asks for that
+model's key (Claude or Gemini) if it's missing. Click **Add**. DeScribe then, in the actions row:
 1. saves the transcript in the project folder (the recording itself stays on your computer);
-2. translates it to English with the project's model, if it's in another language and has no English yet, or only
-   the turns changed since it was translated;
-3. writes its summary.
+2. if **Summarise** is ticked, translates it to English with the project's model, if it's in another language and has
+   no English yet, or only the turns changed since it was translated;
+3. if **Summarise** is ticked, writes its summary.
 
 You can keep reading and renaming speakers meanwhile. If a step fails, the session stays in the project and
 **Resume** carries on from that step; **Cancel** stops, and what was saved stays saved.
 
 From then on the header says **In <project>**, and every change you make on the Output step is saved to the project
 too. Once its summary is written, **Open summary** takes the place of **Add to project…**: it shows the summary in
-Analyse mode, where the chat is. If a colleague changed the same transcript meanwhile, saving stops and DeScribe asks: **Reload** shows their
+Analyse mode, where the chat is. Added without a summary, the session shows **Summarise** there instead, which asks for
+the key if it's missing; **Summarise** in Analyse mode does the same. If a colleague changed the same transcript meanwhile, saving stops and DeScribe asks: **Reload** shows their
 version, **Keep mine** saves yours over it. After you restart the browser, a change asks you to **Reconnect** first.
 If the session's files are deleted from the project folder, Output offers **Add to project…** again once you come
 back to the DeScribe window.
